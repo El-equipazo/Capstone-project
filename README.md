@@ -26,17 +26,19 @@ organization_profiles
 org_profile_id SERIAL PRIMARY KEY
 user_id INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE
 org_name TEXT NOT NULL
-sector TEXT NOT NULL 'financial' | 'healthcare' | 'government' | ...
+sector TEXT NOT NULL |'financial' | 'healthcare' | 'government' |
+-- 'nonprofit' | 'legal' | 'energy' | 'education' | 'other'
 sub_sector TEXT
 founded_year INTEGER
-employee_count_range TEXT '<50' | '50-250' | '250-1k' | ...
+employee_count_range TEXT -- '<50' | '50-250' | '250-1k' | '1k-10k' | '>10k'
 country TEXT
 state_province TEXT
 website TEXT
 org_description TEXT
-quantum_knowledge_level TEXT 'none' | 'basic' | 'intermediate' | 'advanced'
-budget_range TEXT 'under_10k' | '10k_50k' | '50k_250k' | ...
-urgency_level TEXT 'just_exploring' | 'planning_ahead' | 'urgent' | 'critical'
+quantum_knowledge_level TEXT -- 'none' | 'basic' | 'intermediate' | 'advanced'
+budget_range TEXT -- 'under_10k' | '10k_50k' | '50k_250k' | '250k_plus' | 'undisclosed'
+urgency_level TEXT -- 'just_exploring' | 'planning_ahead' | 'urgent' | 'critical'
+default_connection_expiry_days INTEGER DEFAULT 30 -- org sets how long requests stay open
 is_verified BOOLEAN DEFAULT false
 created_at TIMESTAMP DEFAULT NOW()
 updated_at TIMESTAMP DEFAULT NOW()
@@ -222,14 +224,14 @@ connection_requests
 connection_id SERIAL PRIMARY KEY
 org_id INTEGER REFERENCES organization_profiles(org_profile_id) ON DELETE CASCADE
 expert_id INTEGER REFERENCES expert_profiles(expert_profile_id) ON DELETE CASCADE
-initiated_by_role TEXT NOT NULL -- 'organization' | 'expert' | 'system_recommendation'
-initiated_by_user_id INTEGER REFERENCES users(user_id)
-status TEXT NOT NULL -- 'pending' | 'accepted' | 'declined' | 'expired' | 'withdrawn'
+initiated_by_user_id INTEGER REFERENCES users(user_id) -- which org user sent it
+status TEXT NOT NULL DEFAULT 'pending' -- 'pending' | 'accepted' | 'declined' | 'expired'
 initial_message TEXT
-org_stated_need TEXT -- 'cryptographic_audit' | 'risk_assessment' | 'not_sure' | ...
-org_stated_timeline TEXT -- 'asap' | 'within_3mo' | 'within_6mo' | ...
+org_stated_need TEXT -- 'cryptographic_audit' | 'risk_assessment' |
+-- 'migration_roadmap' | 'executive_briefing' | 'not_sure'
+org_stated_timeline TEXT -- 'asap' | 'within_3mo' | 'within_6mo' | 'within_year' | 'just_exploring'
 match_score NUMERIC(5,2) -- system-computed 0–100
-expires_at TIMESTAMP
+expires_at TIMESTAMP -- computed from org's default_connection_expiry_days
 responded_at TIMESTAMP
 created_at TIMESTAMP DEFAULT NOW()
 
@@ -251,7 +253,7 @@ created_at TIMESTAMP DEFAULT NOW()
 │ org_profile_id (PK) │ │ expert_profile_id (PK) │
 │ ... │ │ ... │
 └─────────────────────────────┘ └────────────────────────────┘
-│ 1:M │ 1:M
+│ 1:M (initiator) │ 1:M (receiver only)
 │ │
 ▼ ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -260,49 +262,14 @@ created_at TIMESTAMP DEFAULT NOW()
 │ connection_id (PK) │
 │ org_id (FK) ──────────────────────────────────────► org_profile_id
 │ expert_id (FK) ──────────────────────────────────────► expert_profile_id
-│ status │
+│ initiated_by_user_id (FK) ──────────────────────────────────────► users.user_id
+│ status 'pending' | 'accepted' | 'declined' | 'expired'
 │ match_score │
-│ initiated_by_role │
+│ expires_at ◄── computed from org's expiry setting │
 │ org_stated_need │
 └─────────────────────────────────────────────────────────────────────┘
-│ 1:M
-▼
-┌──────────────────────────────┐
-│ match_scoring_factors │
-├──────────────────────────────┤
-│ factor_id (PK) │
-│ connection_id (FK) ─────┘
-│ factor_name │
-│ weight │
-│ raw_score │
-│ weighted_contribution │
-└──────────────────────────────┘
 
 ### Engagements
-
-engagement_templates
-─────────────────────────────────────────────────────
-template_id SERIAL PRIMARY KEY
-engagement_type TEXT NOT NULL -- 'cryptographic_audit' | 'risk_assessment' | ...
-name TEXT NOT NULL
-description TEXT
-target_sector TEXT -- 'all' | 'financial' | 'healthcare' | ...
-typical_duration_weeks INTEGER
-is_active BOOLEAN DEFAULT true
-created_by_admin_id INTEGER REFERENCES users(user_id)
-created_at TIMESTAMP DEFAULT NOW()
-updated_at TIMESTAMP DEFAULT NOW()
-
-milestone_templates
-─────────────────────────────────────────────────────
-milestone_template_id SERIAL PRIMARY KEY
-template_id INTEGER REFERENCES engagement_templates(template_id) ON DELETE CASCADE
-title TEXT NOT NULL
-description TEXT
-order_index INTEGER NOT NULL
-typical_duration_days INTEGER
-deliverable_description TEXT
-created_at TIMESTAMP DEFAULT NOW()
 
 engagements
 ─────────────────────────────────────────────────────
@@ -311,10 +278,14 @@ connection_id INTEGER UNIQUE REFERENCES connection_requests(connection_id) ON DE
 org_id INTEGER REFERENCES organization_profiles(org_profile_id)
 expert_id INTEGER REFERENCES expert_profiles(expert_profile_id)
 engagement_type TEXT NOT NULL
+-- 'cryptographic_audit' | 'risk_assessment' | 'migration_roadmap' |
+-- 'executive_briefing' | 'staff_training' | 'ongoing_advisory' |
+-- 'compliance_review' | 'full_migration_support'
 title TEXT
 description TEXT
-status TEXT NOT NULL -- 'scoping' | 'proposal_sent' | 'proposal_accepted' | 'active' | 'on_hold' | 'completed' | 'cancelled'
-template_id INTEGER REFERENCES engagement_templates(template_id) -- nullable
+status TEXT NOT NULL DEFAULT 'scoping'
+-- 'scoping' | 'proposal_sent' | 'proposal_accepted' |
+-- 'active' | 'on_hold' | 'completed' | 'cancelled'
 agreed_budget NUMERIC(12,2)
 payment_structure TEXT -- 'hourly' | 'fixed_price' | 'milestone_based' | 'retainer'
 start_date DATE
