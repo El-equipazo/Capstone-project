@@ -47,8 +47,6 @@ async def seed():
             "engagements",
             "match_scoring_factors",
             "connection_requests",
-            "milestone_templates",
-            "engagement_templates",
             "expert_engagement_types",
             "expert_sector_experience",
             "expert_specializations",
@@ -61,8 +59,10 @@ async def seed():
         for table in drop_order:
             await conn.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
 
+        # ── CREATE TABLES ─────────────────────────────────────────────────────
+        print("Creating tables...")
 
-        # ── DOMAIN 1: IDENTITY & AUTH 
+        # ── DOMAIN 1: IDENTITY & AUTH ─────────────────────────────────────────
         await conn.execute("""
             CREATE TABLE users (
                 user_id            SERIAL PRIMARY KEY,
@@ -92,10 +92,11 @@ async def seed():
                 org_description         TEXT,
                 quantum_knowledge_level TEXT,
                 budget_range            TEXT,
-                urgency_level           TEXT,
-                is_verified             BOOLEAN DEFAULT false,
-                created_at              TIMESTAMP DEFAULT NOW(),
-                updated_at              TIMESTAMP DEFAULT NOW()
+                urgency_level                  TEXT,
+                default_connection_expiry_days INTEGER DEFAULT 30,
+                is_verified                    BOOLEAN DEFAULT false,
+                created_at                     TIMESTAMP DEFAULT NOW(),
+                updated_at                     TIMESTAMP DEFAULT NOW()
             )
         """)
 
@@ -125,7 +126,7 @@ async def seed():
             )
         """)
 
-        # ── DOMAIN 2: PROFILES & DISCOVERY 
+        # ── DOMAIN 2: PROFILES & DISCOVERY ───────────────────────────────────
         await conn.execute("""
             CREATE TABLE organization_infrastructure (
                 infra_id                         SERIAL PRIMARY KEY,
@@ -178,7 +179,7 @@ async def seed():
                 sector                        TEXT NOT NULL,
                 years_experience_in_sector    INTEGER,
                 compliance_standards_known    TEXT[],
-                anonymized_client_examples    TEXT, # free-text description of past clients/projects without revealing sensitive info - might not need
+                anonymized_client_examples    TEXT,
                 created_at                    TIMESTAMP DEFAULT NOW()
             )
         """)
@@ -197,41 +198,16 @@ async def seed():
             )
         """)
 
-        # ── DOMAIN 3: MATCHING 
-        await conn.execute("""
-            CREATE TABLE engagement_templates (
-                template_id              SERIAL PRIMARY KEY,
-                engagement_type          TEXT NOT NULL,
-                name                     TEXT NOT NULL,
-                description              TEXT,
-                target_sector            TEXT,
-                typical_duration_weeks   INTEGER,
-                is_active                BOOLEAN DEFAULT true,
-                created_by_admin_id      INTEGER REFERENCES users(user_id),
-                created_at               TIMESTAMP DEFAULT NOW(),
-                updated_at               TIMESTAMP DEFAULT NOW()
-            )
-        """)
-
-        await conn.execute("""
-            CREATE TABLE milestone_templates (
-                milestone_template_id    SERIAL PRIMARY KEY,
-                template_id              INTEGER REFERENCES engagement_templates(template_id) ON DELETE CASCADE,
-                title                    TEXT NOT NULL,
-                description              TEXT,
-                order_index              INTEGER NOT NULL,
-                typical_duration_days    INTEGER,
-                deliverable_description  TEXT,
-                created_at               TIMESTAMP DEFAULT NOW()
-            )
-        """)
+        # ── DOMAIN 3: MATCHING ────────────────────────────────────────────────
+        # engagement_templates and milestone_templates removed — templates are
+        # now frontend components that pre-fill the milestone form client-side.
+        # Only actual confirmed milestones are stored in engagement_milestones.
 
         await conn.execute("""
             CREATE TABLE connection_requests (
                 connection_id           SERIAL PRIMARY KEY,
                 org_id                  INTEGER REFERENCES organization_profiles(org_profile_id) ON DELETE CASCADE,
                 expert_id               INTEGER REFERENCES expert_profiles(expert_profile_id) ON DELETE CASCADE,
-                initiated_by_role       TEXT NOT NULL,
                 initiated_by_user_id    INTEGER REFERENCES users(user_id),
                 status                  TEXT NOT NULL DEFAULT 'pending',
                 initial_message         TEXT,
@@ -267,7 +243,6 @@ async def seed():
                 title                    TEXT,
                 description              TEXT,
                 status                   TEXT NOT NULL DEFAULT 'scoping',
-                template_id              INTEGER REFERENCES engagement_templates(template_id),
                 agreed_budget            NUMERIC(12,2),
                 payment_structure        TEXT,
                 start_date               DATE,
@@ -481,13 +456,15 @@ async def seed():
                 user_id, org_name, sector, sub_sector, founded_year,
                 employee_count_range, country, state_province, website,
                 org_description, quantum_knowledge_level, budget_range,
-                urgency_level, is_verified
+                urgency_level, default_connection_expiry_days, is_verified
             ) VALUES (
                 $1, 'First Community Bank of New York', 'financial',
                 'community bank', 1987, '50-250', 'United States', 'New York',
                 'https://www.firstcommunitybankny.com',
                 'A regional community bank serving the Hudson Valley since 1987, storing decades of customer financial and mortgage records.',
-                'basic', '50k_250k', 'urgent', true
+                'basic', '50k_250k', 'urgent',
+                14,    -- org chose 14 days instead of the 30-day default
+                true
             )
             RETURNING org_profile_id
         """, org_user['user_id'])
@@ -589,55 +566,21 @@ async def seed():
                  'A 2-day engagement to bring your board and C-suite up to speed on quantum threats, regulatory timelines, and your specific risk exposure. Includes a one-page risk summary for board presentation.')
         """, expert_profile['expert_profile_id'])
 
-        # ── ENGAGEMENT TEMPLATE (created by admin) ────────────────────────────
-        template = await conn.fetchrow("""
-            INSERT INTO engagement_templates (
-                engagement_type, name, description, target_sector,
-                typical_duration_weeks, created_by_admin_id
-            ) VALUES (
-                'cryptographic_audit',
-                'Standard Cryptographic Audit (8-Week)',
-                'A structured 8-week audit covering asset inventory, vulnerability mapping, compliance gap analysis, and a prioritized remediation register. Designed for financial institutions.',
-                'financial', 8, $1
-            )
-            RETURNING template_id
-        """, admin['user_id'])
-
-        await conn.execute("""
-            INSERT INTO milestone_templates (
-                template_id, title, description, order_index,
-                typical_duration_days, deliverable_description
-            ) VALUES
-                ($1, 'Kickoff & Scoping',
-                 'Align on scope, gather documentation, establish secure communication channels.',
-                 1, 5,  'Signed scope-of-work document'),
-                ($1, 'Cryptographic Asset Inventory',
-                 'Full enumeration of all algorithms, key lengths, certificates, and protocols.',
-                 2, 14, 'Cryptographic asset register'),
-                ($1, 'Vulnerability Mapping',
-                 'Map each asset to Shor''s and Grover''s threat models. Identify HNDL risk.',
-                 3, 10, 'Vulnerability mapping report with severity ratings'),
-                ($1, 'Compliance Gap Analysis',
-                 'Compare current posture against FFIEC, NIST, and OMB M-23-02 guidance.',
-                 4, 7,  'Compliance gap matrix'),
-                ($1, 'Final Report & Presentation',
-                 'Full assessment report with executive summary, findings, and remediation roadmap.',
-                 5, 5,  'Assessment report PDF, executive presentation deck')
-        """, template['template_id'])
-
         # ── CONNECTION REQUEST ─────────────────────────────────────────────────
+        # Templates are now frontend components — no DB insert needed.
+        # expires_at is computed from org's default_connection_expiry_days (14 days here).
         connection = await conn.fetchrow("""
             INSERT INTO connection_requests (
-                org_id, expert_id, initiated_by_role, initiated_by_user_id,
+                org_id, expert_id, initiated_by_user_id,
                 status, initial_message, org_stated_need, org_stated_timeline,
                 match_score, expires_at, responded_at
             ) VALUES (
-                $1, $2, 'organization', $3,
+                $1, $2, $3,
                 'accepted',
                 'Hello Dr. Chen, we are a community bank with a 22-year-old core banking system relying heavily on RSA-2048. We are concerned about harvest-now-decrypt-later attacks on our mortgage records and would love to discuss a cryptographic audit.',
                 'cryptographic_audit', 'within_3mo',
                 91.50,
-                NOW() + INTERVAL '30 days',
+                NOW() + INTERVAL '14 days',  -- computed from org's default_connection_expiry_days
                 NOW() - INTERVAL '2 days'
             )
             RETURNING connection_id
@@ -665,22 +608,21 @@ async def seed():
         engagement = await conn.fetchrow("""
             INSERT INTO engagements (
                 connection_id, org_id, expert_id, engagement_type,
-                title, description, status, template_id,
+                title, description, status,
                 agreed_budget, payment_structure, start_date, estimated_end_date
             ) VALUES (
                 $1, $2, $3, 'cryptographic_audit',
                 'Cryptographic Audit — First Community Bank of NY',
                 'Full cryptographic asset audit covering core banking, ATM network, and customer-facing web infrastructure. Focus on RSA-2048 exposure and HNDL risk for long-lived mortgage records.',
-                'active', $4,
+                'active',
                 75000.00, 'milestone_based',
-                $5, $6
+                $4, $5
             )
             RETURNING engagement_id
         """,
             connection['connection_id'],
             org_profile['org_profile_id'],
             expert_profile['expert_profile_id'],
-            template['template_id'],
             today,
             today + timedelta(weeks=8)
         )
