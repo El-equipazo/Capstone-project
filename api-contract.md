@@ -1,6 +1,6 @@
-# QuantumConnect — API Contract
+# QuantumConnect — API Contract (v2)
 
-REST API contract for the QuantumConnect platform, mapped directly to the database schema (Identity & Auth, Profiles & Discovery, Matching, Engagements, Communication, Trust & Reviews, Risk Assessment).
+REST API contract mapped to the current schema (Identity & Auth, Profiles & Discovery, Matching, Engagements, Communication, Trust & Reviews, Risk Assessment).
 
 ---
 
@@ -38,19 +38,19 @@ Authorization: Bearer <access_token>
 
 ### 1.2 Status codes
 
-| Code | Meaning                                                                                |
-| ---- | -------------------------------------------------------------------------------------- |
-| 200  | OK (read / update succeeded)                                                           |
-| 201  | Created                                                                                |
-| 204  | No Content (delete succeeded)                                                          |
-| 400  | Validation error / malformed request                                                   |
-| 401  | Missing or invalid token                                                               |
-| 403  | Authenticated but not permitted (wrong role or not resource owner)                     |
-| 404  | Resource not found                                                                     |
-| 409  | Conflict (duplicate email, duplicate review, engagement already exists for connection) |
-| 410  | Gone (connection request expired, document access expired/revoked)                     |
-| 422  | Semantically invalid (e.g. invalid status transition)                                  |
-| 429  | Rate limited                                                                           |
+| Code | Meaning                                                                                                                   |
+| ---- | ------------------------------------------------------------------------------------------------------------------------- |
+| 200  | OK (read / update succeeded)                                                                                              |
+| 201  | Created                                                                                                                   |
+| 204  | No Content (delete succeeded)                                                                                             |
+| 400  | Validation error / malformed request                                                                                      |
+| 401  | Missing or invalid token                                                                                                  |
+| 403  | Authenticated but not permitted (wrong role or not resource owner)                                                        |
+| 404  | Resource not found                                                                                                        |
+| 409  | Conflict (duplicate email, duplicate open connection request, duplicate review, engagement already exists for connection) |
+| 410  | Gone (connection request expired, document access expired/revoked)                                                        |
+| 422  | Semantically invalid (e.g. invalid status transition)                                                                     |
+| 429  | Rate limited                                                                                                              |
 
 ### 1.3 Pagination, sorting, filtering
 
@@ -72,6 +72,23 @@ Paginated responses use this envelope:
     "total_pages": 8
   }
 }
+```
+
+### 1.4 Canonical enums
+
+Two enums are shared across multiple resources — referenced throughout this contract instead of repeating the value lists.
+
+**`engagement_type`** (used by `engagements.engagement_type`, `expert_engagement_types.engagement_type`, and `connection_requests.org_stated_need`):
+
+```
+cryptographic_audit | risk_assessment | migration_roadmap | executive_briefing |
+staff_training | ongoing_advisory | compliance_review | full_migration_support
+```
+
+**`sector`** (used by `organization_profiles.sector` and `expert_sector_experience.sector`):
+
+```
+financial | healthcare | government | nonprofit | legal | energy | education | other
 ```
 
 ---
@@ -185,6 +202,8 @@ Request:
 }
 ```
 
+`sector` must be one of the canonical `sector` enum values (§1.4).
+
 Response `201`: full `organization_profiles` row (`is_verified: false` until admin verification).
 Errors: `409` profile already exists for user · `400` invalid enum value.
 
@@ -266,6 +285,7 @@ Response `201`. `verification_status` starts as `unsubmitted`; `avg_rating` and 
   "avg_rating": 4.85,
   "total_completed_engagements": 12,
   "credentials": [ ... ],
+  "work_history": [ ... ],
   "specializations": [ ... ],
   "sector_experience": [ ... ],
   "engagement_types": [ ... ]
@@ -278,13 +298,36 @@ Response `201`. `verification_status` starts as `unsubmitted`; `avg_rating` and 
 
 ### Credentials (`expert_credentials`)
 
-| Method & Path                                         | Auth           | Notes                                                                                                                   |
-| ----------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `POST /experts/:expertId/credentials`                 | expert (owner) | Body: `credential_type`, `credential_name`, `institution`, `year_obtained`, `expiry_date?`, `verification_url?` → `201` |
-| `GET /experts/:expertId/credentials`                  | any            | `is_admin_verified` included                                                                                            |
-| `PATCH /experts/:expertId/credentials/:credentialId`  | expert (owner) | Editing resets `is_admin_verified` to `false`                                                                           |
-| `DELETE /experts/:expertId/credentials/:credentialId` | expert (owner) | → `204`                                                                                                                 |
-| `PATCH /admin/credentials/:credentialId/verify`       | admin          | Body: `{ "is_admin_verified": true }`                                                                                   |
+| Method & Path                                         | Auth           | Notes                                                                                                                                |
+| ----------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /experts/:expertId/credentials`                 | expert (owner) | Body: `credential_type`, `credential_name`, `institution`, `year_obtained`, `expiry_date?`, `verification_url?` → `201`              |
+| `GET /experts/:expertId/credentials`                  | any            | Each item includes a derived `is_verified` (true if it has a linked `verification_records` row with `status = 'approved'`) — see §9  |
+| `PATCH /experts/:expertId/credentials/:credentialId`  | expert (owner) | Editing a credential does not touch its verification status; a materially changed credential should be re-submitted for verification |
+| `DELETE /experts/:expertId/credentials/:credentialId` | expert (owner) | Cascades to any linked `verification_records` row → `204`                                                                            |
+
+> Credential verification is no longer a direct admin toggle on this resource — see `POST /verifications` in §9. `GET` responses derive `is_verified` from the linked verification record rather than storing it locally.
+
+### Work History (`expert_work_history`)
+
+| Method & Path                                           | Auth           | Notes                                                  |
+| ------------------------------------------------------- | -------------- | ------------------------------------------------------ |
+| `POST /experts/:expertId/work-history`                  | expert (owner) | → `201`                                                |
+| `GET /experts/:expertId/work-history`                   | any            | Sorted by `order_index` if set, else `start_date DESC` |
+| `PATCH /experts/:expertId/work-history/:workHistoryId`  | expert (owner) | Setting `is_current = true` should null out `end_date` |
+| `DELETE /experts/:expertId/work-history/:workHistoryId` | expert (owner) | → `204`                                                |
+
+POST body:
+
+```json
+{
+  "organization_name": "National Institute of Standards and Technology (NIST)",
+  "job_title": "Mathematician, Post-Quantum Cryptography Project Lead",
+  "employment_type": "government",
+  "start_date": "2016-01-01",
+  "is_current": true,
+  "description": "Leading NIST's PQC standardization effort since 2016."
+}
+```
 
 ### Specializations (`expert_specializations`)
 
@@ -320,6 +363,8 @@ POST body:
 }
 ```
 
+`sector` must be one of the canonical `sector` enum values (§1.4) — the same enum used by `organization_profiles.sector`, so sector-based search and matching stay consistent.
+
 ### Engagement types offered (`expert_engagement_types`)
 
 Same CRUD pattern at `/experts/:expertId/engagement-types[/:engTypeId]`.
@@ -337,13 +382,15 @@ POST body:
 }
 ```
 
+`engagement_type` must be one of the canonical `engagement_type` enum values (§1.4).
+
 ---
 
 ## 5. Discovery (Search)
 
 ### GET /experts
 
-Search/filter the directory. — **Auth: Any role** (MVP: this powers the org-side browse view; only `is_verified = true` experts are returned to non-admins).
+Search/filter the directory. — **Auth: Any role** (only `is_verified = true` experts are returned to non-admins). Note: this domain is a stretch feature — see §6 — but the underlying directory/search endpoint is core to the MVP.
 
 Query parameters:
 
@@ -352,9 +399,9 @@ Query parameters:
 | `q`                    | text search on name/headline/bio | `q=lattice`                                |
 | `specialization`       | repeatable enum                  | `specialization=post_quantum_cryptography` |
 | `proficiency_min`      | enum floor                       | `proficiency_min=expert`                   |
-| `sector`               | enum                             | `sector=financial`                         |
+| `sector`               | canonical `sector` enum          | `sector=financial`                         |
 | `compliance`           | repeatable                       | `compliance=PCI-DSS`                       |
-| `engagement_type`      | enum                             | `engagement_type=cryptographic_audit`      |
+| `engagement_type`      | canonical `engagement_type` enum | `engagement_type=cryptographic_audit`      |
 | `availability`         | enum                             | `availability=available`                   |
 | `rate_max`             | number                           | `rate_max=400`                             |
 | `rating_min`           | number 1–5                       | `rating_min=4`                             |
@@ -364,7 +411,9 @@ Response `200`: paginated envelope of expert profile summaries (card view: name,
 
 ---
 
-## 6. Matching (`connection_requests`, `match_scoring_factors`)
+## 6. Matching (stretch feature)
+
+`connection_requests` and `match_scoring_factors`. Fully specified here since the schema supports it, but treat this domain as cuttable under time pressure per the project's user stories.
 
 ### POST /connections
 
@@ -381,6 +430,8 @@ Request:
 }
 ```
 
+`org_stated_need` must be one of the canonical `engagement_type` enum values (§1.4), or omitted/`null` to mean "not sure."
+
 Response `201`:
 
 ```json
@@ -396,7 +447,7 @@ Response `201`:
 }
 ```
 
-Errors: `409` an open (`pending`/`accepted`) request to this expert already exists · `422` expert `availability_status = unavailable`.
+Errors: `409` an open (`pending`) request to this expert already exists for this org — enforced by a DB-level unique partial index, not just app logic · `422` expert `availability_status = unavailable`.
 
 ### GET /connections
 
@@ -446,6 +497,8 @@ Response `200`:
 }
 ```
 
+The server writes all factor rows for a connection in a single transaction — the DB enforces that their weights sum to 1.00 before the transaction commits, so this endpoint should never return a set of factors with an inconsistent total.
+
 ### PATCH /connections/:connectionId
 
 Expert responds. — **Auth: expert (recipient)**
@@ -476,12 +529,11 @@ Request:
   "payment_structure": "milestone_based",
   "agreed_budget": 95000.0,
   "start_date": "2026-08-01",
-  "estimated_end_date": "2026-10-01",
-  "template_id": 3
+  "estimated_end_date": "2026-10-01"
 }
 ```
 
-If `template_id` is supplied, milestones are cloned from `milestone_templates` into `engagement_milestones`.
+`engagement_type` must be one of the canonical `engagement_type` enum values (§1.4). Milestones are added separately after creation (see below) — there is no template to clone from; the frontend is responsible for offering starting-point structures if desired.
 
 Response `201`: full engagement row, `status: "scoping"`.
 Errors: `409` engagement already exists for this connection · `422` connection not `accepted`.
@@ -517,21 +569,34 @@ Errors: `422` illegal transition · `400` cancelling without `cancellation_reaso
 
 ### Milestones (`engagement_milestones`)
 
-| Method & Path                                                     | Auth                                   | Notes                                                                                                                                         |
-| ----------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /engagements/:engagementId/milestones`                      | expert (participant)                   | Body: `title`, `description?`, `order_index`, `due_date?`, `deliverable_description?`, `payment_amount?`, `requires_client_approval?` → `201` |
-| `GET /engagements/:engagementId/milestones`                       | participant                            | Ordered by `order_index`                                                                                                                      |
-| `PATCH /engagements/:engagementId/milestones/:milestoneId`        | expert: status/content · org: approval | Status: `pending → in_progress → completed`; `skipped`/`blocked` allowed from any non-completed state                                         |
-| `POST /engagements/:engagementId/milestones/:milestoneId/approve` | organization (participant)             | Only when `requires_client_approval = true`; sets `client_approved_at` → `200`                                                                |
-| `DELETE /engagements/:engagementId/milestones/:milestoneId`       | expert (participant)                   | Only while engagement is `scoping`/`proposal_sent` → `204`                                                                                    |
+Either party can propose a milestone, but the expert always has final say on scope and timeline.
 
-### Engagement templates
+| Method & Path                                                     | Auth                                                                                                                              | Notes                                                                                                                |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `POST /engagements/:engagementId/milestones`                      | organization or expert (participant)                                                                                              | See body/behavior below → `201`                                                                                      |
+| `GET /engagements/:engagementId/milestones`                       | participant                                                                                                                       | Ordered by `order_index`                                                                                             |
+| `PATCH /engagements/:engagementId/milestones/:milestoneId`        | expert (participant): any field · organization (participant): `due_date`/`description` only, and only while `status = 'proposed'` |                                                                                                                      |
+| `POST /engagements/:engagementId/milestones/:milestoneId/confirm` | expert (participant)                                                                                                              | Moves an org-proposed milestone from `proposed` → `confirmed`; sets `confirmed_by_expert_id`, `confirmed_at` → `200` |
+| `POST /engagements/:engagementId/milestones/:milestoneId/approve` | organization (participant)                                                                                                        | Only when `requires_client_approval = true` and `status = 'completed'`; sets `client_approved_at` → `200`            |
+| `DELETE /engagements/:engagementId/milestones/:milestoneId`       | expert (participant)                                                                                                              | Only while engagement is `scoping`/`proposal_sent` → `204`                                                           |
 
-| Method & Path                                                            | Auth  |
-| ------------------------------------------------------------------------ | ----- |
-| `GET /engagement-templates?engagement_type=&target_sector=`              | any   |
-| `GET /engagement-templates/:templateId` (includes `milestone_templates`) | any   |
-| `POST /admin/engagement-templates` · `PATCH` · `DELETE`                  | admin |
+POST body:
+
+```json
+{
+  "title": "Encryption inventory review",
+  "description": "Catalog all cryptographic dependencies across payment rails.",
+  "order_index": 1,
+  "due_date": "2026-08-15",
+  "deliverable_description": "Spreadsheet inventory + risk flags.",
+  "requires_client_approval": true
+}
+```
+
+`proposed_by_user_id` and `proposed_by_role` are set server-side from the caller. **Behavior:** if the caller is the expert, the milestone is created with `status = 'confirmed'` immediately (`confirmed_by_expert_id`/`confirmed_at` set to the expert/now). If the caller is the organization, it's created with `status = 'proposed'` and cannot advance to `in_progress` until the expert calls the `confirm` endpoint (optionally editing it first).
+
+Status values: `proposed` | `confirmed` | `in_progress` | `completed` | `skipped` | `blocked`.
+Errors: `422` attempting to move a `proposed` milestone to `in_progress` without confirming first · `403` organization attempting to set fields other than `due_date`/`description`, or attempting to confirm.
 
 ---
 
@@ -556,19 +621,19 @@ Request (text):
 }
 ```
 
-Request (file message — after uploading via the documents endpoint or a presigned URL):
+Request (file message): a file message references an already-uploaded document rather than carrying its own file fields. Upload the file first via `POST /engagements/:engagementId/documents` (§8, Secure documents), then create the message pointing at it:
 
 ```json
 {
   "message_type": "file",
   "content": "Network diagram attached.",
-  "file_url": "https://storage.quantumconnect.io/...",
-  "file_name": "network-diagram-v2.pdf",
-  "file_size_bytes": 2411520
+  "document_id": 77
 }
 ```
 
-Response `201`. `content` is encrypted at rest server-side; API always returns plaintext to authorized participants.
+Response `201`. `content` is encrypted at rest server-side; API always returns plaintext to authorized participants. When `message_type = "file"`, the response includes the resolved document metadata (`document_name`, `document_type`, `file_size_bytes`) alongside `document_id` so clients don't need a second round-trip.
+
+Errors: `400` `message_type = "file"` without `document_id`, or `document_id` referencing a document outside this engagement.
 
 > `milestone_update` and `system_event` message types are emitted by the server only (e.g. on milestone completion) — clients cannot POST them.
 
@@ -617,6 +682,8 @@ Errors: `410` revoked or past `access_expires_at`.
 
 **Auth: uploader or admin.** Sets `is_revoked = true`, `revoked_at`. → `200`
 
+> Revoking a document does not delete the `messages` rows that reference it via `document_id`; the message stays in history but its attachment becomes inaccessible (client should render it as "revoked").
+
 ### Notifications (`notifications`)
 
 | Method & Path                          | Auth  | Notes                    |
@@ -642,7 +709,7 @@ Notification objects:
 }
 ```
 
-> Notifications are server-generated only (connection received/responded, message received, milestone completed, review received, verification decision). No client POST endpoint.
+> Notifications are server-generated only (connection received/responded, message received, milestone proposed/confirmed/completed, review received, verification decision). No client POST endpoint.
 
 ---
 
@@ -650,7 +717,7 @@ Notification objects:
 
 ### POST /engagements/:engagementId/reviews
 
-Leave a review after completion. — **Auth: participant.** One review per side (max 2 per engagement).
+Leave a review after completion. — **Auth: participant.** One review per side (max 2 per engagement — enforced by a DB unique constraint on `(engagement_id, reviewer_role)`).
 
 Request:
 
@@ -697,15 +764,29 @@ Errors: `422` engagement not `completed` · `409` this side already reviewed · 
 
 ### Verification (`verification_records`)
 
+Verification is unified here — there is no separate per-credential verification toggle. A credential counts as verified when it has a linked `verification_records` row approved by an admin.
+
 #### POST /verifications
 
 Submit a verification request for yourself. — **Auth: organization | expert**
 
-Request:
+Request (identity/org/background check — no credential link):
+
+```json
+{
+  "verification_type": "identity",
+  "submitted_document_urls": [
+    "https://storage.quantumconnect.io/uploads/passport.pdf"
+  ]
+}
+```
+
+Request (verifying one specific credential):
 
 ```json
 {
   "verification_type": "professional_credential",
+  "related_credential_id": 14,
   "submitted_document_urls": [
     "https://storage.quantumconnect.io/uploads/phd-cert.pdf"
   ]
@@ -713,6 +794,7 @@ Request:
 ```
 
 Response `201` (`status: "pending"`).
+Errors: `400` `related_credential_id` supplied with a `verification_type` other than `professional_credential`, or referencing a credential not owned by the caller.
 
 #### GET /verifications
 
@@ -741,7 +823,10 @@ or
 }
 ```
 
-Response `200`. Side effect: approving the required set flips `is_verified` on the user's profile (and `verification_status` on expert profiles).
+Response `200`. Side effects:
+
+- Approving a record with `verification_type != 'professional_credential'` flips `is_verified` on the corresponding org/expert profile (and `verification_status` on expert profiles).
+- Approving a record with `related_credential_id` set makes that specific credential show `is_verified: true` on subsequent `GET /experts/:expertId/credentials` calls — no separate action needed.
 
 ---
 
@@ -770,7 +855,7 @@ Response `201` (`status: "draft"`).
 
 ### GET /engagements/:engagementId/assessments
 
-**Auth: participant.** The org side sees assessments only once status ≥ `under_org_review`; the expert sees all including drafts.
+**Auth: participant.** The org side sees assessments only once status ≥ `under_org_review`; the expert sees all including drafts. An engagement may accumulate multiple independent assessments over time (e.g. an initial audit and a later follow-up) — there's no versioning link between them.
 
 ### GET /assessments/:assessmentId
 
@@ -841,16 +926,14 @@ POST body:
 
 ## 11. Admin (summary)
 
-| Method & Path                                                                | Purpose                                    |
-| ---------------------------------------------------------------------------- | ------------------------------------------ |
-| `GET /admin/users?role=&is_active=`                                          | User management                            |
-| `PATCH /admin/users/:userId`                                                 | Deactivate/reactivate (`is_active`)        |
-| `PATCH /admin/organizations/:orgId/verify`                                   | `{ "is_verified": true }`                  |
-| `PATCH /admin/experts/:expertId/verify`                                      | Sets `is_verified` / `verification_status` |
-| `PATCH /admin/credentials/:credentialId/verify`                              | Credential verification                    |
-| `GET /admin/verifications?status=pending` · `PATCH /admin/verifications/:id` | Verification queue                         |
-| `GET /admin/reviews?is_flagged=true` · `PATCH /admin/reviews/:id`            | Review moderation                          |
-| `POST/PATCH/DELETE /admin/engagement-templates...`                           | Template management                        |
+| Method & Path                                                                | Purpose                                                                                         |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /admin/users?role=&is_active=`                                          | User management                                                                                 |
+| `PATCH /admin/users/:userId`                                                 | Deactivate/reactivate (`is_active`)                                                             |
+| `PATCH /admin/organizations/:orgId/verify`                                   | `{ "is_verified": true }`                                                                       |
+| `PATCH /admin/experts/:expertId/verify`                                      | Sets `is_verified` / `verification_status`                                                      |
+| `GET /admin/verifications?status=pending` · `PATCH /admin/verifications/:id` | Verification queue — also covers individual credential verification via `related_credential_id` |
+| `GET /admin/reviews?is_flagged=true` · `PATCH /admin/reviews/:id`            | Review moderation                                                                               |
 
 All admin routes: **Auth: admin**, otherwise `403`.
 
@@ -858,10 +941,11 @@ All admin routes: **Auth: admin**, otherwise `403`.
 
 ## 12. Endpoint ↔ User Story Map (MVP)
 
-| User story                                    | Endpoints                                                                                           |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Sign up with email, password, role            | `POST /auth/register`, `POST /auth/verify-email`, `POST /auth/login`                                |
-| Browse directory of verified experts          | `GET /experts` (+ filters)                                                                          |
-| View full expert profile                      | `GET /experts/:expertId` (nested credentials, specializations, sector experience, engagement types) |
-| _Stretch:_ review after engagement            | `POST /engagements/:id/reviews`, `GET /experts/:id/reviews`                                         |
-| _Stretch:_ notification on connection request | `POST /connections` (server emits notification), `GET /notifications`                               |
+| User story                                    | Endpoints                                                                                                         |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Sign up with email, password, role            | `POST /auth/register`, `POST /auth/verify-email`, `POST /auth/login`                                              |
+| Browse directory of verified experts          | `GET /experts` (+ filters)                                                                                        |
+| View full expert profile                      | `GET /experts/:expertId` (nested credentials, work history, specializations, sector experience, engagement types) |
+| _Stretch:_ review after engagement            | `POST /engagements/:id/reviews`, `GET /experts/:id/reviews`                                                       |
+| _Stretch:_ notification on connection request | `POST /connections` (server emits notification), `GET /notifications`                                             |
+| _Stretch:_ matching/connection requests       | `POST /connections`, `GET /connections/:id/score-factors`, `PATCH /connections/:id`                               |
