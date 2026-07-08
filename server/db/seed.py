@@ -6,17 +6,20 @@ Requires:  pip install asyncpg passlib[bcrypt]
 
 Set DATABASE_URL to your Postgres connection string before running.
 Example:   postgresql://postgres:password@localhost/quantumconnect
+
+Uses the shared connection pool from pool.py. All seeding runs inside a
+single transaction (via pool.transaction()), so if anything fails partway
+through, the database is left untouched. The transaction scope also lets the
+DEFERRED weight-sum trigger on match_scoring_factors validate at COMMIT.
 """
 
 import asyncio
-import asyncpg
 from passlib.context import CryptContext
 from datetime import date, timedelta
 
-# ── CONFIG ────────────────────────────────────────────────────────────────────
-DATABASE_URL = "postgresql://localhost/quantumconnect"
+from pool import transaction, close_pool
 
-# passlib is the Python equivalent of bcrypt npm — same algorithm, same idea
+# passlib is the Python equivalent of bcrypt npm -- same algorithm, same idea
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -24,15 +27,23 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-# ── SEED ──────────────────────────────────────────────────────────────────────
-async def seed():
-    # asyncpg.connect() is the Python equivalent of require('./pool')
-    conn = await asyncpg.connect(DATABASE_URL)
-
+def add_years(d: date, years: int) -> date:
+    """
+    Leap-year-safe year arithmetic. date.replace(year=...) raises on Feb 29,
+    so fall back to Feb 28 when the target year isn't a leap year.
+    """
     try:
+        return d.replace(year=d.year + years)
+    except ValueError:
+        return d.replace(year=d.year + years, day=28)
 
-        # ── DROP TABLES (reverse dependency order) ────────────────────────────
-        # Same idea as their expense tracker — drop children before parents
+
+# -- SEED ----------------------------------------------------------------------
+async def seed():
+    # One pooled connection, one transaction -- all-or-nothing seeding.
+    async with transaction() as conn:
+
+        # -- DROP TABLES (reverse dependency order) ----------------------------
         print("Dropping existing tables...")
         drop_order = [
             "remediation_recommendations",
@@ -41,8 +52,8 @@ async def seed():
             "verification_records",
             "reviews",
             "notifications",
-            "secure_document_shares",
             "messages",
+            "secure_document_shares",
             "engagement_milestones",
             "engagements",
             "match_scoring_factors",
@@ -50,6 +61,7 @@ async def seed():
             "expert_engagement_types",
             "expert_sector_experience",
             "expert_specializations",
+            "expert_work_history",
             "expert_credentials",
             "organization_infrastructure",
             "organization_profiles",
@@ -59,10 +71,7 @@ async def seed():
         for table in drop_order:
             await conn.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
 
-        # ── CREATE TABLES ─────────────────────────────────────────────────────
-        print("Creating tables...")
-
-        # ── DOMAIN 1: IDENTITY & AUTH ─────────────────────────────────────────
+        # -- DOMAIN 1: IDENTITY & AUTH -----------------------------------------
         await conn.execute("""
             CREATE TABLE users (
                 user_id            SERIAL PRIMARY KEY,
@@ -79,19 +88,19 @@ async def seed():
 
         await conn.execute("""
             CREATE TABLE organization_profiles (
-                org_profile_id          SERIAL PRIMARY KEY,
-                user_id                 INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
-                org_name                TEXT NOT NULL,
-                sector                  TEXT NOT NULL,
-                sub_sector              TEXT,
-                founded_year            INTEGER,
-                employee_count_range    TEXT,
-                country                 TEXT,
-                state_province          TEXT,
-                website                 TEXT,
-                org_description         TEXT,
-                quantum_knowledge_level TEXT,
-                budget_range            TEXT,
+                org_profile_id                 SERIAL PRIMARY KEY,
+                user_id                        INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
+                org_name                       TEXT NOT NULL,
+                sector                         TEXT NOT NULL,
+                sub_sector                     TEXT,
+                founded_year                   INTEGER,
+                employee_count_range           TEXT,
+                country                        TEXT,
+                state_province                 TEXT,
+                website                        TEXT,
+                org_description                TEXT,
+                quantum_knowledge_level        TEXT,
+                budget_range                   TEXT,
                 urgency_level                  TEXT,
                 default_connection_expiry_days INTEGER DEFAULT 30,
                 is_verified                    BOOLEAN DEFAULT false,
@@ -126,7 +135,7 @@ async def seed():
             )
         """)
 
-        # ── DOMAIN 2: PROFILES & DISCOVERY ───────────────────────────────────
+        # -- DOMAIN 2: PROFILES & DISCOVERY ------------------------------------
         await conn.execute("""
             CREATE TABLE organization_infrastructure (
                 infra_id                         SERIAL PRIMARY KEY,
@@ -146,6 +155,7 @@ async def seed():
             )
         """)
 
+        # expert_credentials -- note: is_admin_verified removed in this schema.
         await conn.execute("""
             CREATE TABLE expert_credentials (
                 credential_id      SERIAL PRIMARY KEY,
@@ -156,7 +166,23 @@ async def seed():
                 year_obtained      INTEGER,
                 expiry_date        DATE,
                 verification_url   TEXT,
-                is_admin_verified  BOOLEAN DEFAULT false,
+                created_at         TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # expert_work_history -- new table in this schema.
+        await conn.execute("""
+            CREATE TABLE expert_work_history (
+                work_history_id    SERIAL PRIMARY KEY,
+                expert_id          INTEGER REFERENCES expert_profiles(expert_profile_id) ON DELETE CASCADE,
+                organization_name  TEXT NOT NULL,
+                job_title          TEXT NOT NULL,
+                employment_type    TEXT,
+                start_date         DATE NOT NULL,
+                end_date           DATE,
+                is_current         BOOLEAN DEFAULT false,
+                description        TEXT,
+                order_index        INTEGER,
                 created_at         TIMESTAMP DEFAULT NOW()
             )
         """)
@@ -198,11 +224,7 @@ async def seed():
             )
         """)
 
-        # ── DOMAIN 3: MATCHING ────────────────────────────────────────────────
-        # engagement_templates and milestone_templates removed — templates are
-        # now frontend components that pre-fill the milestone form client-side.
-        # Only actual confirmed milestones are stored in engagement_milestones.
-
+        # -- DOMAIN 4: MATCHING ------------------------------------------------
         await conn.execute("""
             CREATE TABLE connection_requests (
                 connection_id           SERIAL PRIMARY KEY,
@@ -220,19 +242,58 @@ async def seed():
             )
         """)
 
+        # UNIQUE partial index: only one open (pending) request per org/expert pair.
+        await conn.execute("""
+            CREATE UNIQUE INDEX uq_connection_pending
+                ON connection_requests (org_id, expert_id)
+                WHERE status = 'pending'
+        """)
+
         await conn.execute("""
             CREATE TABLE match_scoring_factors (
                 factor_id               SERIAL PRIMARY KEY,
                 connection_id           INTEGER REFERENCES connection_requests(connection_id) ON DELETE CASCADE,
                 factor_name             TEXT NOT NULL,
-                weight                  NUMERIC(5,2),
-                raw_score               NUMERIC(5,2),
+                weight                  NUMERIC(5,2) NOT NULL CHECK (weight > 0 AND weight <= 1),
+                raw_score               NUMERIC(5,2) NOT NULL CHECK (raw_score BETWEEN 0 AND 100),
                 weighted_contribution   NUMERIC(5,2),
                 created_at              TIMESTAMP DEFAULT NOW()
             )
         """)
 
-        # ── DOMAIN 4: ENGAGEMENTS ─────────────────────────────────────────────
+        # Deferred constraint trigger: at COMMIT, SUM(weight) per connection_id
+        # must be approximately 1.00 (+/- 0.01 rounding tolerance).
+        await conn.execute("""
+            CREATE OR REPLACE FUNCTION check_match_factors_weight_sum()
+            RETURNS TRIGGER AS $$
+            DECLARE
+                bad_connection INTEGER;
+            BEGIN
+                SELECT connection_id INTO bad_connection
+                FROM match_scoring_factors
+                GROUP BY connection_id
+                HAVING ABS(SUM(weight) - 1.00) > 0.01
+                LIMIT 1;
+
+                IF bad_connection IS NOT NULL THEN
+                    RAISE EXCEPTION
+                        'match_scoring_factors weights for connection_id % do not sum to 1.00',
+                        bad_connection;
+                END IF;
+                RETURN NULL;
+            END;
+            $$ LANGUAGE plpgsql
+        """)
+
+        await conn.execute("""
+            CREATE CONSTRAINT TRIGGER trg_match_factors_weight_sum
+                AFTER INSERT OR UPDATE OR DELETE ON match_scoring_factors
+                DEFERRABLE INITIALLY DEFERRED
+                FOR EACH ROW
+                EXECUTE FUNCTION check_match_factors_weight_sum()
+        """)
+
+        # -- DOMAIN 5: ENGAGEMENTS ---------------------------------------------
         await conn.execute("""
             CREATE TABLE engagements (
                 engagement_id            SERIAL PRIMARY KEY,
@@ -254,41 +315,33 @@ async def seed():
             )
         """)
 
+        # engagement_milestones -- reworked: proposal/confirmation workflow,
+        # new status set, no payment_amount column.
         await conn.execute("""
             CREATE TABLE engagement_milestones (
                 milestone_id               SERIAL PRIMARY KEY,
                 engagement_id              INTEGER REFERENCES engagements(engagement_id) ON DELETE CASCADE,
+                proposed_by_user_id        INTEGER REFERENCES users(user_id),
+                proposed_by_role           TEXT NOT NULL CHECK (proposed_by_role IN ('organization', 'expert')),
                 title                      TEXT NOT NULL,
                 description                TEXT,
                 order_index                INTEGER NOT NULL,
                 due_date                   DATE,
-                completed_at               TIMESTAMP,
-                status                     TEXT NOT NULL DEFAULT 'pending',
                 deliverable_description    TEXT,
-                payment_amount             NUMERIC(12,2),
+                status                     TEXT NOT NULL DEFAULT 'proposed',
+                confirmed_by_expert_id     INTEGER REFERENCES expert_profiles(expert_profile_id),
+                confirmed_at               TIMESTAMP,
+                completed_at               TIMESTAMP,
                 requires_client_approval   BOOLEAN DEFAULT false,
                 client_approved_at         TIMESTAMP,
-                created_at                 TIMESTAMP DEFAULT NOW()
+                created_at                 TIMESTAMP DEFAULT NOW(),
+                updated_at                 TIMESTAMP DEFAULT NOW()
             )
         """)
 
-        # ── DOMAIN 5: COMMUNICATION ───────────────────────────────────────────
-        await conn.execute("""
-            CREATE TABLE messages (
-                message_id       SERIAL PRIMARY KEY,
-                engagement_id    INTEGER REFERENCES engagements(engagement_id) ON DELETE CASCADE,
-                sender_id        INTEGER REFERENCES users(user_id),
-                content          TEXT,
-                message_type     TEXT NOT NULL DEFAULT 'text',
-                file_url         TEXT,
-                file_name        TEXT,
-                file_size_bytes  BIGINT,
-                is_read          BOOLEAN DEFAULT false,
-                read_at          TIMESTAMP,
-                created_at       TIMESTAMP DEFAULT NOW()
-            )
-        """)
-
+        # -- DOMAIN 6: COMMUNICATION -------------------------------------------
+        # secure_document_shares created before messages: messages.document_id
+        # FKs into it.
         await conn.execute("""
             CREATE TABLE secure_document_shares (
                 document_id        SERIAL PRIMARY KEY,
@@ -304,6 +357,22 @@ async def seed():
                 revoked_at         TIMESTAMP,
                 first_accessed_at  TIMESTAMP,
                 created_at         TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # messages -- file attachments now reference secure_document_shares
+        # via document_id instead of inline file_url/file_name/file_size_bytes.
+        await conn.execute("""
+            CREATE TABLE messages (
+                message_id       SERIAL PRIMARY KEY,
+                engagement_id    INTEGER REFERENCES engagements(engagement_id) ON DELETE CASCADE,
+                sender_id        INTEGER REFERENCES users(user_id),
+                content          TEXT,
+                message_type     TEXT NOT NULL DEFAULT 'text',
+                document_id      INTEGER REFERENCES secure_document_shares(document_id) ON DELETE SET NULL,
+                is_read          BOOLEAN DEFAULT false,
+                read_at          TIMESTAMP,
+                created_at       TIMESTAMP DEFAULT NOW()
             )
         """)
 
@@ -323,7 +392,7 @@ async def seed():
             )
         """)
 
-        # ── DOMAIN 6: TRUST & REVIEWS ─────────────────────────────────────────
+        # -- DOMAIN 7: TRUST & REVIEWS -----------------------------------------
         await conn.execute("""
             CREATE TABLE reviews (
                 review_id              SERIAL PRIMARY KEY,
@@ -341,15 +410,18 @@ async def seed():
                 is_public              BOOLEAN DEFAULT true,
                 is_flagged             BOOLEAN DEFAULT false,
                 flagged_reason         TEXT,
-                created_at             TIMESTAMP DEFAULT NOW()
+                created_at             TIMESTAMP DEFAULT NOW(),
+                UNIQUE (engagement_id, reviewer_role)
             )
         """)
 
+        # verification_records -- adds related_credential_id FK.
         await conn.execute("""
             CREATE TABLE verification_records (
                 verification_id          SERIAL PRIMARY KEY,
                 user_id                  INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
                 verification_type        TEXT NOT NULL,
+                related_credential_id    INTEGER REFERENCES expert_credentials(credential_id) ON DELETE CASCADE,
                 status                   TEXT NOT NULL DEFAULT 'pending',
                 reviewed_by_admin_id     INTEGER REFERENCES users(user_id),
                 submitted_document_urls  TEXT[],
@@ -361,7 +433,7 @@ async def seed():
             )
         """)
 
-        # ── DOMAIN 7: RISK ASSESSMENT ─────────────────────────────────────────
+        # -- DOMAIN 8: RISK ASSESSMENT -----------------------------------------
         await conn.execute("""
             CREATE TABLE risk_assessments (
                 assessment_id                   SERIAL PRIMARY KEY,
@@ -416,19 +488,12 @@ async def seed():
             )
         """)
 
-        # ── SEED DATA ─────────────────────────────────────────────────────────
-        print("Seeding data...")
-
-        # ── USERS ─────────────────────────────────────────────────────────────
-        # Python hashes passwords sequentially (passlib is synchronous)
-        # In Node.js you used Promise.all() for parallel hashing
-        # The Python equivalent with asyncio would be run_in_executor, but
-        # sequential is fine here — bcrypt is fast enough for a seed script
+        # -- SEED DATA ---------------------------------------------------------
+        # -- USERS -------------------------------------------------------------
         admin_hash  = hash_password("password123")
         org_hash    = hash_password("password123")
         expert_hash = hash_password("password123")
 
-        # fetchrow() returns a single Record — like rows[0] in Node.js pg
         admin = await conn.fetchrow("""
             INSERT INTO users (email, password_hash, role, is_email_verified)
             VALUES ($1, $2, 'admin', true)
@@ -447,10 +512,7 @@ async def seed():
             RETURNING user_id, email
         """, "dr.chen@quantumsec.io", expert_hash)
 
-        # asyncpg Records are accessed like dicts: admin['user_id']
-        # In Node.js pg you'd write: admin.user_id or alice.user_id
-
-        # ── ORGANIZATION PROFILE ──────────────────────────────────────────────
+        # -- ORGANIZATION PROFILE ----------------------------------------------
         org_profile = await conn.fetchrow("""
             INSERT INTO organization_profiles (
                 user_id, org_name, sector, sub_sector, founded_year,
@@ -463,13 +525,13 @@ async def seed():
                 'https://www.firstcommunitybankny.com',
                 'A regional community bank serving the Hudson Valley since 1987, storing decades of customer financial and mortgage records.',
                 'basic', '50k_250k', 'urgent',
-                14,    -- org chose 14 days instead of the 30-day default
+                14,
                 true
             )
             RETURNING org_profile_id
         """, org_user['user_id'])
 
-        # ── EXPERT PROFILE ────────────────────────────────────────────────────
+        # -- EXPERT PROFILE ----------------------------------------------------
         expert_profile = await conn.fetchrow("""
             INSERT INTO expert_profiles (
                 user_id, first_name, last_name, headline, bio,
@@ -490,8 +552,7 @@ async def seed():
             RETURNING expert_profile_id
         """, expert_user['user_id'])
 
-        # ── ORGANIZATION INFRASTRUCTURE ───────────────────────────────────────
-        # TEXT[] in PostgreSQL maps to a Python list in asyncpg
+        # -- ORGANIZATION INFRASTRUCTURE ---------------------------------------
         await conn.execute("""
             INSERT INTO organization_infrastructure (
                 org_id, data_categories, storage_type,
@@ -512,19 +573,50 @@ async def seed():
             )
         """, org_profile['org_profile_id'])
 
-        # ── EXPERT CREDENTIALS ────────────────────────────────────────────────
-        # execute() with no RETURNING — same as pool.query() with no rows needed
-        await conn.execute("""
+        # -- EXPERT CREDENTIALS (no is_admin_verified in this schema) ----------
+        cred_phd = await conn.fetchrow("""
             INSERT INTO expert_credentials (
-                expert_id, credential_type, credential_name,
-                institution, year_obtained, is_admin_verified
-            ) VALUES
-                ($1, 'degree',        'PhD in Cryptography',                        'MIT',                  2010, true),
-                ($1, 'certification', 'CISSP',                                      'ISC2',                 2015, true),
-                ($1, 'publication',   'Lattice-Based Cryptography for Financial Systems', 'IEEE Security & Privacy', 2022, false)
+                expert_id, credential_type, credential_name, institution, year_obtained
+            ) VALUES ($1, 'degree', 'PhD in Cryptography', 'MIT', 2010)
+            RETURNING credential_id
         """, expert_profile['expert_profile_id'])
 
-        # ── EXPERT SPECIALIZATIONS ────────────────────────────────────────────
+        cred_cissp = await conn.fetchrow("""
+            INSERT INTO expert_credentials (
+                expert_id, credential_type, credential_name, institution, year_obtained
+            ) VALUES ($1, 'certification', 'CISSP', 'ISC2', 2015)
+            RETURNING credential_id
+        """, expert_profile['expert_profile_id'])
+
+        await conn.execute("""
+            INSERT INTO expert_credentials (
+                expert_id, credential_type, credential_name, institution, year_obtained
+            ) VALUES ($1, 'publication', 'Lattice-Based Cryptography for Financial Systems', 'IEEE Security & Privacy', 2022)
+        """, expert_profile['expert_profile_id'])
+
+        # -- EXPERT WORK HISTORY (new table) -----------------------------------
+        await conn.execute("""
+            INSERT INTO expert_work_history (
+                expert_id, organization_name, job_title, employment_type,
+                start_date, end_date, is_current, description, order_index
+            ) VALUES
+                ($1, 'QuantumSec Consulting', 'Principal Cryptography Consultant', 'consulting',
+                 $2, NULL, true,
+                 'Lead post-quantum migration engagements for financial and government clients.', 1),
+                ($1, 'National Institute of Standards & Technology', 'Visiting Researcher', 'government',
+                 $3, $4, false,
+                 'Participated in the NIST PQC standardization review process.', 2),
+                ($1, 'MIT Computer Science & AI Laboratory', 'Postdoctoral Researcher', 'academic',
+                 $5, $6, false,
+                 'Lattice-based cryptography research; published on financial-sector applications.', 3)
+        """,
+            expert_profile['expert_profile_id'],
+            date(2018, 1, 1),
+            date(2015, 6, 1), date(2017, 12, 31),
+            date(2010, 9, 1), date(2015, 5, 31)
+        )
+
+        # -- EXPERT SPECIALIZATIONS --------------------------------------------
         await conn.execute("""
             INSERT INTO expert_specializations (
                 expert_id, specialization, proficiency_level, years_in_specialization
@@ -536,7 +628,7 @@ async def seed():
                 ($1, 'lattice_cryptography',       'leading_researcher', 8)
         """, expert_profile['expert_profile_id'])
 
-        # ── EXPERT SECTOR EXPERIENCE ──────────────────────────────────────────
+        # -- EXPERT SECTOR EXPERIENCE ------------------------------------------
         await conn.execute("""
             INSERT INTO expert_sector_experience (
                 expert_id, sector, years_experience_in_sector,
@@ -550,7 +642,7 @@ async def seed():
                  'Advised a state-level agency on post-quantum migration readiness and participated in the NIST PQC standardization review process.')
         """, expert_profile['expert_profile_id'])
 
-        # ── EXPERT ENGAGEMENT TYPES ───────────────────────────────────────────
+        # -- EXPERT ENGAGEMENT TYPES (canonical engagement_type enum) ----------
         await conn.execute("""
             INSERT INTO expert_engagement_types (
                 expert_id, engagement_type,
@@ -559,16 +651,14 @@ async def seed():
                 approach_description
             ) VALUES
                 ($1, 'cryptographic_audit', 6, 10, 40000.00, 90000.00,
-                 'I begin with a full cryptographic asset inventory — algorithms, key lengths, certificate lifecycles, and protocol versions — then map each asset to its quantum vulnerability using Shor''s and Grover''s threat models.'),
+                 'I begin with a full cryptographic asset inventory -- algorithms, key lengths, certificate lifecycles, and protocol versions -- then map each asset to its quantum vulnerability using Shor''s and Grover''s threat models.'),
                 ($1, 'migration_roadmap', 8, 16, 60000.00, 150000.00,
                  'Roadmaps follow a phased approach: assess, prioritize, pilot, and scale. I work closely with engineering teams to ensure NIST FIPS 203/204/205 standards are correctly implemented for your specific infrastructure.'),
                 ($1, 'executive_briefing', 1, 2, 5000.00, 15000.00,
                  'A 2-day engagement to bring your board and C-suite up to speed on quantum threats, regulatory timelines, and your specific risk exposure. Includes a one-page risk summary for board presentation.')
         """, expert_profile['expert_profile_id'])
 
-        # ── CONNECTION REQUEST ─────────────────────────────────────────────────
-        # Templates are now frontend components — no DB insert needed.
-        # expires_at is computed from org's default_connection_expiry_days (14 days here).
+        # -- CONNECTION REQUEST ------------------------------------------------
         connection = await conn.fetchrow("""
             INSERT INTO connection_requests (
                 org_id, expert_id, initiated_by_user_id,
@@ -580,7 +670,7 @@ async def seed():
                 'Hello Dr. Chen, we are a community bank with a 22-year-old core banking system relying heavily on RSA-2048. We are concerned about harvest-now-decrypt-later attacks on our mortgage records and would love to discuss a cryptographic audit.',
                 'cryptographic_audit', 'within_3mo',
                 91.50,
-                NOW() + INTERVAL '14 days',  -- computed from org's default_connection_expiry_days
+                NOW() + INTERVAL '14 days',
                 NOW() - INTERVAL '2 days'
             )
             RETURNING connection_id
@@ -590,7 +680,7 @@ async def seed():
             org_user['user_id']
         )
 
-        # ── MATCH SCORING FACTORS ──────────────────────────────────────────────
+        # -- MATCH SCORING FACTORS (weights sum to 1.00; checked at COMMIT) ----
         await conn.execute("""
             INSERT INTO match_scoring_factors (
                 connection_id, factor_name, weight, raw_score, weighted_contribution
@@ -602,7 +692,7 @@ async def seed():
                 ($1, 'availability',              0.10, 100.00, 10.00)
         """, connection['connection_id'])
 
-        # ── ENGAGEMENT ─────────────────────────────────────────────────────────
+        # -- ENGAGEMENT --------------------------------------------------------
         today = date.today()
 
         engagement = await conn.fetchrow("""
@@ -612,7 +702,7 @@ async def seed():
                 agreed_budget, payment_structure, start_date, estimated_end_date
             ) VALUES (
                 $1, $2, $3, 'cryptographic_audit',
-                'Cryptographic Audit — First Community Bank of NY',
+                'Cryptographic Audit -- First Community Bank of NY',
                 'Full cryptographic asset audit covering core banking, ATM network, and customer-facing web infrastructure. Focus on RSA-2048 exposure and HNDL risk for long-lived mortgage records.',
                 'active',
                 75000.00, 'milestone_based',
@@ -627,74 +717,63 @@ async def seed():
             today + timedelta(weeks=8)
         )
 
-        # ── ENGAGEMENT MILESTONES ──────────────────────────────────────────────
+        # -- ENGAGEMENT MILESTONES (proposal/confirmation workflow) ------------
+        # These were proposed by the expert and confirmed by the same expert.
         await conn.execute("""
             INSERT INTO engagement_milestones (
-                engagement_id, title, description, order_index,
-                due_date, status, deliverable_description,
-                payment_amount, requires_client_approval, completed_at
+                engagement_id, proposed_by_user_id, proposed_by_role,
+                title, description, order_index, due_date,
+                deliverable_description, status,
+                confirmed_by_expert_id, confirmed_at,
+                requires_client_approval, completed_at
             ) VALUES
-                ($1, 'Kickoff & Scoping',
+                ($1, $2, 'expert',
+                 'Kickoff & Scoping',
                  'Scope alignment, documentation gathering, secure channel setup.',
-                 1, $2, 'completed', 'Signed scope-of-work document',
-                 10000.00, true, NOW() - INTERVAL '5 days'),
+                 1, $3, 'Signed scope-of-work document', 'completed',
+                 $4, NOW() - INTERVAL '9 days',
+                 true, NOW() - INTERVAL '5 days'),
 
-                ($1, 'Cryptographic Asset Inventory',
+                ($1, $2, 'expert',
+                 'Cryptographic Asset Inventory',
                  'Full enumeration of all cryptographic assets across all systems.',
-                 2, $3, 'in_progress', 'Cryptographic asset register',
-                 20000.00, true, NULL),
+                 2, $5, 'Cryptographic asset register', 'in_progress',
+                 $4, NOW() - INTERVAL '9 days',
+                 true, NULL),
 
-                ($1, 'Vulnerability Mapping',
+                ($1, $2, 'expert',
+                 'Vulnerability Mapping',
                  'Map each asset to Shor/Grover threat models. Identify HNDL exposure.',
-                 3, $4, 'pending', 'Vulnerability mapping report',
-                 15000.00, false, NULL),
+                 3, $6, 'Vulnerability mapping report', 'confirmed',
+                 $4, NOW() - INTERVAL '9 days',
+                 false, NULL),
 
-                ($1, 'Compliance Gap Analysis',
+                ($1, $2, 'expert',
+                 'Compliance Gap Analysis',
                  'Gap analysis against FFIEC and NIST post-quantum guidance.',
-                 4, $5, 'pending', 'Compliance gap matrix',
-                 15000.00, false, NULL),
+                 4, $7, 'Compliance gap matrix', 'confirmed',
+                 $4, NOW() - INTERVAL '9 days',
+                 false, NULL),
 
-                ($1, 'Final Report & Presentation',
+                ($1, $2, 'expert',
+                 'Final Report & Presentation',
                  'Delivery of full assessment report and executive presentation.',
-                 5, $6, 'pending', 'Full assessment report PDF, executive deck',
-                 15000.00, true, NULL)
+                 5, $8, 'Full assessment report PDF, executive deck', 'confirmed',
+                 $4, NOW() - INTERVAL '9 days',
+                 true, NULL)
         """,
             engagement['engagement_id'],
+            expert_user['user_id'],
             today - timedelta(days=5),
+            expert_profile['expert_profile_id'],
             today + timedelta(weeks=2),
             today + timedelta(weeks=4),
             today + timedelta(weeks=6),
             today + timedelta(weeks=8)
         )
 
-        # ── MESSAGES ───────────────────────────────────────────────────────────
-        await conn.execute("""
-            INSERT INTO messages (
-                engagement_id, sender_id, content, message_type, is_read, read_at
-            ) VALUES
-                ($1, $2,
-                 'Hi Dr. Chen, glad to be working with you. I have attached our network diagram and a full list of vendor software. Let me know if you need anything before the kickoff call.',
-                 'text', true, NOW() - INTERVAL '4 days'),
-
-                ($1, $3,
-                 'Thank you! I have reviewed the documents. Preliminary observation: your core banking system is using RSA-2048 for TLS termination — that will be the highest priority item. See you Thursday!',
-                 'text', true, NOW() - INTERVAL '3 days'),
-
-                ($1, $2,
-                 'Quick question — does the audit cover our ATM network? Our ATMs are managed by a third-party vendor.',
-                 'text', true, NOW() - INTERVAL '1 day'),
-
-                ($1, $3,
-                 'Yes, third-party ATM vendors are in scope. I will assess their cryptographic guarantees and whether their contracts require quantum-safe upgrades. This is a common gap for community banks.',
-                 'text', false, NULL)
-        """,
-            engagement['engagement_id'],
-            org_user['user_id'],
-            expert_user['user_id']
-        )
-
-        # ── SECURE DOCUMENT SHARE ──────────────────────────────────────────────
-        await conn.execute("""
+        # -- SECURE DOCUMENT SHARE (created first so a message can reference it)
+        document = await conn.fetchrow("""
             INSERT INTO secure_document_shares (
                 engagement_id, uploaded_by_id, document_name, document_type,
                 storage_url, file_size_bytes, checksum_sha256
@@ -705,9 +784,37 @@ async def seed():
                 2457600,
                 'a3f8d9c2e1b4f5a67890abcdef1234567890abcdef1234567890abcdef12345678'
             )
+            RETURNING document_id
         """, engagement['engagement_id'], org_user['user_id'])
 
-        # ── NOTIFICATIONS ──────────────────────────────────────────────────────
+        # -- MESSAGES (file message links secure_document_shares via document_id)
+        await conn.execute("""
+            INSERT INTO messages (
+                engagement_id, sender_id, content, message_type, document_id, is_read, read_at
+            ) VALUES
+                ($1, $2,
+                 'Hi Dr. Chen, glad to be working with you. I have attached our network diagram. Let me know if you need anything before the kickoff call.',
+                 'file', $4, true, NOW() - INTERVAL '4 days'),
+
+                ($1, $3,
+                 'Thank you! I have reviewed the documents. Preliminary observation: your core banking system is using RSA-2048 for TLS termination -- that will be the highest priority item. See you Thursday!',
+                 'text', NULL, true, NOW() - INTERVAL '3 days'),
+
+                ($1, $2,
+                 'Quick question -- does the audit cover our ATM network? Our ATMs are managed by a third-party vendor.',
+                 'text', NULL, true, NOW() - INTERVAL '1 day'),
+
+                ($1, $3,
+                 'Yes, third-party ATM vendors are in scope. I will assess their cryptographic guarantees and whether their contracts require quantum-safe upgrades. This is a common gap for community banks.',
+                 'text', NULL, false, NULL)
+        """,
+            engagement['engagement_id'],
+            org_user['user_id'],
+            expert_user['user_id'],
+            document['document_id']
+        )
+
+        # -- NOTIFICATIONS -----------------------------------------------------
         await conn.execute("""
             INSERT INTO notifications (
                 user_id, type, title, body,
@@ -716,7 +823,7 @@ async def seed():
                 ($1, 'connection_accepted',
                  'Dr. Sarah Chen accepted your connection request',
                  'Dr. Chen has accepted your request and is ready to begin scoping your cryptographic audit.',
-                 'connection', $2, '/connections/1', true),
+                 'connection_request', $2, '/connections/1', true),
 
                 ($1, 'milestone_completed',
                  'Milestone completed: Kickoff & Scoping',
@@ -728,29 +835,33 @@ async def seed():
             engagement['engagement_id']
         )
 
-        # ── VERIFICATION RECORDS ───────────────────────────────────────────────
+        # -- VERIFICATION RECORDS (identity + credential-linked) ---------------
         await conn.execute("""
             INSERT INTO verification_records (
-                user_id, verification_type, status,
+                user_id, verification_type, related_credential_id, status,
                 reviewed_by_admin_id, admin_notes, reviewed_at, expires_at
             ) VALUES
-                ($1, 'identity', 'approved', $2,
+                ($1, 'identity', NULL, 'approved', $2,
                  'Government ID verified against submitted documents.',
-                 NOW() - INTERVAL '30 days',
-                 $3),
+                 NOW() - INTERVAL '30 days', $3),
 
-                ($1, 'professional_credential', 'approved', $2,
-                 'CISSP and PhD confirmed via institution and ISC2 registry.',
-                 NOW() - INTERVAL '28 days',
-                 $4)
+                ($1, 'professional_credential', $4, 'approved', $2,
+                 'PhD confirmed via institution registry.',
+                 NOW() - INTERVAL '28 days', $5),
+
+                ($1, 'professional_credential', $6, 'approved', $2,
+                 'CISSP confirmed via ISC2 registry.',
+                 NOW() - INTERVAL '28 days', $5)
         """,
             expert_user['user_id'],
             admin['user_id'],
-            today.replace(year=today.year + 2),
-            today.replace(year=today.year + 3)
+            add_years(today, 2),
+            cred_phd['credential_id'],
+            add_years(today, 3),
+            cred_cissp['credential_id']
         )
 
-        # ── REVIEW ─────────────────────────────────────────────────────────────
+        # -- REVIEW (UNIQUE per engagement/reviewer_role) ----------------------
         await conn.execute("""
             INSERT INTO reviews (
                 engagement_id, reviewer_id, reviewee_id, reviewer_role,
@@ -760,13 +871,13 @@ async def seed():
             ) VALUES (
                 $1, $2, $3, 'organization',
                 5, 5, 5, 5, 5,
-                'Exceptional expertise — transformed how we think about our security posture',
+                'Exceptional expertise -- transformed how we think about our security posture',
                 'Dr. Chen identified vulnerabilities we had no idea existed. Her explanation of harvest-now-decrypt-later attacks was clear enough that we could present the risk to our board and get immediate budget approval for remediation. The final report was thorough and directly actionable.',
                 true
             )
         """, engagement['engagement_id'], org_user['user_id'], expert_user['user_id'])
 
-        # ── RISK ASSESSMENT ────────────────────────────────────────────────────
+        # -- RISK ASSESSMENT ---------------------------------------------------
         assessment = await conn.fetchrow("""
             INSERT INTO risk_assessments (
                 engagement_id, created_by_expert_id,
@@ -786,7 +897,7 @@ async def seed():
             RETURNING assessment_id
         """, engagement['engagement_id'], expert_profile['expert_profile_id'])
 
-        # ── ASSESSMENT FINDINGS ────────────────────────────────────────────────
+        # -- ASSESSMENT FINDINGS -----------------------------------------------
         finding_1 = await conn.fetchrow("""
             INSERT INTO assessment_findings (
                 assessment_id, category, severity, title, description,
@@ -808,14 +919,14 @@ async def seed():
             ) VALUES (
                 $1, 'data_at_rest', 'high',
                 'Long-Lived Mortgage Records at HNDL Risk',
-                'Mortgage records with 30-year retention requirements are encrypted with RSA-2048 at rest. Adversaries may be harvesting this encrypted data today with intent to decrypt it once quantum hardware becomes available — well within the retention window.',
+                'Mortgage records with 30-year retention requirements are encrypted with RSA-2048 at rest. Adversaries may be harvesting this encrypted data today with intent to decrypt it once quantum hardware becomes available -- well within the retention window.',
                 'Document management system, mortgage origination archive, regulatory reporting store',
                 'harvest_now_decrypt_later', 2
             )
             RETURNING finding_id
         """, assessment['assessment_id'])
 
-        # ── REMEDIATION RECOMMENDATIONS ────────────────────────────────────────
+        # -- REMEDIATION RECOMMENDATIONS ---------------------------------------
         await conn.execute("""
             INSERT INTO remediation_recommendations (
                 finding_id, assessment_id, priority,
@@ -827,14 +938,14 @@ async def seed():
                  'Deploy Hybrid TLS with CRYSTALS-Kyber',
                  'Replace RSA-2048 key exchange with a hybrid scheme combining ECDH (X25519) and CRYSTALS-Kyber (ML-KEM). Hybrid schemes provide backward compatibility while adding quantum resistance. Update load balancers and API gateway first, then the mainframe TLS stack.',
                  'CRYSTALS-Kyber (ML-KEM)', 'NIST FIPS 203',
-                 12, '$120,000 – $200,000',
+                 12, '$120,000 - $200,000',
                  'Vendor support confirmation for Kyber on IBM mainframe TLS; staff PQC training'),
 
                 ($3, $2, 'short_term_0_6mo',
                  'Re-encrypt Mortgage Archive with AES-256 + Kyber Hybrid',
                  'Initiate phased re-encryption of the mortgage records archive using AES-256 for data at rest with key encapsulation migrated to CRYSTALS-Kyber. Protects the key exchange layer against future quantum decryption.',
                  'CRYSTALS-Kyber (ML-KEM) for key encapsulation, AES-256 for data', 'NIST FIPS 203',
-                 24, '$350,000 – $700,000',
+                 24, '$350,000 - $700,000',
                  'Completion of TLS migration; legal review of re-encryption process against GLBA; storage capacity planning for re-encryption staging')
         """,
             finding_1['finding_id'],
@@ -848,14 +959,8 @@ async def seed():
             "expert_user": expert_user,
         }
 
-    finally:
-        # Always close the connection — same as pool.end() in Node.js
-        await conn.close()
 
-
-# ── ENTRY POINT ───────────────────────────────────────────────────────────────
-# Python equivalent of:
-#   seed().then(...).catch(...).finally(() => pool.end())
+# -- ENTRY POINT ---------------------------------------------------------------
 if __name__ == "__main__":
     async def main():
         try:
@@ -867,5 +972,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"\nError seeding database: {e}")
             raise
+        finally:
+            await close_pool()
 
     asyncio.run(main())
