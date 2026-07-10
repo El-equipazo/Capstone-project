@@ -4,7 +4,8 @@ import { SPECIALIZATIONS, SECTORS, ENGAGEMENT_TYPES } from '../data/mockExperts'
 import ExpertCard from '../components/ExpertCard'
 import { labelize } from '../utils/format'
 
-const AVAILABILITY_OPTIONS = ['available', 'limited', 'unavailable']
+const AVAILABILITY_OPTIONS = ['available', 'limited', 'booking_future', 'unavailable']
+const RATE_MAX_OPTIONS = ['250', '350', '500']
 
 const EMPTY_FILTERS = {
   q: '',
@@ -12,6 +13,7 @@ const EMPTY_FILTERS = {
   sector: '',
   engagement_type: '',
   availability: '',
+  rate_max: '',
   rating_min: '',
 }
 
@@ -121,6 +123,18 @@ export default function ExpertDirectory() {
                   onClick={() => toggleFilter('availability', s)}
                 >
                   {labelize(s)}
+                </span>
+              ))}
+            </FilterGroup>
+
+            <FilterGroup label="Maximum hourly rate">
+              {RATE_MAX_OPTIONS.map((s) => (
+                <span
+                  key={s}
+                  className={`chip ${filters.rate_max === s ? 'on' : ''}`}
+                  onClick={() => toggleFilter('rate_max', s)}
+                >
+                  ≤ ${s}/hr
                 </span>
               ))}
             </FilterGroup>

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { expertsApi } from '../api/client'
-import VerifiedBadge from '../components/VerifiedBadge'
-import RatingStars from '../components/RatingStars'
+import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
-import { formatRate, formatCurrencyRange, labelize, AVAILABILITY_LABEL } from '../utils/format'
+import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL } from '../utils/format'
 
 export default function ExpertProfile() {
   const { expertId } = useParams()
@@ -36,7 +35,7 @@ export default function ExpertProfile() {
 
   if (notFound) {
     return (
-      <div className="page">
+      <div className="page xp-page">
         <div className="container empty-state">
           <p style={{ fontWeight: 600, marginBottom: 8 }}>Expert profile not found</p>
           <Link to="/experts" className="btn btn-sm">
@@ -49,7 +48,7 @@ export default function ExpertProfile() {
 
   if (!expert) {
     return (
-      <div className="page">
+      <div className="page xp-page">
         <div className="container">
           <p className="lead">Loading profile…</p>
         </div>
@@ -57,173 +56,168 @@ export default function ExpertProfile() {
     )
   }
 
-  const initials = `${expert.first_name[0]}${expert.last_name[0]}`
+  // POST /connections is Auth: organization — hide the CTA for signed-in experts/admins
+  // (anonymous visitors still see it and are routed through login, where role is decided).
+  const canRequestAssessment = !user || user.role === 'organization'
+  const unavailable = expert.availability_status === 'unavailable'
 
   return (
-    <div className="page">
-      <div className="container" style={{ maxWidth: 880 }}>
-        <Link to="/experts" className="lead" style={{ fontSize: 12.5, display: 'inline-block', marginBottom: 16 }}>
+    <div className="page xp-page">
+      <div className="container xp-container">
+        <Link to="/experts" className="lead" style={{ fontSize: 12, display: 'inline-block', marginBottom: 22 }}>
           ← Back to directory
         </Link>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 24 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Header */}
-            <div className="card" style={{ padding: 24 }}>
-              <div className="row gap-14" style={{ alignItems: 'flex-start', marginBottom: 14 }}>
-                <span className="avatar" style={{ width: 60, height: 60, fontSize: 18 }}>
-                  {initials}
-                </span>
-                <div style={{ flex: 1 }}>
-                  <div className="row gap-10 wrap" style={{ justifyContent: 'space-between' }}>
-                    <h1 className="h2" style={{ fontSize: 21 }}>
-                      {expert.first_name} {expert.last_name}
-                    </h1>
-                    <VerifiedBadge verified={expert.is_verified} />
-                  </div>
-                  <p className="lead" style={{ marginTop: 4 }}>
-                    {expert.headline}
-                  </p>
-                  <div className="row gap-8 wrap" style={{ marginTop: 10 }}>
-                    <RatingStars rating={expert.avg_rating} count={expert.total_completed_engagements} />
-                    <span className="tag">{expert.total_completed_engagements} completed engagements</span>
-                    <span className="tag">{expert.years_of_experience} yrs experience</span>
-                  </div>
-                </div>
-              </div>
-              <p className="lead">{expert.bio}</p>
-            </div>
+        <div className="xp-topbar">
+          <span className="section-label">Expert profile</span>
+          <span className="section-label">№{String(expert.expert_profile_id).padStart(2, '0')}</span>
+        </div>
 
-            {/* Specializations */}
-            <Section title="Specializations">
-              <div className="row gap-8 wrap">
-                {expert.specializations.map((s) => (
-                  <span key={s.specialization_id} className="chip on">
-                    {labelize(s.specialization)}
-                    <span className="tag" style={{ marginLeft: 4 }}>
-                      {labelize(s.proficiency_level)}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </Section>
-
-            {/* Credentials */}
-            <Section title="Credentials & certifications">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {expert.credentials.map((c) => (
-                  <div key={c.credential_id} className="row" style={{ justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{c.credential_name}</div>
-                      <div className="lead" style={{ fontSize: 11.5 }}>
-                        {c.institution} · {c.year_obtained}
-                      </div>
-                    </div>
-                    {c.is_admin_verified ? (
-                      <span className="badge">✓ verified</span>
-                    ) : (
-                      <span className="badge pending">unverified</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Sector experience */}
-            <Section title="Sector experience & compliance">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {expert.sector_experience.map((s) => (
-                  <div key={s.sector_exp_id}>
-                    <div className="row gap-8 wrap" style={{ marginBottom: 6 }}>
-                      <span style={{ fontWeight: 700, fontSize: 13 }}>{labelize(s.sector)}</span>
-                      <span className="tag">{s.years_experience_in_sector} yrs in sector</span>
-                    </div>
-                    <div className="row gap-6 wrap" style={{ marginBottom: 6 }}>
-                      {s.compliance_standards_known.map((c) => (
-                        <span key={c} className="tag">
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                    {s.anonymized_client_examples && (
-                      <p className="lead" style={{ fontSize: 12 }}>
-                        {s.anonymized_client_examples}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Engagement types */}
-            <Section title="Engagement types & estimated timelines">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {expert.engagement_types.map((t) => (
-                  <div key={t.eng_type_id} className="card2" style={{ border: '1px solid var(--line)', borderRadius: 8, padding: 14 }}>
-                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontWeight: 700, fontSize: 13 }}>{labelize(t.engagement_type)}</span>
-                      <span className="tag">
-                        {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
-                      </span>
-                    </div>
-                    <p className="lead" style={{ fontSize: 12.5, marginBottom: 6 }}>
-                      {t.approach_description}
-                    </p>
-                    <span className="tag">
-                      Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Section>
+        <div className="xp-hero">
+          <div className="xp-photo">
+            <PortraitPlaceholder />
           </div>
-
-          {/* Sidebar */}
-          <aside style={{ position: 'sticky', top: 84, alignSelf: 'flex-start' }}>
-            <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="stat">
-                <span className="v">{formatRate(expert.hourly_rate_min, expert.hourly_rate_max)}</span>
-                <span className="l">estimated rate</span>
-              </div>
-              <div className="stat">
-                <span className="v">{AVAILABILITY_LABEL[expert.availability_status]}</span>
-                <span className="l">availability · usually responds in {expert.avg_response_time_hours}h</span>
-              </div>
-              <div className="stat">
-                <span className="v">{labelize(expert.preferred_engagement_length)}</span>
-                <span className="l">preferred engagement length</span>
-              </div>
-
-              {requestSent ? (
-                <div className="alert alert-success">Request sent — {expert.first_name} typically responds within {expert.avg_response_time_hours}h.</div>
-              ) : (
-                <button
-                  className="btn btn-acc btn-block"
-                  onClick={handleRequestAssessment}
-                  disabled={expert.availability_status === 'unavailable'}
-                >
-                  {expert.availability_status === 'unavailable' ? 'Currently unavailable' : 'Request assessment'}
-                </button>
-              )}
-
-              {expert.linkedin_url && (
-                <a href={expert.linkedin_url} target="_blank" rel="noreferrer" className="btn btn-sm btn-block">
-                  View LinkedIn
-                </a>
-              )}
+          <div className="xp-index">
+            <div className="xp-bignum">{expert.total_completed_engagements}</div>
+            <div className="xp-status-row">
+              <span className="xp-status-dot" style={{ opacity: unavailable ? 0.3 : 1 }} />
+              {AVAILABILITY_LABEL[expert.availability_status]}
             </div>
-          </aside>
+            <div className="xp-substat">{expert.years_of_experience} yrs experience</div>
+          </div>
+        </div>
+
+        <h1 className="xp-name">
+          {expert.first_name} {expert.last_name}.
+        </h1>
+
+        <div className="xp-role-row">
+          <span className="xp-role">
+            {expert.headline}
+            {expert.is_verified && ' · Verified'}
+          </span>
+          {expert.linkedin_url && (
+            <a href={expert.linkedin_url} target="_blank" rel="noreferrer" className="xp-link-arrow">
+              LinkedIn ↗
+            </a>
+          )}
+        </div>
+
+        <section className="xp-section">
+          <span className="section-label xp-section-label">About</span>
+          <p className="xp-about-text">{expert.bio}</p>
+        </section>
+
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Specializations</span>
+          <div className="xp-plain-list">
+            {expert.specializations.map((s) => (
+              <span key={s.specialization_id}>
+                {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
+              </span>
+            ))}
+          </div>
+        </section>
+
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Credentials &amp; certifications</span>
+          <div className="xp-row-list">
+            {expert.credentials.map((c) => (
+              <div className="xp-row-item" key={c.credential_id}>
+                <span className="label">{c.credential_name}</span>
+                <span className="meta">
+                  {c.institution} · {c.year_obtained} · {c.is_verified ? 'Verified' : 'Pending verification'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Work history</span>
+          <div className="xp-row-list">
+            {expert.work_history.map((w) => (
+              <div className="xp-row-item xp-row-item-stack" key={w.work_history_id}>
+                <div className="xp-row-item-top">
+                  <span className="label">
+                    {w.job_title} — {w.organization_name}
+                  </span>
+                  <span className="meta">{formatWorkPeriod(w.start_date, w.end_date)}</span>
+                </div>
+                {w.description && <span className="meta">{w.description}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
+          <div className="xp-row-list">
+            {expert.sector_experience.map((s) => (
+              <div className="xp-row-item xp-row-item-stack" key={s.sector_exp_id}>
+                <div className="xp-row-item-top">
+                  <span className="label">{labelize(s.sector)}</span>
+                  <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
+                </div>
+                <span className="meta">{s.compliance_standards_known.join(', ')}</span>
+                {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
+          <div className="xp-row-list">
+            {expert.engagement_types.map((t) => (
+              <div className="xp-row-item xp-row-item-stack" key={t.eng_type_id}>
+                <div className="xp-row-item-top">
+                  <span className="label">{labelize(t.engagement_type)}</span>
+                  <span className="meta">
+                    {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
+                  </span>
+                </div>
+                <span className="meta">{t.approach_description}</span>
+                <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="xp-connect-card">
+          <div className="xp-connect-left">
+            <span className="section-label xp-section-label">Request assessment</span>
+            {canRequestAssessment ? (
+              requestSent ? (
+                <p className="xp-connect-text">Request sent — {expert.first_name} has been notified.</p>
+              ) : (
+                <>
+                  <p className="xp-connect-text">
+                    Share your risk profile with {expert.first_name} to connect intentionally.
+                  </p>
+                  <button className="xp-tap-link" onClick={handleRequestAssessment} disabled={unavailable}>
+                    {unavailable ? 'Currently unavailable' : 'Tap to request ↗'}
+                  </button>
+                </>
+              )
+            ) : (
+              <p className="xp-connect-text">Only organizations can request assessments.</p>
+            )}
+          </div>
+          <div className="xp-dot-pattern" />
+        </div>
+
+        <div className="xp-stats-row">
+          <div className="xp-stat-block">
+            <span className="section-label xp-section-label">Rating</span>
+            <div className="value">{expert.avg_rating ? `${expert.avg_rating.toFixed(1)} ↗` : 'New ↗'}</div>
+          </div>
+          <div className="xp-stat-block">
+            <span className="section-label xp-section-label">Rate</span>
+            <div className="value">{formatRate(expert.hourly_rate_min, expert.hourly_rate_max)} ↗</div>
+          </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-function Section({ title, children }) {
-  return (
-    <div className="card" style={{ padding: 20 }}>
-      <span className="section-label">{title}</span>
-      <div style={{ marginTop: 12 }}>{children}</div>
     </div>
   )
 }
