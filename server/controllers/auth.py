@@ -129,11 +129,17 @@ async def get_me(current_user=Depends(get_current_user)):
     profile = None
     role = current_user["role"]
     if role == "organization":
-        from server.models import organization_model  # teammate implementing
-        profile = await organization_model.find_by_user(current_user["user_id"])
+        try:
+            from server.models import organization_model
+            profile = await organization_model.find_by_user(current_user["user_id"])
+        except ImportError:
+            pass
     elif role == "expert":
-        from server.models import expert_model  # teammate implementing
-        profile = await expert_model.find_by_user(current_user["user_id"])
+        try:
+            from server.models import expert_model
+            profile = await expert_model.find_by_user(current_user["user_id"])
+        except ImportError:
+            pass
     return {**dict(current_user), "profile": dict(profile) if profile else None}
 
 
