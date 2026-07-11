@@ -33,7 +33,10 @@ def check_rating(value, field):
     """Any *_rating column: SMALLINT 1-5 (or NULL for optional sub-ratings)."""
     if value is None:
         return
-    if not isinstance(value, int) or not (1 <= value <= 5):
+    # bool is a subclass of int, so `isinstance(True, int)` is True and
+    # `1 <= True <= 5` holds -- a JSON `true` would silently validate as 1.
+    # Exclude bool explicitly.
+    if isinstance(value, bool) or not isinstance(value, int) or not (1 <= value <= 5):
         raise ValidationError(
             f"{field} must be an integer between 1 and 5",
             field=field, issue="out_of_range",

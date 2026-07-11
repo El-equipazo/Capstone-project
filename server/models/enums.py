@@ -7,6 +7,8 @@ constraint (role, ratings, milestone status), these mirror it so bad input is
 caught in the app layer with a clean 400 before the DB raises a 23xxx error.
 """
 
+from enum import Enum
+
 # Shared across engagements, expert_engagement_types, connection_requests.org_stated_need
 ENGAGEMENT_TYPE = {
     "cryptographic_audit", "risk_assessment", "migration_roadmap",
@@ -29,7 +31,27 @@ QUANTUM_KNOWLEDGE_LEVEL = {"none", "basic", "intermediate", "advanced"}
 BUDGET_RANGE = {"under_10k", "10k_50k", "50k_250k", "250k_plus", "undisclosed"}
 URGENCY_LEVEL = {"just_exploring", "planning_ahead", "urgent", "critical"}
 
-CONNECTION_STATUS = {"pending", "accepted", "declined", "expired"}
+
+class ConnectionStatus(str, Enum):
+    """Named constants for connection_requests.status so code references the
+    canonical value instead of a bare string literal (a typo becomes an
+    AttributeError at import, not a silently-wrong query). Subclasses str so
+    instances compare/serialize as their value and drop straight into SQL."""
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    EXPIRED = "expired"
+
+    def __str__(self) -> str:
+        # Enum overrides str.__str__ to 'ClassName.MEMBER'; restore the value
+        # so f-strings and log messages render 'pending', not
+        # 'ConnectionStatus.PENDING'. (StrEnum does this natively on 3.11+,
+        # but this works on every version.)
+        return self.value
+
+
+# Validation set, derived from the enum so the two can't drift apart.
+CONNECTION_STATUS = {s.value for s in ConnectionStatus}
 ORG_STATED_TIMELINE = {"asap", "within_3mo", "within_6mo", "within_year", "just_exploring"}
 
 ENGAGEMENT_STATUS = {

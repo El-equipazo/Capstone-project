@@ -9,8 +9,12 @@ Shows three patterns the thinner models don't need:
 """
 
 from server.db import connection_pool as pool
-from .enums import CONNECTION_STATUS, ENGAGEMENT_TYPE, ORG_STATED_TIMELINE
-from .errors import ConflictError, NotFoundError, TransitionError, ValidationError
+from .enums import (
+    ConnectionStatus, CONNECTION_STATUS, ENGAGEMENT_TYPE, ORG_STATED_TIMELINE,
+)
+from .errors import (
+    ConflictError, GoneError, NotFoundError, TransitionError, ValidationError,
+)
 from .validators import check_enum
 
 
@@ -38,12 +42,12 @@ async def create(*, org_id, expert_id, initiated_by_user_id,
                     org_id, expert_id, initiated_by_user_id, status,
                     initial_message, org_stated_need, org_stated_timeline,
                     match_score, expires_at
-                ) VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8)
+                ) VALUES ($1, $2, $3, $9, $4, $5, $6, $7, $8)
                 RETURNING *
                 """,
                 org_id, expert_id, initiated_by_user_id,
                 initial_message, org_stated_need, org_stated_timeline,
-                match_score, expires_at,
+                match_score, expires_at, ConnectionStatus.PENDING,
             )
             if factors:
                 await conn.executemany(
@@ -121,33 +125,58 @@ async def get_score_factors(connection_id: int):
 
 async def respond(connection_id: int, new_status: str):
     """
-    Expert accepts/declines. Only valid from 'pending'. Sets responded_at.
-    Raises TransitionError (-> 422) if not currently pending.
-    Note: 'expired' is set by a scheduled job, never here.
+    Expert accepts/declines. Only valid from 'pending' AND not past
+    expires_at. Sets responded_at. 'expired' is set by a scheduled job,
+    never here.
+
+    Raises:
+      ValidationError (400) if new_status isn't accepted/declined
+      NotFoundError   (404) if the request doesn't exist
+      GoneError       (410) if the request has expired -- whether the
+                            scheduler already flipped it to 'expired' or it's
+                            merely past expires_at while still 'pending'
+      TransitionError (422) for any other non-pending state (already
+                            accepted/declined)
     """
-    if new_status not in ("accepted", "declined"):
+    if new_status not in (ConnectionStatus.ACCEPTED, ConnectionStatus.DECLINED):
         raise ValidationError(
-            "status must be 'accepted' or 'declined'",
+            f"status must be '{ConnectionStatus.ACCEPTED}' or "
+            f"'{ConnectionStatus.DECLINED}'",
             field="status", issue="invalid_response",
         )
+    # Only update if still pending AND not yet past its expiry wall-clock.
+    # The expiry guard closes the race window before the scheduler runs.
     row = await pool.fetchrow(
         """
         UPDATE connection_requests
         SET status = $2, responded_at = NOW()
-        WHERE connection_id = $1 AND status = 'pending'
+        WHERE connection_id = $1
+          AND status = $3
+          AND (expires_at IS NULL OR expires_at > NOW())
         RETURNING *
         """,
-        connection_id, new_status,
+        connection_id, new_status, ConnectionStatus.PENDING,
     )
-    if row is None:
-        # Either missing or not pending; disambiguate for the caller.
-        existing = await pool.fetchrow(
-            "SELECT status FROM connection_requests WHERE connection_id = $1",
-            connection_id,
-        )
-        if existing is None:
-            raise NotFoundError("connection request not found")
-        raise TransitionError(
-            f"cannot respond to a request in '{existing['status']}' state"
-        )
-    return row
+    if row is not None:
+        return row
+
+    # No row updated: figure out why so the API layer gets the right code.
+    existing = await pool.fetchrow(
+        "SELECT status, expires_at FROM connection_requests WHERE connection_id = $1",
+        connection_id,
+    )
+    if existing is None:
+        raise NotFoundError("connection request not found")
+
+    status = existing["status"]
+    expires_at = existing["expires_at"]
+
+    # Already swept to 'expired', OR still 'pending' but past its wall-clock
+    # expiry (scheduler just hasn't run yet) -- both are 410 Gone.
+    if status == ConnectionStatus.EXPIRED:
+        raise GoneError("connection request has expired")
+    if status == ConnectionStatus.PENDING and expires_at is not None:
+        raise GoneError("connection request has expired")
+
+    # Otherwise it's a genuine bad transition (already accepted/declined).
+    raise TransitionError(f"cannot respond to a request in '{status}' state")

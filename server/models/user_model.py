@@ -14,7 +14,7 @@ from passlib.context import CryptContext
 
 from server.db import connection_pool as pool
 from .enums import USER_ROLE
-from .errors import ConflictError, ValidationError
+from .errors import AuthenticationError, ConflictError, DeactivatedError
 from .validators import check_enum
 
 BCRYPT_ROUNDS = 12  # set explicitly; align with any other hasher in the stack
@@ -72,7 +72,14 @@ async def find_by_email(email: str):
 
 async def validate_password(email: str, password: str):
     """
-    Verify a password. Returns {user_id, email, role} on success, else None.
+    Verify a password. Returns {user_id, email, role} on success.
+
+    Raises AuthenticationError (-> 401) for an unknown email or wrong
+    password, and DeactivatedError (-> 403) for a correct password against a
+    deactivated account. The is_active check happens AFTER password
+    verification on purpose: returning 403 before verifying the password
+    would leak which accounts exist and their active state to an attacker.
+
     This is the ONLY function that reads password_hash.
     """
     row = await pool.fetchrow(
@@ -80,10 +87,12 @@ async def validate_password(email: str, password: str):
         "FROM users WHERE email = $1",
         email,
     )
-    if row is None or not row["is_active"]:
-        return None
-    if not pwd_context.verify(password, row["password_hash"]):
-        return None
+    # Unknown email or wrong password -> indistinguishable 401.
+    if row is None or not pwd_context.verify(password, row["password_hash"]):
+        raise AuthenticationError("invalid email or password")
+    # Correct password, but the account has been soft-deactivated -> 403.
+    if not row["is_active"]:
+        raise DeactivatedError("account is deactivated")
     return {"user_id": row["user_id"], "email": row["email"], "role": row["role"]}
 
 
