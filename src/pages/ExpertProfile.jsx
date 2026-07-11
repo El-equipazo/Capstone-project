@@ -108,81 +108,91 @@ export default function ExpertProfile() {
           <p className="xp-about-text">{expert.bio}</p>
         </section>
 
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Specializations</span>
-          <div className="xp-plain-list">
-            {expert.specializations.map((s) => (
-              <span key={s.specialization_id}>
-                {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Credentials &amp; certifications</span>
-          <div className="xp-row-list">
-            {expert.credentials.map((c) => (
-              <div className="xp-row-item" key={c.credential_id}>
-                <span className="label">{c.credential_name}</span>
-                <span className="meta">
-                  {c.institution} · {c.year_obtained} · {c.is_verified ? 'Verified' : 'Pending verification'}
+        {expert.specializations.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Specializations</span>
+            <div className="xp-plain-list">
+              {expert.specializations.map((s) => (
+                <span key={s.specialization_id}>
+                  {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
                 </span>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Work history</span>
-          <div className="xp-row-list">
-            {expert.work_history.map((w) => (
-              <div className="xp-row-item xp-row-item-stack" key={w.work_history_id}>
-                <div className="xp-row-item-top">
-                  <span className="label">
-                    {w.job_title} — {w.organization_name}
-                  </span>
-                  <span className="meta">{formatWorkPeriod(w.start_date, w.end_date)}</span>
-                </div>
-                {w.description && <span className="meta">{w.description}</span>}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
-          <div className="xp-row-list">
-            {expert.sector_experience.map((s) => (
-              <div className="xp-row-item xp-row-item-stack" key={s.sector_exp_id}>
-                <div className="xp-row-item-top">
-                  <span className="label">{labelize(s.sector)}</span>
-                  <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
-                </div>
-                <span className="meta">{s.compliance_standards_known.join(', ')}</span>
-                {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
-          <div className="xp-row-list">
-            {expert.engagement_types.map((t) => (
-              <div className="xp-row-item xp-row-item-stack" key={t.eng_type_id}>
-                <div className="xp-row-item-top">
-                  <span className="label">{labelize(t.engagement_type)}</span>
+        {expert.credentials.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Credentials &amp; certifications</span>
+            <div className="xp-row-list">
+              {expert.credentials.map((c) => (
+                <div className="xp-row-item" key={c.credential_id}>
+                  <span className="label">{c.credential_name}</span>
                   <span className="meta">
-                    {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
+                    {c.institution} · {c.year_obtained} · {c.is_verified ? 'Verified' : 'Pending verification'}
                   </span>
                 </div>
-                <span className="meta">{t.approach_description}</span>
-                <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {expert.work_history.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Work history</span>
+            <div className="xp-row-list">
+              {expert.work_history.map((w) => (
+                <div className="xp-row-item xp-row-item-stack" key={w.work_history_id}>
+                  <div className="xp-row-item-top">
+                    <span className="label">
+                      {w.job_title} — {w.organization_name}
+                    </span>
+                    <span className="meta">{formatWorkPeriod(w.start_date, w.end_date)}</span>
+                  </div>
+                  {w.description && <span className="meta">{w.description}</span>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {expert.sector_experience.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
+            <div className="xp-row-list">
+              {expert.sector_experience.map((s) => (
+                <div className="xp-row-item xp-row-item-stack" key={s.sector_exp_id}>
+                  <div className="xp-row-item-top">
+                    <span className="label">{labelize(s.sector)}</span>
+                    <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
+                  </div>
+                  <span className="meta">{s.compliance_standards_known.join(', ')}</span>
+                  {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {expert.engagement_types.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
+            <div className="xp-row-list">
+              {expert.engagement_types.map((t) => (
+                <div className="xp-row-item xp-row-item-stack" key={t.eng_type_id}>
+                  <div className="xp-row-item-top">
+                    <span className="label">{labelize(t.engagement_type)}</span>
+                    <span className="meta">
+                      {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
+                    </span>
+                  </div>
+                  <span className="meta">{t.approach_description}</span>
+                  <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="xp-connect-card">
           <div className="xp-connect-left">

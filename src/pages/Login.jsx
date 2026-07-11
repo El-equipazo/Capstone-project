@@ -20,7 +20,8 @@ export default function Login() {
     setSubmitting(true)
     try {
       const { user } = await login({ email, password })
-      navigate(user.role === 'organization' ? '/experts' : '/')
+      const next = searchParams.get('next')
+      navigate(next || (user.role === 'organization' ? '/experts' : '/dashboard'))
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {

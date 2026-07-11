@@ -12,6 +12,12 @@ export const SPECIALIZATIONS = [
   'quantum_risk_assessment',
 ]
 
+// expert_specializations.proficiency_level enum (schema.md §2).
+export const PROFICIENCY_LEVELS = ['familiar', 'proficient', 'expert', 'leading_researcher']
+
+// expert_profiles.preferred_engagement_length enum (schema.md §1).
+export const ENGAGEMENT_LENGTHS = ['short_term', 'long_term', 'both']
+
 // Canonical `sector` enum (schema.md §3) — shared by organization_profiles.sector
 // and expert_sector_experience.sector.
 export const SECTORS = ['financial', 'healthcare', 'government', 'nonprofit', 'legal', 'energy', 'education', 'other']

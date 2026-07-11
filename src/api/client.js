@@ -4,9 +4,14 @@
 // real `fetch` calls against VITE_API_BASE_URL); callers stay the same.
 
 import { mockExperts, verifiedMockExperts } from '../data/mockExperts'
+import { labelize } from '../utils/format'
 
 const USERS_KEY = 'qc_mock_users'
 const SESSION_KEY = 'qc_mock_session'
+// Profiles created through the expert dashboard, keyed by user_id — separate from
+// the seeded mockExperts.js directory data, mirroring how a real backend would
+// have `expert_profiles.user_id` rows independent of any fixture data.
+const EXPERT_PROFILES_KEY = 'qc_mock_expert_profiles'
 const NETWORK_DELAY_MS = 350
 
 function delay(value) {
@@ -31,6 +36,93 @@ function loadUsers() {
 
 function saveUsers(users) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users))
+}
+
+function loadExpertProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(EXPERT_PROFILES_KEY)) || {}
+  } catch {
+    return {}
+  }
+}
+
+function saveExpertProfiles(map) {
+  localStorage.setItem(EXPERT_PROFILES_KEY, JSON.stringify(map))
+}
+
+// connection_requests and engagements for dashboard experts. We don't have a
+// real organization_profiles fixture set, so — unlike expert_profiles, which
+// mirrors the schema's org_id FK — these mock rows carry org_name/org_sector
+// directly for simplicity.
+const CONNECTIONS_KEY = 'qc_mock_connections'
+const ENGAGEMENTS_KEY = 'qc_mock_engagements'
+
+function loadConnections() {
+  try {
+    return JSON.parse(localStorage.getItem(CONNECTIONS_KEY)) || []
+  } catch {
+    return []
+  }
+}
+
+function saveConnections(list) {
+  localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(list))
+}
+
+function loadEngagements() {
+  try {
+    return JSON.parse(localStorage.getItem(ENGAGEMENTS_KEY)) || []
+  } catch {
+    return []
+  }
+}
+
+function saveEngagements(list) {
+  localStorage.setItem(ENGAGEMENTS_KEY, JSON.stringify(list))
+}
+
+let nextDashboardExpertId = 5000
+let nextConnectionId = 9000
+let nextEngagementId = 9500
+
+// A freshly created profile has no real inbound activity yet — seed a couple
+// of illustrative pending requests so the Overview tab has something to
+// demo/act on, the same way mockExperts.js fabricates realistic directory
+// fixtures rather than leaving everything at zero.
+const DEMO_REQUESTS = [
+  {
+    org_name: 'Meridian Trust Bank',
+    org_sector: 'financial',
+    org_stated_need: 'cryptographic_audit',
+    org_stated_timeline: 'within_3mo',
+    initial_message: 'We need an independent audit of our payment rails ahead of our Q3 compliance review.',
+    match_score: 88.5,
+  },
+  {
+    org_name: 'Alpine Health Network',
+    org_sector: 'healthcare',
+    org_stated_need: 'risk_assessment',
+    org_stated_timeline: 'within_6mo',
+    initial_message: 'Looking for a harvest-now-decrypt-later exposure assessment on our patient records archive.',
+    match_score: 76.0,
+  },
+]
+
+function seedConnectionsForExpert(expertId) {
+  const all = loadConnections()
+  const now = Date.now()
+  DEMO_REQUESTS.forEach((req, i) => {
+    all.push({
+      connection_id: nextConnectionId++,
+      expert_id: expertId,
+      status: 'pending',
+      created_at: new Date(now - i * 3600_000).toISOString(),
+      expires_at: new Date(now + 30 * 86400_000).toISOString(),
+      responded_at: null,
+      ...req,
+    })
+  })
+  saveConnections(all)
 }
 
 // ---------------- Auth (POST /auth/register, /auth/login, GET /auth/me) ----------------
@@ -88,9 +180,13 @@ export const authApi = {
 
 // ---------------- Discovery (GET /experts, GET /experts/:expertId) ----------------
 
+function allDashboardProfiles() {
+  return Object.values(loadExpertProfiles())
+}
+
 export const expertsApi = {
   async list(filters = {}) {
-    let results = [...verifiedMockExperts]
+    let results = [...verifiedMockExperts, ...allDashboardProfiles().filter((p) => p.is_verified)]
 
     if (filters.q) {
       const q = filters.q.toLowerCase()
@@ -136,10 +232,139 @@ export const expertsApi = {
   },
 
   async getById(expertId) {
-    const expert = mockExperts.find((e) => String(e.expert_profile_id) === String(expertId))
+    const expert =
+      mockExperts.find((e) => String(e.expert_profile_id) === String(expertId)) ??
+      allDashboardProfiles().find((e) => String(e.expert_profile_id) === String(expertId))
     if (!expert) {
       throw new ApiError(404, 'NOT_FOUND', 'Expert profile not found.')
     }
     return delay(expert)
+  },
+
+  // ---------------- Expert dashboard (POST /experts, PATCH /experts/:id, specializations CRUD) ----------------
+
+  async getByUserId(userId) {
+    const profiles = loadExpertProfiles()
+    return delay(profiles[userId] ?? null)
+  },
+
+  async createProfile(userId, data) {
+    const profiles = loadExpertProfiles()
+    if (profiles[userId]) {
+      throw new ApiError(409, 'CONFLICT', 'Profile already exists for this user.')
+    }
+    const profile = {
+      expert_profile_id: nextDashboardExpertId++,
+      user_id: userId,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      headline: data.headline || '',
+      bio: data.bio || '',
+      years_of_experience: data.years_of_experience ?? 0,
+      linkedin_url: data.linkedin_url || '',
+      hourly_rate_min: data.hourly_rate_min ?? null,
+      hourly_rate_max: data.hourly_rate_max ?? null,
+      availability_status: data.availability_status || 'available',
+      preferred_engagement_length: data.preferred_engagement_length || 'both',
+      is_verified: false,
+      verification_status: 'unsubmitted',
+      avg_rating: null,
+      total_completed_engagements: 0,
+      credentials: [],
+      verification_records: [],
+      work_history: [],
+      specializations: [],
+      sector_experience: [],
+      engagement_types: [],
+    }
+    profiles[userId] = profile
+    saveExpertProfiles(profiles)
+    seedConnectionsForExpert(profile.expert_profile_id)
+    return delay(profile)
+  },
+
+  async updateProfile(userId, patch) {
+    const profiles = loadExpertProfiles()
+    if (!profiles[userId]) {
+      throw new ApiError(404, 'NOT_FOUND', 'No profile to update.')
+    }
+    profiles[userId] = { ...profiles[userId], ...patch }
+    saveExpertProfiles(profiles)
+    return delay(profiles[userId])
+  },
+
+  async addSpecialization(userId, spec) {
+    const profiles = loadExpertProfiles()
+    const profile = profiles[userId]
+    if (!profile) throw new ApiError(404, 'NOT_FOUND', 'No profile found for this user.')
+    const item = { specialization_id: Date.now(), ...spec }
+    profile.specializations.push(item)
+    saveExpertProfiles(profiles)
+    return delay(item)
+  },
+
+  async removeSpecialization(userId, specializationId) {
+    const profiles = loadExpertProfiles()
+    const profile = profiles[userId]
+    if (!profile) throw new ApiError(404, 'NOT_FOUND', 'No profile found for this user.')
+    profile.specializations = profile.specializations.filter((s) => s.specialization_id !== specializationId)
+    saveExpertProfiles(profiles)
+    return delay({})
+  },
+}
+
+// ---------------- Matching (GET /connections, PATCH /connections/:id) ----------------
+
+export const connectionsApi = {
+  async listForExpert(expertId) {
+    const all = loadConnections()
+    const mine = all
+      .filter((c) => c.expert_id === expertId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    return delay(mine)
+  },
+
+  async respond(connectionId, status) {
+    if (!['accepted', 'declined'].includes(status)) {
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Status must be accepted or declined.')
+    }
+    const all = loadConnections()
+    const connection = all.find((c) => c.connection_id === connectionId)
+    if (!connection) throw new ApiError(404, 'NOT_FOUND', 'Connection request not found.')
+    if (connection.status !== 'pending') {
+      throw new ApiError(422, 'INVALID_STATE', 'This request has already been responded to.')
+    }
+    connection.status = status
+    connection.responded_at = new Date().toISOString()
+    saveConnections(all)
+
+    if (status === 'accepted') {
+      const engagements = loadEngagements()
+      engagements.push({
+        engagement_id: nextEngagementId++,
+        connection_id: connection.connection_id,
+        expert_id: connection.expert_id,
+        org_name: connection.org_name,
+        engagement_type: connection.org_stated_need,
+        title: `${connection.org_stated_need ? labelize(connection.org_stated_need) : 'Engagement'} — ${connection.org_name}`,
+        status: 'scoping',
+        created_at: new Date().toISOString(),
+      })
+      saveEngagements(engagements)
+    }
+
+    return delay(connection)
+  },
+}
+
+// ---------------- Engagements (GET /engagements) ----------------
+
+export const engagementsApi = {
+  async listForExpert(expertId) {
+    const all = loadEngagements()
+    const mine = all
+      .filter((e) => e.expert_id === expertId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    return delay(mine)
   },
 }

@@ -1019,3 +1019,41 @@ button, input, select, textarea {
     align-items: flex-start;
   }
 }
+
+/* ---------- Expert dashboard ---------- */
+.dash-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+}
+
+.dash-tab {
+  padding: 10px 2px;
+  border: none;
+  background: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.dash-tab.on {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+.dash-request-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dash-request-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
