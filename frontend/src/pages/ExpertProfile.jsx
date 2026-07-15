@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { expertsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
@@ -12,7 +12,6 @@ export default function ExpertProfile() {
   const [requestSent, setRequestSent] = useState(false)
 
   const { user } = useAuth()
-  const navigate = useNavigate()
 
   useEffect(() => {
     setExpert(null)
@@ -25,11 +24,9 @@ export default function ExpertProfile() {
   }, [expertId])
 
   function handleRequestAssessment() {
-    if (!user) {
-      navigate(`/login?next=/experts/${expertId}`)
-      return
-    }
-    // POST /connections would fire here against the real API.
+    // Only rendered when canRequestAssessment is true, i.e. user.role is
+    // already 'organization' — POST /connections would fire here against
+    // the real API.
     setRequestSent(true)
   }
 
@@ -56,9 +53,11 @@ export default function ExpertProfile() {
     )
   }
 
-  // POST /connections is Auth: organization — hide the CTA for signed-in experts/admins
-  // (anonymous visitors still see it and are routed through login, where role is decided).
-  const canRequestAssessment = !user || user.role === 'organization'
+  // POST /connections is Auth: organization — only render the actionable CTA
+  // for a confirmed organization account. Anonymous/expert/admin visitors get
+  // an explanatory message instead (with a sign-in link for anonymous ones)
+  // rather than a button that would either no-op or 403 against a real API.
+  const canRequestAssessment = user?.role === 'organization'
   const unavailable = expert.availability_status === 'unavailable'
 
   return (
@@ -210,6 +209,13 @@ export default function ExpertProfile() {
                   </button>
                 </>
               )
+            ) : !user ? (
+              <p className="xp-connect-text">
+                <Link to={`/login?next=/experts/${expertId}`} className="xp-link-arrow">
+                  Sign in as an organization
+                </Link>{' '}
+                to request an assessment.
+              </p>
             ) : (
               <p className="xp-connect-text">Only organizations can request assessments.</p>
             )}

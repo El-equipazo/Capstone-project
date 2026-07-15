@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { connectionsApi, engagementsApi, expertsApi } from '../api/client'
+import { authApi, connectionsApi, engagementsApi, expertsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ExpertCard from '../components/ExpertCard'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
-import { AVAILABILITY_LABEL, labelize } from '../utils/format'
+import { AVAILABILITY_LABEL, labelize, toNumberOrNull } from '../utils/format'
 
 const AVAILABILITY_OPTIONS = Object.keys(AVAILABILITY_LABEL)
 
@@ -64,7 +64,7 @@ export default function ExpertDashboard() {
       return
     }
     if (user.role !== 'expert') return
-    expertsApi.getByUserId(user.user_id).then((result) => {
+    authApi.me().then(({ profile: result }) => {
       setProfile(result)
       if (result) setForm(profileToForm(result))
       setLoading(false)
@@ -75,12 +75,10 @@ export default function ExpertDashboard() {
   const expertId = profile?.expert_profile_id
   useEffect(() => {
     if (!expertId) return
-    Promise.all([connectionsApi.listForExpert(expertId), engagementsApi.listForExpert(expertId)]).then(
-      ([conns, engs]) => {
-        setConnections(conns)
-        setEngagements(engs)
-      }
-    )
+    Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()]).then(([conns, engs]) => {
+      setConnections(conns)
+      setEngagements(engs)
+    })
   }, [expertId])
 
   if (!user) return null
@@ -116,10 +114,6 @@ export default function ExpertDashboard() {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
-  function toNumberOrNull(value) {
-    return value === '' ? null : Number(value)
-  }
-
   async function handleCreate(e) {
     e.preventDefault()
     setError('')
@@ -144,7 +138,7 @@ export default function ExpertDashboard() {
     setError('')
     setSaving(true)
     try {
-      const result = await expertsApi.updateProfile(user.user_id, {
+      const result = await expertsApi.updateProfile(profile.expert_profile_id, {
         ...form,
         years_of_experience: toNumberOrNull(form.years_of_experience),
         hourly_rate_min: toNumberOrNull(form.hourly_rate_min),
@@ -166,32 +160,41 @@ export default function ExpertDashboard() {
       return
     }
     setError('')
-    const item = await expertsApi.addSpecialization(user.user_id, {
-      ...specForm,
-      years_in_specialization: toNumberOrNull(specForm.years_in_specialization),
-    })
-    setProfile((prev) => ({ ...prev, specializations: [...prev.specializations, item] }))
-    setSpecForm({ specialization: SPECIALIZATIONS[0], proficiency_level: PROFICIENCY_LEVELS[0], years_in_specialization: '' })
+    try {
+      const item = await expertsApi.addSpecialization(profile.expert_profile_id, {
+        ...specForm,
+        years_in_specialization: toNumberOrNull(specForm.years_in_specialization),
+      })
+      setProfile((prev) => ({ ...prev, specializations: [...prev.specializations, item] }))
+      setSpecForm({ specialization: SPECIALIZATIONS[0], proficiency_level: PROFICIENCY_LEVELS[0], years_in_specialization: '' })
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Could not add that specialization. Please try again.')
+    }
   }
 
   async function handleRemoveSpecialization(specializationId) {
-    await expertsApi.removeSpecialization(user.user_id, specializationId)
-    setProfile((prev) => ({
-      ...prev,
-      specializations: prev.specializations.filter((s) => s.specialization_id !== specializationId),
-    }))
+    setError('')
+    try {
+      await expertsApi.removeSpecialization(profile.expert_profile_id, specializationId)
+      setProfile((prev) => ({
+        ...prev,
+        specializations: prev.specializations.filter((s) => s.specialization_id !== specializationId),
+      }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Could not remove that specialization. Please try again.')
+    }
   }
 
   async function handleRespond(connectionId, status) {
     setRespondingId(connectionId)
+    setError('')
     try {
       await connectionsApi.respond(connectionId, status)
-      const [conns, engs] = await Promise.all([
-        connectionsApi.listForExpert(expertId),
-        engagementsApi.listForExpert(expertId),
-      ])
+      const [conns, engs] = await Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()])
       setConnections(conns)
       setEngagements(engs)
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Could not update this request. Please try again.')
     } finally {
       setRespondingId(null)
     }
@@ -371,6 +374,12 @@ export default function ExpertDashboard() {
             Profile
           </button>
         </div>
+
+        {error && (
+          <div className="alert alert-error" style={{ margin: '16px 0' }}>
+            {error}
+          </div>
+        )}
 
         {tab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -569,7 +578,6 @@ export default function ExpertDashboard() {
                   <input className="field-input" value={form.linkedin_url} onChange={(e) => updateField('linkedin_url', e.target.value)} />
                 </div>
 
-                {error && <div className="alert alert-error">{error}</div>}
                 {savedNotice && <div className="alert alert-success">Saved.</div>}
 
                 <button className="btn btn-acc" type="submit" disabled={saving} style={{ alignSelf: 'flex-start' }}>

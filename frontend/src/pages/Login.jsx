@@ -14,14 +14,27 @@ export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  // Only ever redirect to a same-site path — an absolute URL is blocked by
+  // React Router already, but a protocol-relative "//evil.com" isn't, so
+  // require a leading "/" that isn't itself the start of "//".
+  function safeNext(value) {
+    if (!value || !value.startsWith('/') || value.startsWith('//')) return null
+    return value
+  }
+
+  function landingPathFor(role) {
+    if (role === 'organization') return '/experts'
+    if (role === 'expert') return '/dashboard'
+    return '/'
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setSubmitting(true)
     try {
       const { user } = await login({ email, password })
-      const next = searchParams.get('next')
-      navigate(next || (user.role === 'organization' ? '/experts' : '/dashboard'))
+      navigate(safeNext(searchParams.get('next')) || landingPathFor(user.role))
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {

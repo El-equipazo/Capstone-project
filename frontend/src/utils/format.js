@@ -30,3 +30,7 @@ export function formatWorkPeriod(startDate, endDate) {
   const fmt = (d) => new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
   return `${fmt(startDate)} – ${endDate ? fmt(endDate) : 'Present'}`
 }
+
+export function toNumberOrNull(value) {
+  return value === '' ? null : Number(value)
+}
