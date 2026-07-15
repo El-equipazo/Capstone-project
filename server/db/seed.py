@@ -17,7 +17,7 @@ import asyncio
 from passlib.context import CryptContext
 from datetime import date, timedelta
 
-from pool import transaction, close_pool
+from server.db.connection_pool import transaction, close_pool
 
 # passlib is the Python equivalent of bcrypt npm -- same algorithm, same idea
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

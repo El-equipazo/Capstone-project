@@ -3,7 +3,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from server.dependencies import get_current_user, require_role
-from server.models import expert_model  # teammate implementing
 from server.schemas.experts import (
     CredentialCreate,
     CredentialUpdate,
@@ -20,6 +19,19 @@ from server.schemas.experts import (
     WorkHistoryCreate,
     WorkHistoryUpdate,
 )
+
+try:
+    from server.models import expert_model
+except ImportError:
+    class _Stub:
+        def __getattr__(self, attr):
+            async def _not_implemented(*args, **kwargs):
+                raise HTTPException(
+                    status_code=503,
+                    detail={"error": {"code": "NOT_IMPLEMENTED", "message": "expert_model not yet available"}},
+                )
+            return _not_implemented
+    expert_model = _Stub()
 
 router = APIRouter(tags=["experts"])
 

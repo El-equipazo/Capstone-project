@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from server.dependencies import get_current_user, require_role
-from server.models import organization_model  # teammate implementing
 from server.schemas.organizations import (
     InfrastructureCreate,
     InfrastructureResponse,
@@ -9,6 +8,19 @@ from server.schemas.organizations import (
     OrgResponse,
     OrgUpdate,
 )
+
+try:
+    from server.models import organization_model
+except ImportError:
+    class _Stub:
+        def __getattr__(self, attr):
+            async def _not_implemented(*args, **kwargs):
+                raise HTTPException(
+                    status_code=503,
+                    detail={"error": {"code": "NOT_IMPLEMENTED", "message": "organization_model not yet available"}},
+                )
+            return _not_implemented
+    organization_model = _Stub()
 
 router = APIRouter(tags=["organizations"])
 
