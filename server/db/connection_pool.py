@@ -29,20 +29,13 @@ Set DATABASE_URL to your Postgres connection string before running.
 Example:   postgresql://postgres:password@localhost/quantumconnect
 """
 
-import os
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
 
 import asyncpg
 
-# -- CONFIG --------------------------------------------------------------------
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://localhost/quantumconnect",
-)
-
-# Pool sizing -- tune to your deployment. min stays warm; max caps concurrency.
-POOL_MIN_SIZE = int(os.environ.get("DB_POOL_MIN_SIZE", "2"))
-POOL_MAX_SIZE = int(os.environ.get("DB_POOL_MAX_SIZE", "10"))
+from server.config import settings
 
 # Module-level singleton. Lazily created on first use.
 _pool: asyncpg.Pool | None = None
@@ -59,9 +52,9 @@ async def get_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
         _pool = await asyncpg.create_pool(
-            dsn=DATABASE_URL,
-            min_size=POOL_MIN_SIZE,
-            max_size=POOL_MAX_SIZE,
+            dsn=settings.database_url,
+            min_size=settings.db_pool_min_size,
+            max_size=settings.db_pool_max_size,
             command_timeout=60,
         )
     return _pool
