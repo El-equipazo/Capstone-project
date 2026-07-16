@@ -8,6 +8,7 @@ import Login from './pages/Login'
 import ExpertDirectory from './pages/ExpertDirectory'
 import ExpertProfile from './pages/ExpertProfile'
 import ExpertDashboard from './pages/ExpertDashboard'
+import OrganizationDashboard from './pages/OrganizationDashboard'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/experts" element={<ExpertDirectory />} />
         <Route path="/experts/:expertId" element={<ExpertProfile />} />
         <Route path="/dashboard" element={<ExpertDashboard />} />
+        <Route path="/organization" element={<OrganizationDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />

@@ -41,6 +41,7 @@ export default function Navbar() {
             <NavLink to="/experts">Browse experts</NavLink>
             <NavLink to="/how-it-works">How it works</NavLink>
             {user?.role === 'expert' && <NavLink to="/dashboard">Dashboard</NavLink>}
+            {user?.role === 'organization' && <NavLink to="/organization">Dashboard</NavLink>}
             {!user && <Link to="/login">Sign in</Link>}
             {user && <span className="tag nav-email">{user.email}</span>}
           </nav>

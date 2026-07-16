@@ -67,6 +67,30 @@ function findProfileByUserId(userId) {
   return allDashboardProfiles().find((p) => p.user_id === userId) ?? null
 }
 
+// Organization profiles created through the onboarding wizard, keyed by
+// org_profile_id — same pattern as EXPERT_PROFILES_KEY above.
+const ORG_PROFILES_KEY = 'qc_mock_org_profiles'
+
+function loadOrgProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(ORG_PROFILES_KEY)) || {}
+  } catch {
+    return {}
+  }
+}
+
+function saveOrgProfiles(map) {
+  localStorage.setItem(ORG_PROFILES_KEY, JSON.stringify(map))
+}
+
+function allOrgProfiles() {
+  return Object.values(loadOrgProfiles())
+}
+
+function findOrgProfileByUserId(userId) {
+  return allOrgProfiles().find((p) => p.user_id === userId) ?? null
+}
+
 // connection_requests and engagements for dashboard experts. We don't have a
 // real organization_profiles fixture set, so — unlike expert_profiles, which
 // mirrors the schema's org_id FK — these mock rows carry org_name/org_sector
@@ -108,6 +132,7 @@ function computeNextId(items, idKey, fallback) {
 }
 
 let nextDashboardExpertId = computeNextId(allDashboardProfiles(), 'expert_profile_id', 5000)
+let nextOrgProfileId = computeNextId(allOrgProfiles(), 'org_profile_id', 7000)
 let nextConnectionId = computeNextId(loadConnections(), 'connection_id', 9000)
 let nextEngagementId = computeNextId(loadEngagements(), 'engagement_id', 9500)
 
@@ -207,15 +232,18 @@ export const authApi = {
     }
   },
 
-  // GET /auth/me — returns the current user plus their attached profile, if
-  // any. This is how the dashboard should find "my profile", rather than a
-  // dedicated by-user-id expert route (which doesn't exist in the contract).
+  // GET /auth/me — returns the current user plus their attached profile
+  // (organization_profile or expert_profile), if any. This is how the
+  // dashboards find "my profile", rather than a dedicated by-user-id route
+  // per role (which doesn't exist in the contract).
   async me() {
     const session = authApi.getSession()
     if (!session) {
       throw new ApiError(401, 'UNAUTHORIZED', 'Not signed in.')
     }
-    const profile = session.user.role === 'expert' ? findProfileByUserId(session.user.user_id) : null
+    let profile = null
+    if (session.user.role === 'expert') profile = findProfileByUserId(session.user.user_id)
+    else if (session.user.role === 'organization') profile = findOrgProfileByUserId(session.user.user_id)
     return delay({ user: session.user, profile })
   },
 }
@@ -346,6 +374,57 @@ export const expertsApi = {
     profile.specializations = profile.specializations.filter((s) => s.specialization_id !== specializationId)
     saveExpertProfiles(profiles)
     return delay({})
+  },
+}
+
+// ---------------- Organization Profiles (POST /organizations, PATCH /organizations/:orgId) ----------------
+// Same shape/pattern as expertsApi.createProfile/updateProfile above.
+// `sector` is hardcoded 'financial' — the whole platform is scoped to
+// financial institutions only, so it's not a field the wizard collects;
+// "Industry" in the wizard maps to the free-text `sub_sector` instead.
+
+export const organizationsApi = {
+  async createProfile(userId, data) {
+    if (findOrgProfileByUserId(userId)) {
+      throw new ApiError(409, 'CONFLICT', 'Profile already exists for this user.')
+    }
+    const profiles = loadOrgProfiles()
+    const orgProfileId = nextOrgProfileId++
+    const profile = {
+      org_profile_id: orgProfileId,
+      user_id: userId,
+      org_name: data.org_name,
+      contact_name: data.contact_name || '',
+      contact_title: data.contact_title || '',
+      sector: 'financial',
+      sub_sector: data.sub_sector || '',
+      founded_year: data.founded_year ?? null,
+      employee_count_range: data.employee_count_range || '<50',
+      country: data.country || '',
+      state_province: data.state_province || '',
+      website: data.website || '',
+      org_description: data.org_description || '',
+      quantum_knowledge_level: data.quantum_knowledge_level || 'none',
+      budget_range: data.budget_range || 'undisclosed',
+      urgency_level: data.urgency_level || 'just_exploring',
+      default_connection_expiry_days: 30,
+      is_verified: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    profiles[orgProfileId] = profile
+    saveOrgProfiles(profiles)
+    return delay(profile)
+  },
+
+  async updateProfile(orgId, patch) {
+    const profiles = loadOrgProfiles()
+    if (!profiles[orgId]) {
+      throw new ApiError(404, 'NOT_FOUND', 'No profile to update.')
+    }
+    profiles[orgId] = { ...profiles[orgId], ...patch, updated_at: new Date().toISOString() }
+    saveOrgProfiles(profiles)
+    return delay(profiles[orgId])
   },
 }
 
