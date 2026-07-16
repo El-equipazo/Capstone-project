@@ -15,7 +15,7 @@ from server.models.errors import (
     TransitionError,
     ValidationError,
 )
-from server.controllers import auth, experts, organizations
+from server.controllers import auth, connections, engagements, experts, organizations
 
 
 @asynccontextmanager
@@ -106,3 +106,5 @@ async def _handle_deactivated(request: Request, exc: DeactivatedError):
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(experts.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
+app.include_router(connections.router, prefix="/api/v1")
+app.include_router(engagements.router, prefix="/api/v1")

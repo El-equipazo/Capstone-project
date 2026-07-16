@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { expertsApi } from '../api/client'
+import { connectionsApi, expertsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
 import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL } from '../utils/format'
@@ -10,6 +10,8 @@ export default function ExpertProfile() {
   const [expert, setExpert] = useState(null)
   const [notFound, setNotFound] = useState(false)
   const [requestSent, setRequestSent] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+  const [requestError, setRequestError] = useState('')
 
   const { user } = useAuth()
 
@@ -23,11 +25,17 @@ export default function ExpertProfile() {
       .catch(() => setNotFound(true))
   }, [expertId])
 
-  function handleRequestAssessment() {
-    // Only rendered when canRequestAssessment is true, i.e. user.role is
-    // already 'organization' — POST /connections would fire here against
-    // the real API.
-    setRequestSent(true)
+  async function handleRequestAssessment() {
+    setRequesting(true)
+    setRequestError('')
+    try {
+      await connectionsApi.create(Number(expertId))
+      setRequestSent(true)
+    } catch (err) {
+      setRequestError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setRequesting(false)
+    }
   }
 
   if (notFound) {
@@ -203,9 +211,10 @@ export default function ExpertProfile() {
                   <p className="xp-connect-text">
                     Share your risk profile with {expert.first_name} to connect intentionally.
                   </p>
-                  <button className="xp-tap-link" onClick={handleRequestAssessment} disabled={unavailable}>
-                    {unavailable ? 'Currently unavailable' : 'Tap to request ↗'}
+                  <button className="xp-tap-link" onClick={handleRequestAssessment} disabled={unavailable || requesting}>
+                    {requesting ? 'Sending…' : unavailable ? 'Currently unavailable' : 'Tap to request ↗'}
                   </button>
+                  {requestError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginTop: 6 }}>{requestError}</p>}
                 </>
               )
             ) : !user ? (
