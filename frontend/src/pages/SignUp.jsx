@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { landingPathFor } from '../utils/format'
 
 export default function SignUp() {
   const [searchParams] = useSearchParams()
@@ -12,8 +13,16 @@ export default function SignUp() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const { register } = useAuth()
+  const { user, register, login } = useAuth()
   const navigate = useNavigate()
+
+  // Already signed in — bounce to their dashboard rather than showing a form
+  // to create a second account (or a stale "sign in" link back to /login).
+  useEffect(() => {
+    if (user) navigate(landingPathFor(user.role), { replace: true })
+  }, [user, navigate])
+
+  if (user) return null
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -21,7 +30,8 @@ export default function SignUp() {
     setSubmitting(true)
     try {
       await register({ email, password, role })
-      navigate(`/login?justRegistered=1&email=${encodeURIComponent(email)}`)
+      const { user } = await login({ email, password })
+      navigate(landingPathFor(user.role))
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {
@@ -37,7 +47,7 @@ export default function SignUp() {
         </h1>
         <p className="lead" style={{ marginBottom: 24 }}>
           Choose the role that matches why you&apos;re here — you can complete your full profile
-          after signing in.
+          once you&apos;re in.
         </p>
 
         <form onSubmit={handleSubmit} className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>

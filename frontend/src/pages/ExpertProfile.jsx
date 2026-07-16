@@ -77,7 +77,6 @@ export default function ExpertProfile() {
             <PortraitPlaceholder />
           </div>
           <div className="xp-index">
-            <div className="xp-bignum">{expert.total_completed_engagements}</div>
             <div className="xp-status-row">
               <span className="xp-status-dot" style={{ opacity: unavailable ? 0.3 : 1 }} />
               {AVAILABILITY_LABEL[expert.availability_status]}

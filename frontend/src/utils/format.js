@@ -34,3 +34,12 @@ export function formatWorkPeriod(startDate, endDate) {
 export function toNumberOrNull(value) {
   return value === '' ? null : Number(value)
 }
+
+// Shared by Login and SignUp so both land a freshly authenticated user in the
+// same place for their role, rather than each page reimplementing its own copy.
+export function landingPathFor(role) {
+  if (role === 'organization') return '/experts'
+  if (role === 'expert') return '/dashboard'
+  if (role === 'admin') return '/admin'
+  return '/'
+}
