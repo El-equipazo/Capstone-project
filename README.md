@@ -3,7 +3,7 @@
 ## Lattice — QuantumConnect frontend
 
 React (Vite) frontend for QuantumConnect, a marketplace connecting high-risk
-organizations with verified post-quantum cryptography experts.
+financial institutions with verified post-quantum cryptography experts.
 
 Implements the MVP user stories: sign up with a role, browse the verified
 expert directory with filters, and view a full expert profile (credentials,

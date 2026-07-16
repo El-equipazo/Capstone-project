@@ -7,7 +7,7 @@ const STEPS = [
   {
     n: 2,
     title: 'Get matched',
-    body: 'Search and filter the verified expert directory by specialization, sector experience, and compliance familiarity — no fragmented referral networks or generalist firms.',
+    body: 'Search and filter the verified expert directory by specialization, engagement type, and compliance familiarity — no fragmented referral networks or generalist firms.',
   },
   {
     n: 3,

@@ -10,7 +10,7 @@
 // leftover rows (like the illustrative seed data below) will surface as
 // phantom data alongside the real API's responses.
 
-import { mockExperts, verifiedMockExperts } from '../data/mockExperts'
+import { mockExperts } from '../data/mockExperts'
 import { labelize } from '../utils/format'
 
 const USERS_KEY = 'qc_mock_users'
@@ -125,11 +125,11 @@ const DEMO_REQUESTS = [
     match_score: 88.5,
   },
   {
-    org_name: 'Alpine Health Network',
-    org_sector: 'healthcare',
+    org_name: 'Alpine Capital Partners',
+    org_sector: 'financial',
     org_stated_need: 'risk_assessment',
     org_stated_timeline: 'within_6mo',
-    initial_message: 'Looking for a harvest-now-decrypt-later exposure assessment on our patient records archive.',
+    initial_message: 'Looking for a harvest-now-decrypt-later exposure assessment on our client account records archive.',
     match_score: 76.0,
   },
 ]
@@ -224,7 +224,9 @@ export const authApi = {
 
 export const expertsApi = {
   async list(filters = {}) {
-    let results = [...verifiedMockExperts, ...allDashboardProfiles().filter((p) => p.is_verified)]
+    // Showing every expert on the platform for now, verified or not — swap
+    // back to filtering on is_verified once verification is enforced.
+    let results = [...mockExperts, ...allDashboardProfiles()]
 
     if (filters.q) {
       const q = filters.q.toLowerCase()
@@ -239,9 +241,6 @@ export const expertsApi = {
       results = results.filter((e) =>
         e.specializations.some((s) => s.specialization === filters.specialization)
       )
-    }
-    if (filters.sector) {
-      results = results.filter((e) => e.sector_experience.some((s) => s.sector === filters.sector))
     }
     if (filters.engagement_type) {
       results = results.filter((e) =>

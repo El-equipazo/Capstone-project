@@ -1,32 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { landingPathFor } from '../utils/format'
+
+// Only ever redirect to a same-site path — an absolute URL is blocked by
+// React Router already, but a protocol-relative "//evil.com" isn't, so
+// require a leading "/" that isn't itself the start of "//".
+function safeNext(value) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return null
+  return value
+}
 
 export default function Login() {
   const [searchParams] = useSearchParams()
-  const justRegistered = searchParams.get('justRegistered') === '1'
 
-  const [email, setEmail] = useState(searchParams.get('email') ?? '')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const { login } = useAuth()
+  const { user, login } = useAuth()
   const navigate = useNavigate()
 
-  // Only ever redirect to a same-site path — an absolute URL is blocked by
-  // React Router already, but a protocol-relative "//evil.com" isn't, so
-  // require a leading "/" that isn't itself the start of "//".
-  function safeNext(value) {
-    if (!value || !value.startsWith('/') || value.startsWith('//')) return null
-    return value
-  }
+  // Already signed in — bounce to their dashboard (or wherever `next` points)
+  // rather than showing a login form to someone who's already authenticated.
+  useEffect(() => {
+    if (user) navigate(safeNext(searchParams.get('next')) || landingPathFor(user.role), { replace: true })
+  }, [user, searchParams, navigate])
 
-  function landingPathFor(role) {
-    if (role === 'organization') return '/experts'
-    if (role === 'expert') return '/dashboard'
-    return '/'
-  }
+  if (user) return null
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -51,12 +53,6 @@ export default function Login() {
         <p className="lead" style={{ marginBottom: 24 }}>
           Welcome back to Lattice.
         </p>
-
-        {justRegistered && (
-          <div className="alert alert-success" style={{ marginBottom: 18 }}>
-            Account created — sign in below to continue.
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="field-group">

@@ -203,9 +203,24 @@ export default function ExpertDashboard() {
   // ---------------- No profile yet: creation form ----------------
 
   if (!profile) {
+    const previewExpert = {
+      expert_profile_id: 0,
+      first_name: form.first_name || 'Your',
+      last_name: form.last_name || 'Name',
+      headline: form.headline || 'Your headline will appear here',
+      years_of_experience: toNumberOrNull(form.years_of_experience) ?? 0,
+      hourly_rate_min: toNumberOrNull(form.hourly_rate_min),
+      hourly_rate_max: toNumberOrNull(form.hourly_rate_max),
+      availability_status: form.availability_status,
+      is_verified: false,
+      avg_rating: null,
+      total_completed_engagements: 0,
+      specializations: [],
+    }
+
     return (
       <div className="page">
-        <div className="container" style={{ maxWidth: 480 }}>
+        <div className="container">
           <span className="section-label" style={{ color: 'var(--acc)' }}>
             expert dashboard
           </span>
@@ -216,118 +231,127 @@ export default function ExpertDashboard() {
             This is what organizations will see in the directory once it's verified.
           </p>
 
-          <form onSubmit={handleCreate} className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div className="row gap-10">
-              <div className="field-group" style={{ flex: 1 }}>
-                <label className="field-label">First name</label>
-                <input className="field-input" required value={form.first_name} onChange={(e) => updateField('first_name', e.target.value)} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
+            <form onSubmit={handleCreate} className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="row gap-10">
+                <div className="field-group" style={{ flex: 1 }}>
+                  <label className="field-label">First name</label>
+                  <input className="field-input" required value={form.first_name} onChange={(e) => updateField('first_name', e.target.value)} />
+                </div>
+                <div className="field-group" style={{ flex: 1 }}>
+                  <label className="field-label">Last name</label>
+                  <input className="field-input" required value={form.last_name} onChange={(e) => updateField('last_name', e.target.value)} />
+                </div>
               </div>
-              <div className="field-group" style={{ flex: 1 }}>
-                <label className="field-label">Last name</label>
-                <input className="field-input" required value={form.last_name} onChange={(e) => updateField('last_name', e.target.value)} />
-              </div>
-            </div>
 
-            <div className="field-group">
-              <label className="field-label">Headline</label>
-              <input
-                className="field-input"
-                placeholder="e.g. Post-Quantum Cryptography Specialist"
-                value={form.headline}
-                onChange={(e) => updateField('headline', e.target.value)}
-              />
-            </div>
-
-            <div className="field-group">
-              <label className="field-label">Bio</label>
-              <textarea
-                className="field-input"
-                rows={4}
-                value={form.bio}
-                onChange={(e) => updateField('bio', e.target.value)}
-              />
-            </div>
-
-            <div className="row gap-10">
-              <div className="field-group" style={{ flex: 1 }}>
-                <label className="field-label">Years of experience</label>
+              <div className="field-group">
+                <label className="field-label">Headline</label>
                 <input
-                  type="number"
-                  min="0"
                   className="field-input"
-                  value={form.years_of_experience}
-                  onChange={(e) => updateField('years_of_experience', e.target.value)}
+                  placeholder="e.g. Post-Quantum Cryptography Specialist"
+                  value={form.headline}
+                  onChange={(e) => updateField('headline', e.target.value)}
                 />
               </div>
-              <div className="field-group" style={{ flex: 1 }}>
-                <label className="field-label">Rate min ($/hr)</label>
-                <input
-                  type="number"
-                  min="0"
+
+              <div className="field-group">
+                <label className="field-label">Bio</label>
+                <textarea
                   className="field-input"
-                  value={form.hourly_rate_min}
-                  onChange={(e) => updateField('hourly_rate_min', e.target.value)}
+                  rows={4}
+                  value={form.bio}
+                  onChange={(e) => updateField('bio', e.target.value)}
                 />
               </div>
-              <div className="field-group" style={{ flex: 1 }}>
-                <label className="field-label">Rate max ($/hr)</label>
+
+              <div className="row gap-10">
+                <div className="field-group" style={{ flex: 1 }}>
+                  <label className="field-label">Years of experience</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="field-input"
+                    value={form.years_of_experience}
+                    onChange={(e) => updateField('years_of_experience', e.target.value)}
+                  />
+                </div>
+                <div className="field-group" style={{ flex: 1 }}>
+                  <label className="field-label">Rate min ($/hr)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="field-input"
+                    value={form.hourly_rate_min}
+                    onChange={(e) => updateField('hourly_rate_min', e.target.value)}
+                  />
+                </div>
+                <div className="field-group" style={{ flex: 1 }}>
+                  <label className="field-label">Rate max ($/hr)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="field-input"
+                    value={form.hourly_rate_max}
+                    onChange={(e) => updateField('hourly_rate_max', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="row gap-10">
+                <div className="field-group" style={{ flex: 1 }}>
+                  <label className="field-label">Availability</label>
+                  <select
+                    className="field-input"
+                    value={form.availability_status}
+                    onChange={(e) => updateField('availability_status', e.target.value)}
+                  >
+                    {AVAILABILITY_OPTIONS.map((o) => (
+                      <option key={o} value={o}>
+                        {AVAILABILITY_LABEL[o]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field-group" style={{ flex: 1 }}>
+                  <label className="field-label">Preferred engagement length</label>
+                  <select
+                    className="field-input"
+                    value={form.preferred_engagement_length}
+                    onChange={(e) => updateField('preferred_engagement_length', e.target.value)}
+                  >
+                    {ENGAGEMENT_LENGTHS.map((o) => (
+                      <option key={o} value={o}>
+                        {labelize(o)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">LinkedIn URL</label>
                 <input
-                  type="number"
-                  min="0"
                   className="field-input"
-                  value={form.hourly_rate_max}
-                  onChange={(e) => updateField('hourly_rate_max', e.target.value)}
+                  placeholder="https://linkedin.com/in/…"
+                  value={form.linkedin_url}
+                  onChange={(e) => updateField('linkedin_url', e.target.value)}
                 />
               </div>
-            </div>
 
-            <div className="row gap-10">
-              <div className="field-group" style={{ flex: 1 }}>
-                <label className="field-label">Availability</label>
-                <select
-                  className="field-input"
-                  value={form.availability_status}
-                  onChange={(e) => updateField('availability_status', e.target.value)}
-                >
-                  {AVAILABILITY_OPTIONS.map((o) => (
-                    <option key={o} value={o}>
-                      {AVAILABILITY_LABEL[o]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field-group" style={{ flex: 1 }}>
-                <label className="field-label">Preferred engagement length</label>
-                <select
-                  className="field-input"
-                  value={form.preferred_engagement_length}
-                  onChange={(e) => updateField('preferred_engagement_length', e.target.value)}
-                >
-                  {ENGAGEMENT_LENGTHS.map((o) => (
-                    <option key={o} value={o}>
-                      {labelize(o)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+              {error && <div className="alert alert-error">{error}</div>}
 
-            <div className="field-group">
-              <label className="field-label">LinkedIn URL</label>
-              <input
-                className="field-input"
-                placeholder="https://linkedin.com/in/…"
-                value={form.linkedin_url}
-                onChange={(e) => updateField('linkedin_url', e.target.value)}
-              />
-            </div>
+              <button className="btn btn-acc btn-block" type="submit" disabled={saving}>
+                {saving ? 'Creating…' : 'Create profile'}
+              </button>
+            </form>
 
-            {error && <div className="alert alert-error">{error}</div>}
-
-            <button className="btn btn-acc btn-block" type="submit" disabled={saving}>
-              {saving ? 'Creating…' : 'Create profile'}
-            </button>
-          </form>
+            <aside style={{ position: 'sticky', top: 84, alignSelf: 'flex-start' }}>
+              <span className="section-label" style={{ marginBottom: 12, display: 'block' }}>
+                Live preview · buyer view
+              </span>
+              <ExpertCard expert={previewExpert} />
+            </aside>
+          </div>
         </div>
       </div>
     )
