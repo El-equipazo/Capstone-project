@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 class OrgCreate(BaseModel):
     org_name: str
+    contact_name: Optional[str] = None
+    contact_title: Optional[str] = None
     sector: str
     sub_sector: Optional[str] = None
     founded_year: Optional[int] = None
@@ -22,6 +24,8 @@ class OrgCreate(BaseModel):
 
 class OrgUpdate(BaseModel):
     org_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_title: Optional[str] = None
     sector: Optional[str] = None
     sub_sector: Optional[str] = None
     founded_year: Optional[int] = None
@@ -40,6 +44,8 @@ class OrgResponse(BaseModel):
     org_profile_id: int
     user_id: int
     org_name: str
+    contact_name: Optional[str] = None
+    contact_title: Optional[str] = None
     sector: str
     sub_sector: Optional[str] = None
     founded_year: Optional[int] = None

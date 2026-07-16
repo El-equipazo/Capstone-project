@@ -7,8 +7,8 @@ from server.db import connection_pool as pool
 from .errors import ConflictError, NotFoundError
 
 _ORG_COLS = (
-    "org_profile_id, user_id, org_name, sector, sub_sector, founded_year, "
-    "employee_count_range, country, state_province, website, org_description, "
+    "org_profile_id, user_id, org_name, contact_name, contact_title, sector, sub_sector, "
+    "founded_year, employee_count_range, country, state_province, website, org_description, "
     "quantum_knowledge_level, budget_range, urgency_level, "
     "default_connection_expiry_days, is_verified, created_at, updated_at"
 )
@@ -45,15 +45,17 @@ async def create(user_id: int, data: dict) -> dict:
         row = await pool.fetchrow(
             f"""
             INSERT INTO organization_profiles (
-                user_id, org_name, sector, sub_sector, founded_year,
+                user_id, org_name, contact_name, contact_title, sector, sub_sector, founded_year,
                 employee_count_range, country, state_province, website,
                 org_description, quantum_knowledge_level, budget_range,
                 urgency_level, default_connection_expiry_days
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             RETURNING {_ORG_COLS}
             """,
             user_id,
             data["org_name"],
+            data.get("contact_name"),
+            data.get("contact_title"),
             data.get("sector", "other"),
             data.get("sub_sector"),
             data.get("founded_year"),

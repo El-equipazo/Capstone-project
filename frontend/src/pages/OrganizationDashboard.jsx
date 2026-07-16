@@ -79,12 +79,15 @@ export default function OrganizationDashboard() {
     )
   }
 
-  async function handleOnboardingComplete(wizardData) {
+  async function handleOnboardingComplete({ invite_emails, ...wizardData }) {
     setError('')
     try {
+      // invite_emails is decorative only (see OnboardingWizard) — there's no
+      // team/invite concept in organization_profiles to send it to.
       const result = await organizationsApi.createProfile(user.user_id, {
         ...wizardData,
         org_name: wizardData.org_name.trim() || `${user.email.split('@')[0]}'s Organization`,
+        sector: 'financial', // the whole platform is scoped to financial institutions
       })
       setProfile(result)
       setForm(profileToForm(result))
