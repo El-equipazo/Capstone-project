@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { authApi, organizationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
-import { labelize } from '../utils/format'
+import { labelize, BUDGET_RANGE_LABEL } from '../utils/format'
 
 const EMPLOYEE_COUNT_OPTIONS = ['<50', '50-250', '250-1k', '1k-10k', '>10k']
 const QUANTUM_KNOWLEDGE_OPTIONS = ['none', 'basic', 'intermediate', 'advanced']
@@ -184,7 +184,7 @@ export default function OrganizationDashboard() {
               </div>
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
-                  <span className="v">{labelize(profile.budget_range)}</span>
+                  <span className="v">{BUDGET_RANGE_LABEL[profile.budget_range]}</span>
                   <span className="l">budget range</span>
                 </div>
               </div>
@@ -311,7 +311,7 @@ export default function OrganizationDashboard() {
                 <select className="field-input" value={form.budget_range} onChange={(e) => updateField('budget_range', e.target.value)}>
                   {BUDGET_RANGE_OPTIONS.map((o) => (
                     <option key={o} value={o}>
-                      {labelize(o)}
+                      {BUDGET_RANGE_LABEL[o]}
                     </option>
                   ))}
                 </select>
