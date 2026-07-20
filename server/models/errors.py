@@ -41,3 +41,10 @@ class GoneError(ModelError):
 
 class TransitionError(ModelError):
     """Illegal status transition -> 422."""
+
+
+class NotImplementedModelError(ModelError):
+    """Model function not written yet -> 503. Raised by the module-level
+    __getattr__ guards in organization_model/expert_model so endpoints whose
+    data layer isn't built keep returning a clean 503 (same behavior as the
+    old controller import stubs) instead of a 500 AttributeError."""

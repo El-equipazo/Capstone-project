@@ -658,6 +658,25 @@ async def seed():
                  'A 2-day engagement to bring your board and C-suite up to speed on quantum threats, regulatory timelines, and your specific risk exposure. Includes a one-page risk summary for board presentation.')
         """, expert_profile['expert_profile_id'])
 
+        # -- SECOND EXPERT (unavailable — exercises the 422 guard and 403s) ----
+        expert2_user = await conn.fetchrow("""
+            INSERT INTO users (email, password_hash, role, is_email_verified)
+            VALUES ($1, $2, 'expert', true)
+            RETURNING user_id, email
+        """, "m.okafor@pqshield.dev", expert_hash)
+
+        await conn.execute("""
+            INSERT INTO expert_profiles (
+                user_id, first_name, last_name, headline,
+                hourly_rate_min, hourly_rate_max, availability_status,
+                is_verified, verification_status
+            ) VALUES (
+                $1, 'Marcus', 'Okafor', 'Quantum-Safe Network Architect',
+                200.00, 300.00, 'unavailable',
+                true, 'verified'
+            )
+        """, expert2_user['user_id'])
+
         # -- CONNECTION REQUEST ------------------------------------------------
         connection = await conn.fetchrow("""
             INSERT INTO connection_requests (
@@ -669,7 +688,7 @@ async def seed():
                 'accepted',
                 'Hello Dr. Chen, we are a community bank with a 22-year-old core banking system relying heavily on RSA-2048. We are concerned about harvest-now-decrypt-later attacks on our mortgage records and would love to discuss a cryptographic audit.',
                 'cryptographic_audit', 'within_3mo',
-                91.50,
+                100.00,
                 NOW() + INTERVAL '14 days',
                 NOW() - INTERVAL '2 days'
             )
@@ -681,15 +700,18 @@ async def seed():
         )
 
         # -- MATCH SCORING FACTORS (weights sum to 1.00; checked at COMMIT) ----
+        # Values are exactly what server/models/match_scoring.py computes for
+        # this org/expert pair: financial sector w/ 8 yrs -> 100; PCI-DSS,
+        # GLBA, SOX all known -> 100; audit budget 40-90k overlaps 50k-250k
+        # -> 100; 'available' -> 100. match_score = sum of contributions.
         await conn.execute("""
             INSERT INTO match_scoring_factors (
                 connection_id, factor_name, weight, raw_score, weighted_contribution
             ) VALUES
-                ($1, 'sector_match',             0.30, 100.00, 30.00),
-                ($1, 'specialization_alignment', 0.25,  95.00, 23.75),
-                ($1, 'compliance_overlap',        0.20,  90.00, 18.00),
-                ($1, 'budget_fit',                0.15,  85.00, 12.75),
-                ($1, 'availability',              0.10, 100.00, 10.00)
+                ($1, 'sector_match',       0.40, 100.00, 40.00),
+                ($1, 'compliance_overlap', 0.25, 100.00, 25.00),
+                ($1, 'budget_fit',         0.15, 100.00, 15.00),
+                ($1, 'availability_fit',   0.20, 100.00, 20.00)
         """, connection['connection_id'])
 
         # -- ENGAGEMENT --------------------------------------------------------
@@ -954,9 +976,10 @@ async def seed():
         )
 
         return {
-            "admin":       admin,
-            "org_user":    org_user,
-            "expert_user": expert_user,
+            "admin":        admin,
+            "org_user":     org_user,
+            "expert_user":  expert_user,
+            "expert2_user": expert2_user,
         }
 
 
@@ -966,9 +989,10 @@ if __name__ == "__main__":
         try:
             users = await seed()
             print("\nDatabase seeded successfully.")
-            print(f"  Admin:  {users['admin']['email']}")
-            print(f"  Org:    {users['org_user']['email']}")
-            print(f"  Expert: {users['expert_user']['email']}")
+            print(f"  Admin:    {users['admin']['email']}")
+            print(f"  Org:      {users['org_user']['email']}")
+            print(f"  Expert:   {users['expert_user']['email']}")
+            print(f"  Expert 2: {users['expert2_user']['email']} (unavailable)")
         except Exception as e:
             print(f"\nError seeding database: {e}")
             raise
