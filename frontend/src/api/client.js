@@ -180,8 +180,12 @@ export const connectionsApi = {
     })
   },
 
+  // GET /connections now returns the standard { data, pagination } envelope
+  // (api-contract.md §1.3); unwrap it here so page components can keep
+  // treating this as a plain array.
   async listForExpert() {
-    return await apiFetch('/connections', { headers: authHeader() })
+    const result = await apiFetch('/connections', { headers: authHeader() })
+    return result.data
   },
 
   async respond(connectionId, status) {
@@ -196,7 +200,16 @@ export const connectionsApi = {
 // ---------------- Engagements ------------------------------------------------
 
 export const engagementsApi = {
+  async create(data) {
+    return await apiFetch('/engagements', {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
   async listForExpert() {
-    return await apiFetch('/engagements', { headers: authHeader() })
+    const result = await apiFetch('/engagements', { headers: authHeader() })
+    return result.data
   },
 }

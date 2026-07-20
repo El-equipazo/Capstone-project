@@ -4,7 +4,9 @@ engagement_model — data access for the engagements table.
 from __future__ import annotations
 
 from server.db import connection_pool as pool
-from .errors import NotFoundError
+from .enums import ENGAGEMENT_TYPE, PAYMENT_STRUCTURE
+from .errors import ConflictError, NotFoundError
+from .validators import check_enum
 
 
 async def create(
@@ -13,16 +15,36 @@ async def create(
     expert_id: int,
     engagement_type: str,
     title: str = None,
+    description: str = None,
+    payment_structure: str = None,
+    agreed_budget=None,
+    start_date=None,
+    estimated_end_date=None,
 ) -> dict:
-    row = await pool.fetchrow(
-        """
-        INSERT INTO engagements (
-            connection_id, org_id, expert_id, engagement_type, title, status
-        ) VALUES ($1, $2, $3, $4, $5, 'scoping')
-        RETURNING *
-        """,
-        connection_id, org_id, expert_id, engagement_type, title,
-    )
+    check_enum(engagement_type, ENGAGEMENT_TYPE, "engagement_type")
+    check_enum(payment_structure, PAYMENT_STRUCTURE, "payment_structure", allow_none=True)
+
+    try:
+        row = await pool.fetchrow(
+            """
+            INSERT INTO engagements (
+                connection_id, org_id, expert_id, engagement_type, title,
+                description, payment_structure, agreed_budget, start_date,
+                estimated_end_date, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scoping')
+            RETURNING *
+            """,
+            connection_id, org_id, expert_id, engagement_type, title,
+            description, payment_structure, agreed_budget, start_date,
+            estimated_end_date,
+        )
+    except Exception as e:
+        state = getattr(e, "sqlstate", None)
+        if state == "23505":  # unique_violation on connection_id (1:1 with engagements)
+            raise ConflictError(
+                "an engagement already exists for this connection"
+            ) from e
+        raise
     return dict(row)
 
 
