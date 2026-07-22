@@ -78,6 +78,9 @@ export const authApi = {
     return getStoredSession()
   },
 
+  // GET /auth/me already resolves either an organization_profile or an
+  // expert_profile server-side depending on the user's role, so this stays
+  // generic rather than branching on role itself.
   async me() {
     const session = getStoredSession()
     if (!session) throw new ApiError(401, 'UNAUTHORIZED', 'Not signed in.')
@@ -143,6 +146,29 @@ export const expertsApi = {
   },
 }
 
+// ---------------- Organizations -----------------------------------------------
+// Same userId-kept-for-signature-compatibility pattern as expertsApi above —
+// POST /organizations and PATCH /organizations/:orgId already exist server-side
+// (server/controllers/organizations.py + server/models/organization_model.py).
+
+export const organizationsApi = {
+  async createProfile(_userId, data) {
+    return await apiFetch('/organizations', {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async updateProfile(orgId, patch) {
+    return await apiFetch(`/organizations/${orgId}`, {
+      method: 'PATCH',
+      body: patch,
+      headers: authHeader(),
+    })
+  },
+}
+
 // ---------------- Connections ------------------------------------------------
 
 export const connectionsApi = {
@@ -154,8 +180,12 @@ export const connectionsApi = {
     })
   },
 
+  // GET /connections now returns the standard { data, pagination } envelope
+  // (api-contract.md §1.3); unwrap it here so page components can keep
+  // treating this as a plain array.
   async listForExpert() {
-    return await apiFetch('/connections', { headers: authHeader() })
+    const result = await apiFetch('/connections', { headers: authHeader() })
+    return result.data
   },
 
   async respond(connectionId, status) {
@@ -170,7 +200,16 @@ export const connectionsApi = {
 // ---------------- Engagements ------------------------------------------------
 
 export const engagementsApi = {
+  async create(data) {
+    return await apiFetch('/engagements', {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
   async listForExpert() {
-    return await apiFetch('/engagements', { headers: authHeader() })
+    const result = await apiFetch('/engagements', { headers: authHeader() })
+    return result.data
   },
 }

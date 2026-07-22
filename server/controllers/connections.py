@@ -8,8 +8,8 @@ from pydantic import BaseModel
 
 from server.db import connection_pool as pool
 from server.dependencies import get_current_user, require_role
-from server.models import connection_model, engagement_model, expert_model, organization_model
-from server.models.errors import GoneError, NotFoundError, TransitionError
+from server.models import connection_model, expert_model, matching, organization_model
+from server.models.errors import NotFoundError
 
 router = APIRouter(tags=["connections"])
 
@@ -25,11 +25,34 @@ class ConnectionRespond(BaseModel):
     status: str  # 'accepted' | 'declined'
 
 
-def _make_engagement_title(org_stated_need: Optional[str], org_name: str) -> str:
-    if org_stated_need:
-        label = org_stated_need.replace("_", " ").title()
-        return f"{label} — {org_name}"
-    return f"Engagement — {org_name}"
+def _paginate(data: list) -> dict:
+    return {
+        "data": data,
+        "pagination": {
+            "page": 1,
+            "limit": len(data),
+            "total_items": len(data),
+            "total_pages": 1,
+        },
+    }
+
+
+async def _require_connection_participant(connection: dict, current_user: dict) -> None:
+    role = current_user["role"]
+    if role == "admin":
+        return
+    if role == "organization":
+        org = await organization_model.find_by_user(current_user["user_id"])
+        if org is not None and org["org_profile_id"] == connection["org_id"]:
+            return
+    elif role == "expert":
+        expert = await expert_model.find_by_user(current_user["user_id"])
+        if expert is not None and expert["expert_profile_id"] == connection["expert_id"]:
+            return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"error": {"code": "FORBIDDEN", "message": "Not a participant in this connection request"}},
+    )
 
 
 @router.post("/connections", status_code=201)
@@ -47,6 +70,25 @@ async def create_connection(
             "sector": "other",
         })
 
+    expert = await expert_model.get(body.expert_id)
+    if expert["availability_status"] == "unavailable":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "UNAVAILABLE",
+                    "message": "This expert is not currently available for new requests.",
+                }
+            },
+        )
+
+    try:
+        org_infra = await organization_model.get_infrastructure(org["org_profile_id"])
+    except NotFoundError:
+        org_infra = None
+
+    match_score, factors = matching.compute_match_factors(org, org_infra, expert)
+
     # Default expiry from org's preference, fallback to 30 days
     expiry_days = org.get("default_connection_expiry_days") or 30
     expires_at = datetime.utcnow() + timedelta(days=expiry_days)
@@ -58,6 +100,8 @@ async def create_connection(
         initial_message=body.initial_message,
         org_stated_need=body.org_stated_need,
         org_stated_timeline=body.org_stated_timeline,
+        match_score=match_score,
+        factors=factors,
         expires_at=expires_at,
     )
     return dict(row)
@@ -73,42 +117,77 @@ async def list_connections(
     if role == "expert":
         expert = await expert_model.find_by_user(current_user["user_id"])
         if expert is None:
-            return []
+            return _paginate([])
+        params = [expert["expert_profile_id"]]
+        where = "cr.expert_id = $1"
+        if connection_status:
+            where += " AND cr.status = $2"
+            params.append(connection_status)
         rows = await pool.fetch(
-            """
+            f"""
             SELECT cr.connection_id, cr.org_id, cr.expert_id, cr.status,
                    cr.initial_message, cr.org_stated_need, cr.org_stated_timeline,
                    cr.match_score, cr.created_at, cr.expires_at, cr.responded_at,
                    op.org_name, op.sector AS org_sector
             FROM connection_requests cr
             JOIN organization_profiles op ON op.org_profile_id = cr.org_id
-            WHERE cr.expert_id = $1
+            WHERE {where}
             ORDER BY cr.created_at DESC
             """,
-            expert["expert_profile_id"],
+            *params,
         )
-        return [dict(r) for r in rows]
+        return _paginate([dict(r) for r in rows])
 
     if role == "organization":
         org = await organization_model.find_by_user(current_user["user_id"])
         if org is None:
-            return []
+            return _paginate([])
+        params = [org["org_profile_id"]]
+        where = "cr.org_id = $1"
+        if connection_status:
+            where += " AND cr.status = $2"
+            params.append(connection_status)
         rows = await pool.fetch(
-            """
+            f"""
             SELECT cr.connection_id, cr.org_id, cr.expert_id, cr.status,
                    cr.initial_message, cr.org_stated_need, cr.org_stated_timeline,
                    cr.match_score, cr.created_at, cr.expires_at, cr.responded_at,
                    op.org_name, op.sector AS org_sector
             FROM connection_requests cr
             JOIN organization_profiles op ON op.org_profile_id = cr.org_id
-            WHERE cr.org_id = $1
+            WHERE {where}
             ORDER BY cr.created_at DESC
             """,
-            org["org_profile_id"],
+            *params,
         )
-        return [dict(r) for r in rows]
+        return _paginate([dict(r) for r in rows])
 
-    return []
+    return _paginate([])
+
+
+@router.get("/connections/{connection_id}")
+async def get_connection(
+    connection_id: int,
+    current_user=Depends(get_current_user),
+):
+    connection = await connection_model.get(connection_id)
+    await _require_connection_participant(connection, current_user)
+    return dict(connection)
+
+
+@router.get("/connections/{connection_id}/score-factors")
+async def get_connection_score_factors(
+    connection_id: int,
+    current_user=Depends(get_current_user),
+):
+    connection = await connection_model.get(connection_id)
+    await _require_connection_participant(connection, current_user)
+    factors = await connection_model.get_score_factors(connection_id)
+    return {
+        "connection_id": connection_id,
+        "match_score": connection["match_score"],
+        "factors": [dict(f) for f in factors],
+    }
 
 
 @router.patch("/connections/{connection_id}")
@@ -132,21 +211,4 @@ async def respond_to_connection(
         )
 
     updated = await connection_model.respond(connection_id, body.status)
-
-    if body.status == "accepted":
-        org_row = await pool.fetchrow(
-            "SELECT org_name FROM organization_profiles WHERE org_profile_id = $1",
-            updated["org_id"],
-        )
-        org_name = org_row["org_name"] if org_row else "Unknown"
-        engagement_type = updated["org_stated_need"] or "risk_assessment"
-        title = _make_engagement_title(updated["org_stated_need"], org_name)
-        await engagement_model.create(
-            connection_id=updated["connection_id"],
-            org_id=updated["org_id"],
-            expert_id=updated["expert_id"],
-            engagement_type=engagement_type,
-            title=title,
-        )
-
     return dict(updated)

@@ -187,6 +187,8 @@ Request:
 ```json
 {
   "org_name": "JPMorgan Chase",
+  "contact_name": "Rob Otter",
+  "contact_title": "Head of Global Technology Applied Research",
   "sector": "financial",
   "sub_sector": "banking",
   "founded_year": 1799,

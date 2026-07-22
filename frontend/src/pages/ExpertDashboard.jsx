@@ -189,7 +189,23 @@ export default function ExpertDashboard() {
     setRespondingId(connectionId)
     setError('')
     try {
+      const connection = connections.find((c) => c.connection_id === connectionId)
       await connectionsApi.respond(connectionId, status)
+
+      // Accepting used to silently auto-create an engagement server-side;
+      // that's now an explicit step (POST /engagements) so the org/expert
+      // side can supply real budget/dates later without colliding with a
+      // hidden duplicate. Fire it here so the demo experience (accept ->
+      // engagement appears) stays the same.
+      if (status === 'accepted' && connection) {
+        const engagementType = connection.org_stated_need || 'risk_assessment'
+        await engagementsApi.create({
+          connection_id: connectionId,
+          engagement_type: engagementType,
+          title: `${labelize(engagementType)} — ${connection.org_name}`,
+        })
+      }
+
       const [conns, engs] = await Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()])
       setConnections(conns)
       setEngagements(engs)
