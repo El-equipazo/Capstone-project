@@ -469,13 +469,13 @@ Response `200`:
 ```json
 {
   "connection_id": 501,
-  "match_score": 87.5,
+  "match_score": 82.5,
   "factors": [
     {
       "factor_name": "sector_match",
-      "weight": 0.3,
+      "weight": 0.4,
       "raw_score": 100.0,
-      "weighted_contribution": 30.0
+      "weighted_contribution": 40.0
     },
     {
       "factor_name": "compliance_overlap",
@@ -485,21 +485,23 @@ Response `200`:
     },
     {
       "factor_name": "budget_fit",
-      "weight": 0.2,
-      "raw_score": 75.0,
-      "weighted_contribution": 15.0
+      "weight": 0.15,
+      "raw_score": 50.0,
+      "weighted_contribution": 7.5
     },
     {
       "factor_name": "availability_fit",
-      "weight": 0.25,
-      "raw_score": 80.0,
-      "weighted_contribution": 20.0
+      "weight": 0.2,
+      "raw_score": 62.5,
+      "weighted_contribution": 12.5
     }
   ]
 }
 ```
 
 The server writes all factor rows for a connection in a single transaction — the DB enforces that their weights sum to 1.00 before the transaction commits, so this endpoint should never return a set of factors with an inconsistent total.
+
+Sector fit deliberately carries the largest weight (0.40) and is graded by the expert's years of experience in the org's sector — an expert with no experience in that sector scores 0 on the factor, so cross-sector matches (say, a healthcare org and an education-focused expert) rank near the bottom regardless of the other factors.
 
 ### PATCH /connections/:connectionId
 
@@ -511,6 +513,48 @@ Response `200` (sets `responded_at`).
 Errors: `410` request already expired · `422` not in `pending` state.
 
 > `expired` status is set by a scheduled job when `NOW() > expires_at` and status is still `pending`. Clients never set it directly.
+
+### POST /matching/recommendations
+
+AI matching: the organization hits "Match me" and the server has an LLM (Google Gemini) rank the verified expert directory against the org's stored profile + infrastructure, plus an optional free-text description of what they need. — **Auth: organization**
+
+The result is **advisory and never stored** — the deterministic `match_score` + factor breakdown above is still computed on every connection request. Recommendations only include verified experts whose `availability_status` is not `unavailable`.
+
+Request (both fields optional):
+
+```json
+{
+  "need_description": "We need an independent audit of our payment rails before our next regulator exam.",
+  "limit": 5
+}
+```
+
+Response `200`:
+
+```json
+{
+  "model": "gemini-flash-latest",
+  "recommendations": [
+    {
+      "expert_profile_id": 7,
+      "first_name": "Sarah",
+      "last_name": "Chen",
+      "headline": "Post-Quantum Cryptography Specialist",
+      "hourly_rate_min": 350.0,
+      "hourly_rate_max": 500.0,
+      "availability_status": "available",
+      "is_verified": true,
+      "avg_rating": 4.9,
+      "total_completed_engagements": 23,
+      "fit_score": 93,
+      "reasoning": "8 years advising financial institutions and coverage of all three of your compliance requirements (PCI-DSS, GLBA, SOX); her cryptographic_audit offering fits your stated need and budget range.",
+      "key_strengths": ["financial sector depth", "PCI-DSS/GLBA/SOX", "audit-focused"]
+    }
+  ]
+}
+```
+
+Errors: `403` caller has no organization profile · `503` `AI_NOT_CONFIGURED` (server has no `GEMINI_API_KEY`) · `502` `AI_UNAVAILABLE` (LLM call failed).
 
 ---
 

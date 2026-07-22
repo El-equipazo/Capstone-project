@@ -696,3 +696,53 @@ async def delete_engagement_type(expert_id: int, eng_type_id: int) -> None:
     )
     if result == "DELETE 0":
         raise NotFoundError("engagement type not found")
+
+
+# ── Matching (AI recommendations) ────────────────────────────────────────────
+
+async def list_matching_candidates(limit: int = 50):
+    """
+    Candidate pool for the AI matcher: verified experts who aren't
+    'unavailable', with their sub-resources aggregated into arrays so one
+    query returns everything the ranking prompt needs. Best-rated first.
+    """
+    return await pool.fetch(
+        """
+        SELECT
+            e.expert_profile_id, e.first_name, e.last_name, e.headline,
+            e.years_of_experience, e.hourly_rate_min, e.hourly_rate_max,
+            e.availability_status, e.preferred_engagement_length,
+            e.is_verified, e.avg_rating, e.total_completed_engagements,
+            COALESCE((
+                SELECT array_agg(s.specialization)
+                FROM expert_specializations s
+                WHERE s.expert_id = e.expert_profile_id
+            ), '{}') AS specializations,
+            COALESCE((
+                SELECT json_agg(json_build_object(
+                    'sector', se.sector,
+                    'years', se.years_experience_in_sector,
+                    'compliance_standards', se.compliance_standards_known
+                ))
+                FROM expert_sector_experience se
+                WHERE se.expert_id = e.expert_profile_id
+            ), '[]') AS sector_experience,
+            COALESCE((
+                SELECT json_agg(json_build_object(
+                    'engagement_type', et.engagement_type,
+                    'budget_min', et.typical_budget_min,
+                    'budget_max', et.typical_budget_max,
+                    'duration_weeks_min', et.typical_duration_weeks_min,
+                    'duration_weeks_max', et.typical_duration_weeks_max
+                ))
+                FROM expert_engagement_types et
+                WHERE et.expert_id = e.expert_profile_id
+            ), '[]') AS engagement_types
+        FROM expert_profiles e
+        WHERE e.is_verified = true
+          AND e.availability_status != 'unavailable'
+        ORDER BY e.avg_rating DESC NULLS LAST, e.expert_profile_id
+        LIMIT $1
+        """,
+        limit,
+    )

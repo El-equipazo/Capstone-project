@@ -137,3 +137,15 @@ async def get_infrastructure(org_id: int) -> dict:
     if row is None:
         raise NotFoundError("infrastructure record not found")
     return dict(row)
+
+
+async def find_infrastructure(org_id: int):
+    """Same as get_infrastructure, but returns None instead of raising when
+    the org hasn't filled in an infrastructure record yet. Used by the
+    matching feature, which treats "no infrastructure on file" as a neutral
+    signal rather than a hard error."""
+    row = await pool.fetchrow(
+        f"SELECT {_INFRA_COLS} FROM organization_infrastructure WHERE org_id = $1",
+        org_id,
+    )
+    return dict(row) if row else None

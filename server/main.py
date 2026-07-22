@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.config import settings
 from server.db import connection_pool as pool
@@ -38,6 +39,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Controller HTTPExceptions → contract error envelope (§1.1) ---
+# FastAPI serializes HTTPException as {"detail": ...}; our controllers already
+# pass detail={"error": {...}}, so unwrap it to keep the envelope top-level.
+
+@app.exception_handler(StarletteHTTPException)
+async def _handle_http_exception(request: Request, exc: StarletteHTTPException):
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        content = exc.detail
+    else:
+        content = {"error": {"code": "ERROR", "message": str(exc.detail)}}
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=content,
+        headers=getattr(exc, "headers", None),
+    )
 
 
 # --- Model-layer exceptions → contract error envelope (§1.1) ---
