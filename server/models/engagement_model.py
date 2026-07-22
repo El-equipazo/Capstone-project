@@ -4,7 +4,7 @@ engagement_model — data access for the engagements table.
 from __future__ import annotations
 
 from server.db import connection_pool as pool
-from .enums import ENGAGEMENT_TYPE, PAYMENT_STRUCTURE
+from .enums import ENGAGEMENT_STATUS, ENGAGEMENT_TYPE, PAYMENT_STRUCTURE
 from .errors import ConflictError, NotFoundError
 from .validators import check_enum
 
@@ -48,10 +48,25 @@ async def create(
     return dict(row)
 
 
-async def list_for_expert(expert_id: int) -> list:
+def _check_list_filters(status: str = None, engagement_type: str = None) -> None:
+    check_enum(status, ENGAGEMENT_STATUS, "status", allow_none=True)
+    check_enum(engagement_type, ENGAGEMENT_TYPE, "engagement_type", allow_none=True)
+
+
+async def list_for_expert(expert_id: int, *, status: str = None, engagement_type: str = None) -> list:
     """Return engagements for an expert, with org_name joined in."""
+    _check_list_filters(status, engagement_type)
+    params = [expert_id]
+    where = "e.expert_id = $1"
+    if status is not None:
+        params.append(status)
+        where += f" AND e.status = ${len(params)}"
+    if engagement_type is not None:
+        params.append(engagement_type)
+        where += f" AND e.engagement_type = ${len(params)}"
+
     rows = await pool.fetch(
-        """
+        f"""
         SELECT e.engagement_id, e.connection_id, e.org_id, e.expert_id,
                e.engagement_type, e.title, e.description, e.status,
                e.agreed_budget, e.payment_structure,
@@ -60,27 +75,37 @@ async def list_for_expert(expert_id: int) -> list:
                op.org_name
         FROM engagements e
         JOIN organization_profiles op ON op.org_profile_id = e.org_id
-        WHERE e.expert_id = $1
+        WHERE {where}
         ORDER BY e.created_at DESC
         """,
-        expert_id,
+        *params,
     )
     return [dict(r) for r in rows]
 
 
-async def list_for_org(org_id: int) -> list:
+async def list_for_org(org_id: int, *, status: str = None, engagement_type: str = None) -> list:
+    _check_list_filters(status, engagement_type)
+    params = [org_id]
+    where = "e.org_id = $1"
+    if status is not None:
+        params.append(status)
+        where += f" AND e.status = ${len(params)}"
+    if engagement_type is not None:
+        params.append(engagement_type)
+        where += f" AND e.engagement_type = ${len(params)}"
+
     rows = await pool.fetch(
-        """
+        f"""
         SELECT e.engagement_id, e.connection_id, e.org_id, e.expert_id,
                e.engagement_type, e.title, e.description, e.status,
                e.agreed_budget, e.payment_structure,
                e.start_date, e.estimated_end_date, e.actual_end_date,
                e.created_at, e.updated_at
         FROM engagements e
-        WHERE e.org_id = $1
+        WHERE {where}
         ORDER BY e.created_at DESC
         """,
-        org_id,
+        *params,
     )
     return [dict(r) for r in rows]
 

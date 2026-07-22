@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from server.dependencies import get_current_user, require_role
@@ -83,21 +83,29 @@ async def create_engagement(
 
 
 @router.get("/engagements")
-async def list_engagements(current_user=Depends(get_current_user)):
+async def list_engagements(
+    status: Optional[str] = Query(None),
+    engagement_type: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+):
     role = current_user["role"]
 
     if role == "expert":
         expert = await expert_model.find_by_user(current_user["user_id"])
         if expert is None:
             return _paginate([])
-        rows = await engagement_model.list_for_expert(expert["expert_profile_id"])
+        rows = await engagement_model.list_for_expert(
+            expert["expert_profile_id"], status=status, engagement_type=engagement_type
+        )
         return _paginate(rows)
 
     if role == "organization":
         org = await organization_model.find_by_user(current_user["user_id"])
         if org is None:
             return _paginate([])
-        rows = await engagement_model.list_for_org(org["org_profile_id"])
+        rows = await engagement_model.list_for_org(
+            org["org_profile_id"], status=status, engagement_type=engagement_type
+        )
         return _paginate(rows)
 
     return _paginate([])
