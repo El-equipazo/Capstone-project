@@ -1,17 +1,9 @@
-// Mock client that mirrors api-contract.md's request/response shapes and status
-// codes. Every page talks to *this* module, never to mock data directly — once
-// the FastAPI backend exists, only the bodies of these functions change (to
-// real `fetch` calls against VITE_API_BASE_URL); callers stay the same.
+// API client that talks to the FastAPI backend at VITE_API_BASE_URL.
+// All callers use the same function signatures as the old localStorage mock,
+// so no page components needed to change.
 
-import { mockExperts, verifiedMockExperts } from '../data/mockExperts'
-
-const USERS_KEY = 'qc_mock_users'
-const SESSION_KEY = 'qc_mock_session'
-const NETWORK_DELAY_MS = 350
-
-function delay(value) {
-  return new Promise((resolve) => setTimeout(() => resolve(value), NETWORK_DELAY_MS))
-}
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+const SESSION_KEY = 'qc_session'
 
 class ApiError extends Error {
   constructor(status, code, message) {
@@ -21,125 +13,203 @@ class ApiError extends Error {
   }
 }
 
-function loadUsers() {
+function getStoredSession() {
   try {
-    return JSON.parse(localStorage.getItem(USERS_KEY)) || []
+    return JSON.parse(localStorage.getItem(SESSION_KEY))
   } catch {
-    return []
+    return null
   }
 }
 
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
+function storeSession(session) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
 }
 
-// ---------------- Auth (POST /auth/register, /auth/login, GET /auth/me) ----------------
+function authHeader() {
+  const session = getStoredSession()
+  return session ? { Authorization: `Bearer ${session.access_token}` } : {}
+}
+
+async function apiFetch(path, { method = 'GET', body, headers = {} } = {}) {
+  const options = {
+    method,
+    headers: { 'Content-Type': 'application/json', ...headers },
+  }
+  if (body !== undefined) {
+    options.body = JSON.stringify(body)
+  }
+  const res = await fetch(`${BASE}${path}`, options)
+
+  if (res.status === 204) return null
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    const err = data?.error ?? {}
+    throw new ApiError(res.status, err.code ?? 'ERROR', err.message ?? res.statusText)
+  }
+  return data
+}
+
+// ---------------- Auth -------------------------------------------------------
 
 export const authApi = {
   async register({ email, password, role }) {
-    if (!email || !password || password.length < 8) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Password must be at least 8 characters.')
-    }
-    if (!['organization', 'expert'].includes(role)) {
-      throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid role.')
-    }
-    const users = loadUsers()
-    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      throw new ApiError(409, 'CONFLICT', 'An account with this email already exists.')
-    }
-    const user = {
-      user_id: users.length + 1,
-      email,
-      role,
-      is_email_verified: false,
-      created_at: new Date().toISOString(),
-    }
-    users.push({ ...user, password })
-    saveUsers(users)
-    return delay({ ...user })
+    return await apiFetch('/auth/register', { method: 'POST', body: { email, password, role } })
   },
 
   async login({ email, password }) {
-    const users = loadUsers()
-    const match = users.find((u) => u.email.toLowerCase() === email.toLowerCase())
-    if (!match || match.password !== password) {
-      throw new ApiError(401, 'UNAUTHORIZED', 'Incorrect email or password.')
-    }
-    const session = {
-      access_token: `mock.${match.user_id}.${Date.now()}`,
-      user: { user_id: match.user_id, email: match.email, role: match.role },
-    }
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-    return delay(session)
+    const data = await apiFetch('/auth/login', { method: 'POST', body: { email, password } })
+    const session = { access_token: data.access_token, user: data.user }
+    storeSession(session)
+    return session
   },
 
   logout() {
+    const session = getStoredSession()
+    if (session) {
+      // Best-effort server-side logout; ignore failure (token self-expires)
+      apiFetch('/auth/logout', { method: 'POST', headers: authHeader() }).catch(() => {})
+    }
     localStorage.removeItem(SESSION_KEY)
   },
 
   getSession() {
-    try {
-      return JSON.parse(localStorage.getItem(SESSION_KEY))
-    } catch {
-      return null
-    }
+    return getStoredSession()
+  },
+
+  // GET /auth/me already resolves either an organization_profile or an
+  // expert_profile server-side depending on the user's role, so this stays
+  // generic rather than branching on role itself.
+  async me() {
+    const session = getStoredSession()
+    if (!session) throw new ApiError(401, 'UNAUTHORIZED', 'Not signed in.')
+    const data = await apiFetch('/auth/me', { headers: authHeader() })
+    // Transform flat response into { user, profile } shape the dashboard expects
+    const { profile, ...userFields } = data
+    const user = { user_id: userFields.user_id, email: userFields.email, role: userFields.role }
+    // Keep stored session user fields fresh
+    storeSession({ ...session, user })
+    return { user, profile }
   },
 }
 
-// ---------------- Discovery (GET /experts, GET /experts/:expertId) ----------------
+// ---------------- Experts ----------------------------------------------------
 
 export const expertsApi = {
   async list(filters = {}) {
-    let results = [...verifiedMockExperts]
-
-    if (filters.q) {
-      const q = filters.q.toLowerCase()
-      results = results.filter(
-        (e) =>
-          `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
-          e.headline.toLowerCase().includes(q) ||
-          e.bio.toLowerCase().includes(q)
-      )
+    const params = new URLSearchParams()
+    for (const [key, val] of Object.entries(filters)) {
+      if (val !== undefined && val !== null && val !== '') {
+        params.set(key, val)
+      }
     }
-    if (filters.specialization) {
-      results = results.filter((e) =>
-        e.specializations.some((s) => s.specialization === filters.specialization)
-      )
-    }
-    if (filters.sector) {
-      results = results.filter((e) => e.sector_experience.some((s) => s.sector === filters.sector))
-    }
-    if (filters.engagement_type) {
-      results = results.filter((e) =>
-        e.engagement_types.some((t) => t.engagement_type === filters.engagement_type)
-      )
-    }
-    if (filters.availability) {
-      results = results.filter((e) => e.availability_status === filters.availability)
-    }
-    if (filters.rate_max) {
-      results = results.filter((e) => e.hourly_rate_min <= Number(filters.rate_max))
-    }
-    if (filters.rating_min) {
-      results = results.filter((e) => (e.avg_rating || 0) >= Number(filters.rating_min))
-    }
-
-    return delay({
-      data: results,
-      pagination: {
-        page: 1,
-        limit: results.length,
-        total_items: results.length,
-        total_pages: 1,
-      },
-    })
+    const qs = params.toString() ? `?${params}` : ''
+    return await apiFetch(`/experts${qs}`)
   },
 
   async getById(expertId) {
-    const expert = mockExperts.find((e) => String(e.expert_profile_id) === String(expertId))
-    if (!expert) {
-      throw new ApiError(404, 'NOT_FOUND', 'Expert profile not found.')
-    }
-    return delay(expert)
+    return await apiFetch(`/experts/${expertId}`)
+  },
+
+  // userId param kept for signature compatibility; the real API ignores it
+  // (user comes from the JWT)
+  async createProfile(_userId, data) {
+    return await apiFetch('/experts', {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async updateProfile(expertId, patch) {
+    return await apiFetch(`/experts/${expertId}`, {
+      method: 'PATCH',
+      body: patch,
+      headers: authHeader(),
+    })
+  },
+
+  async addSpecialization(expertId, spec) {
+    return await apiFetch(`/experts/${expertId}/specializations`, {
+      method: 'POST',
+      body: spec,
+      headers: authHeader(),
+    })
+  },
+
+  async removeSpecialization(expertId, specializationId) {
+    return await apiFetch(`/experts/${expertId}/specializations/${specializationId}`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    })
+  },
+}
+
+// ---------------- Organizations -----------------------------------------------
+// Same userId-kept-for-signature-compatibility pattern as expertsApi above —
+// POST /organizations and PATCH /organizations/:orgId already exist server-side
+// (server/controllers/organizations.py + server/models/organization_model.py).
+
+export const organizationsApi = {
+  async createProfile(_userId, data) {
+    return await apiFetch('/organizations', {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async updateProfile(orgId, patch) {
+    return await apiFetch(`/organizations/${orgId}`, {
+      method: 'PATCH',
+      body: patch,
+      headers: authHeader(),
+    })
+  },
+}
+
+// ---------------- Connections ------------------------------------------------
+
+export const connectionsApi = {
+  async create(expertId, { initial_message = '', org_stated_need = null, org_stated_timeline = null } = {}) {
+    return await apiFetch('/connections', {
+      method: 'POST',
+      body: { expert_id: expertId, initial_message, org_stated_need, org_stated_timeline },
+      headers: authHeader(),
+    })
+  },
+
+  // GET /connections now returns the standard { data, pagination } envelope
+  // (api-contract.md §1.3); unwrap it here so page components can keep
+  // treating this as a plain array.
+  async listForExpert() {
+    const result = await apiFetch('/connections', { headers: authHeader() })
+    return result.data
+  },
+
+  async respond(connectionId, status) {
+    return await apiFetch(`/connections/${connectionId}`, {
+      method: 'PATCH',
+      body: { status },
+      headers: authHeader(),
+    })
+  },
+}
+
+// ---------------- Engagements ------------------------------------------------
+
+export const engagementsApi = {
+  async create(data) {
+    return await apiFetch('/engagements', {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async listForExpert() {
+    const result = await apiFetch('/engagements', { headers: authHeader() })
+    return result.data
   },
 }

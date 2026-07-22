@@ -90,7 +90,14 @@ async def create_connection(
 
     org = await organization_model.find_by_user(current_user["user_id"])
     if org is None:
-        raise _FORBIDDEN_NO_ORG_PROFILE
+        # Auto-create a minimal profile so new org accounts can send requests
+        # without a separate setup step. They can fill in details later via
+        # PATCH /organizations.
+        org_name = current_user["email"].split("@")[0]
+        org = await organization_model.create(current_user["user_id"], {
+            "org_name": org_name,
+            "sector": "other",
+        })
 
     # Server computes the score + factor breakdown (404 unknown expert /
     # 422 unavailable bubble up from the scorer).

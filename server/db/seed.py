@@ -91,6 +91,8 @@ async def seed():
                 org_profile_id                 SERIAL PRIMARY KEY,
                 user_id                        INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
                 org_name                       TEXT NOT NULL,
+                contact_name                   TEXT,
+                contact_title                  TEXT,
                 sector                         TEXT NOT NULL,
                 sub_sector                     TEXT,
                 founded_year                   INTEGER,
@@ -515,12 +517,12 @@ async def seed():
         # -- ORGANIZATION PROFILE ----------------------------------------------
         org_profile = await conn.fetchrow("""
             INSERT INTO organization_profiles (
-                user_id, org_name, sector, sub_sector, founded_year,
+                user_id, org_name, contact_name, contact_title, sector, sub_sector, founded_year,
                 employee_count_range, country, state_province, website,
                 org_description, quantum_knowledge_level, budget_range,
                 urgency_level, default_connection_expiry_days, is_verified
             ) VALUES (
-                $1, 'First Community Bank of New York', 'financial',
+                $1, 'First Community Bank of New York', 'Jordan Alvarez', 'Chief Technology Officer', 'financial',
                 'community bank', 1987, '50-250', 'United States', 'New York',
                 'https://www.firstcommunitybankny.com',
                 'A regional community bank serving the Hudson Valley since 1987, storing decades of customer financial and mortgage records.',

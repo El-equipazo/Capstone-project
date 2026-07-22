@@ -5,10 +5,10 @@ import ExpertCard from '../components/ExpertCard'
 import LatticeHeroArt from '../components/LatticeHeroArt'
 
 const SECTORS = [
-  { icon: '🏦', label: 'Financial institutions', sub: 'Banks, payment processors, investment firms' },
-  { icon: '🏥', label: 'Healthcare organizations', sub: 'Hospitals, insurers, research institutions' },
-  { icon: '🏛', label: 'Government & defense', sub: 'Classified comms, national infrastructure' },
-  { icon: '⚡', label: 'Critical infrastructure', sub: 'Energy, telecom, transportation' },
+  { icon: '🏦', label: 'Banks', sub: 'Retail, commercial & community banks' },
+  { icon: '💳', label: 'Payment processors', sub: 'Card networks, payment rails, fintech infrastructure' },
+  { icon: '📈', label: 'Investment firms', sub: 'Asset managers, hedge funds, broker-dealers' },
+  { icon: '🛡️', label: 'Insurers', sub: 'Carriers holding decades of policyholder data' },
 ]
 
 export default function Landing() {
@@ -31,9 +31,9 @@ export default function Landing() {
               Pick yours.
             </h1>
             <p className="hero-sub">
-              Lattice is a verified marketplace connecting high-risk organizations with the
-              quantum security experts who can assess and remediate their cryptographic exposure
-              — before a quantum breakthrough renders today&apos;s protections obsolete.
+              Lattice is a verified marketplace connecting high-risk financial institutions with
+              the quantum security experts who can assess and remediate their cryptographic
+              exposure — before a quantum breakthrough renders today&apos;s protections obsolete.
             </p>
             <Link to="/experts" className="pill-btn">
               Browse verified experts <span aria-hidden="true">→</span>
@@ -61,7 +61,7 @@ export default function Landing() {
               </h2>
               <p className="lead" style={{ marginBottom: 18 }}>
                 Search a curated directory of verified quantum security professionals, filtered by
-                specialization, sector experience, and compliance familiarity — then engage
+                specialization, engagement type, and compliance familiarity — then engage
                 end-to-end in a secure workspace.
               </p>
               <Link to="/experts" className="btn btn-acc btn-block">

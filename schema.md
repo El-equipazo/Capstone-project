@@ -20,6 +20,8 @@ organization_profiles
 org_profile_id                  SERIAL PRIMARY KEY
 user_id                         INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE
 org_name                        TEXT NOT NULL
+contact_name                    TEXT -- primary point of contact for this account
+contact_title                   TEXT -- e.g. 'Head of Security', 'CISO'
 sector                          TEXT NOT NULL -- 'financial' | 'healthcare' | 'government' |
                                  -- 'nonprofit' | 'legal' | 'energy' | 'education' | 'other'
 sub_sector                      TEXT

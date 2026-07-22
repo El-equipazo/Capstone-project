@@ -13,11 +13,10 @@ from server.models.errors import (
     DeactivatedError,
     GoneError,
     NotFoundError,
-    NotImplementedModelError,
     TransitionError,
     ValidationError,
 )
-from server.controllers import auth, connections, experts, organizations
+from server.controllers import auth, connections, engagements, experts, organizations
 
 
 @asynccontextmanager
@@ -120,17 +119,10 @@ async def _handle_deactivated(request: Request, exc: DeactivatedError):
     )
 
 
-@app.exception_handler(NotImplementedModelError)
-async def _handle_not_implemented(request: Request, exc: NotImplementedModelError):
-    return JSONResponse(
-        status_code=503,
-        content={"error": {"code": "NOT_IMPLEMENTED", "message": str(exc)}},
-    )
-
-
 # --- Routers ---
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(experts.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
 app.include_router(connections.router, prefix="/api/v1")
+app.include_router(engagements.router, prefix="/api/v1")

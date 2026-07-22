@@ -174,13 +174,20 @@ def compute_factors(inputs: Dict,
 # -- ENTRY POINT -------------------------------------------------------------
 
 async def fetch_inputs(org_profile_id: int, expert_profile_id: int) -> Dict:
-    """Gather everything the factors need. NotFoundError bubbles as 404."""
+    """
+    Gather everything the factors need. NotFoundError bubbles as 404.
+
+    expert_model.get() already embeds sector_experience and engagement_types
+    (it builds the full profile for GET /experts/:id), so one call covers
+    availability_status plus both sub-resource lists — no separate queries.
+    """
+    expert = await expert_model.get(expert_profile_id)
     return {
         "org": await organization_model.get(org_profile_id),
         "infrastructure": await organization_model.find_infrastructure(org_profile_id),
-        "expert": await expert_model.get(expert_profile_id),
-        "sector_experience": await expert_model.get_sector_experience(expert_profile_id),
-        "engagement_types": await expert_model.get_engagement_types(expert_profile_id),
+        "expert": expert,
+        "sector_experience": expert["sector_experience"],
+        "engagement_types": expert["engagement_types"],
     }
 
 

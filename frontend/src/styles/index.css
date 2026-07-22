@@ -806,20 +806,11 @@ button, input, select, textarea {
   text-align: right;
 }
 
-.xp-bignum {
-  font-size: 62px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-
 .xp-status-row {
   display: flex;
   align-items: center;
   gap: 7px;
   justify-content: flex-end;
-  margin-top: 16px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1018,4 +1009,97 @@ button, input, select, textarea {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* ---------- Expert dashboard ---------- */
+.dash-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+}
+
+.dash-tab {
+  padding: 10px 2px;
+  border: none;
+  background: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.dash-tab.on {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+.dash-request-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dash-request-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* ---------- Onboarding wizard step indicator ---------- */
+.onboard-steps {
+  display: flex;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.onboard-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.onboard-step .n {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  flex: none;
+}
+
+.onboard-step.on {
+  color: var(--ink);
+}
+
+.onboard-step.on .n {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.onboard-step.done .n {
+  border-color: var(--acc);
+  background: var(--acc);
+  color: #fff;
+}
+
+.onboard-step-line {
+  flex: 1;
+  height: 1.5px;
+  background: var(--line);
+  margin: 0 12px;
+  min-width: 24px;
 }
