@@ -144,6 +144,25 @@ export const expertsApi = {
       headers: authHeader(),
     })
   },
+
+  async listCredentials(expertId) {
+    return await apiFetch(`/experts/${expertId}/credentials`, { headers: authHeader() })
+  },
+
+  async addCredential(expertId, data) {
+    return await apiFetch(`/experts/${expertId}/credentials`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async deleteCredential(expertId, credentialId) {
+    return await apiFetch(`/experts/${expertId}/credentials/${credentialId}`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    })
+  },
 }
 
 // ---------------- Organizations -----------------------------------------------
@@ -211,5 +230,87 @@ export const engagementsApi = {
   async listForExpert() {
     const result = await apiFetch('/engagements', { headers: authHeader() })
     return result.data
+  },
+}
+
+// ---------------- Verifications ----------------------------------------------
+
+export const verificationsApi = {
+  async submit(data) {
+    return await apiFetch('/verifications', {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async list() {
+    return await apiFetch('/verifications', { headers: authHeader() })
+  },
+}
+
+// ---------------- Admin -------------------------------------------------------
+
+export const adminApi = {
+  async listExpertProfiles({ is_verified } = {}) {
+    const params = new URLSearchParams()
+    if (is_verified != null) params.set('is_verified', is_verified)
+    const qs = params.toString() ? `?${params}` : ''
+    return await apiFetch(`/admin/experts${qs}`, { headers: authHeader() })
+  },
+
+  async listOrganizationProfiles({ is_verified } = {}) {
+    const params = new URLSearchParams()
+    if (is_verified != null) params.set('is_verified', is_verified)
+    const qs = params.toString() ? `?${params}` : ''
+    return await apiFetch(`/admin/organizations${qs}`, { headers: authHeader() })
+  },
+
+  async listUsers({ role, is_active } = {}) {
+    const params = new URLSearchParams()
+    if (role != null) params.set('role', role)
+    if (is_active != null) params.set('is_active', is_active)
+    const qs = params.toString() ? `?${params}` : ''
+    return await apiFetch(`/admin/users${qs}`, { headers: authHeader() })
+  },
+
+  async setUserActive(userId, isActive) {
+    return await apiFetch(`/admin/users/${userId}`, {
+      method: 'PATCH',
+      body: { is_active: isActive },
+      headers: authHeader(),
+    })
+  },
+
+  async listVerifications({ status, verification_type } = {}) {
+    const params = new URLSearchParams()
+    if (status != null) params.set('status', status)
+    if (verification_type != null) params.set('verification_type', verification_type)
+    const qs = params.toString() ? `?${params}` : ''
+    return await apiFetch(`/admin/verifications${qs}`, { headers: authHeader() })
+  },
+
+  async decideVerification(verificationId, data) {
+    return await apiFetch(`/admin/verifications/${verificationId}`, {
+      method: 'PATCH',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async setExpertVerified(expertProfileId, isVerified) {
+    return await apiFetch(`/admin/experts/${expertProfileId}/verify`, {
+      method: 'PATCH',
+      body: { is_verified: isVerified },
+      headers: authHeader(),
+    })
+  },
+
+  async verifyOrganization(orgProfileId) {
+    return await apiFetch(`/admin/organizations/${orgProfileId}/verify`, {
+      method: 'PATCH',
+      body: { is_verified: true },
+      headers: authHeader(),
+    })
   },
 }

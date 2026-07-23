@@ -9,6 +9,7 @@ import ExpertDirectory from './pages/ExpertDirectory'
 import ExpertProfile from './pages/ExpertProfile'
 import ExpertDashboard from './pages/ExpertDashboard'
 import OrganizationDashboard from './pages/OrganizationDashboard'
+import AdminDashboard from './pages/AdminDashboard'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/experts/:expertId" element={<ExpertProfile />} />
         <Route path="/dashboard" element={<ExpertDashboard />} />
         <Route path="/organization" element={<OrganizationDashboard />} />
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />

@@ -208,7 +208,10 @@ async def list(
     order_sql = "ASC" if order.lower() == "asc" else "DESC"
 
     params: list = []
-    where_parts: list = []
+    where_parts: list = [
+        "ep.is_verified = true",
+        "EXISTS (SELECT 1 FROM users u WHERE u.user_id = ep.user_id AND u.is_active = true)",
+    ]
 
     def p(val) -> str:
         params.append(val)
