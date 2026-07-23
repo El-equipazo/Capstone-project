@@ -186,6 +186,18 @@ export const organizationsApi = {
       headers: authHeader(),
     })
   },
+
+  async getInfrastructure(orgId) {
+    return await apiFetch(`/organizations/${orgId}/infrastructure`, { headers: authHeader() })
+  },
+
+  async upsertInfrastructure(orgId, data) {
+    return await apiFetch(`/organizations/${orgId}/infrastructure`, {
+      method: 'PUT',
+      body: data,
+      headers: authHeader(),
+    })
+  },
 }
 
 // ---------------- Connections ------------------------------------------------
@@ -201,8 +213,15 @@ export const connectionsApi = {
 
   // GET /connections now returns the standard { data, pagination } envelope
   // (api-contract.md §1.3); unwrap it here so page components can keep
-  // treating this as a plain array.
+  // treating this as a plain array. The backend scopes the result to the
+  // caller's own side (sent vs received) based on their role, so the org and
+  // expert variants hit the same endpoint.
   async listForExpert() {
+    const result = await apiFetch('/connections', { headers: authHeader() })
+    return result.data
+  },
+
+  async listForOrg() {
     const result = await apiFetch('/connections', { headers: authHeader() })
     return result.data
   },
@@ -428,6 +447,21 @@ export const adminApi = {
     return await apiFetch(`/admin/organizations/${orgProfileId}/verify`, {
       method: 'PATCH',
       body: { is_verified: true },
+      headers: authHeader(),
+    })
+  },
+}
+
+// ---------------- AI Matching --------------------------------------------------
+// POST /matching/recommendations returns a flat { model, recommendations }
+// object, not the { data, pagination } envelope other list endpoints use —
+// nothing to unwrap here.
+
+export const matchingApi = {
+  async getRecommendations({ need_description, limit = 5 } = {}) {
+    return await apiFetch('/matching/recommendations', {
+      method: 'POST',
+      body: { need_description, limit },
       headers: authHeader(),
     })
   },

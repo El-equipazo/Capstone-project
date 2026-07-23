@@ -291,6 +291,46 @@ button, input, select, textarea {
   white-space: nowrap;
 }
 
+.tag-input-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 6px 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--fill2);
+  white-space: nowrap;
+}
+
+.tag-input-chip button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.tag-suggest-btn {
+  border: 1px dashed var(--line);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.tag-suggest-btn:hover {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+
 /* ---------- Cards ---------- */
 .card {
   background: var(--paper);
@@ -348,6 +388,7 @@ button, input, select, textarea {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -464,6 +505,80 @@ button, input, select, textarea {
 
 .ec-cta {
   white-space: nowrap;
+}
+
+/* ---------- AI match recommendations ---------- */
+.fit-score-badge {
+  flex: none;
+  border: 1px solid var(--acc);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--acc);
+  background: var(--acc-light);
+  white-space: nowrap;
+}
+
+.rec-reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rec-reasoning-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.rec-scores {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: none;
+}
+
+.score-info-btn {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--fill2);
+  color: var(--muted);
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-info-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  width: 230px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  z-index: 10;
 }
 
 /* ---------- Forms ---------- */

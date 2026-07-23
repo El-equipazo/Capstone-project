@@ -21,7 +21,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from server.config import settings
-from . import expert_model, organization_model
+from . import expert_model, match_scoring, organization_model
 
 # The SDK is only needed when the endpoint is actually used — import lazily so
 # the server runs fine for teammates who haven't installed it / set a key.
@@ -100,7 +100,7 @@ def _default(value):
     return str(value)
 
 
-def _build_user_prompt(org, infrastructure, need_description, candidates, limit):
+def _build_org_context(org, infrastructure):
     org_context = {
         "org_name": org["org_name"],
         "sector": org["sector"],
@@ -119,24 +119,41 @@ def _build_user_prompt(org, infrastructure, need_description, candidates, limit)
             "oldest_system_age_years": infrastructure["oldest_system_age_years"],
             "known_risks": infrastructure["known_risks_freetext"],
         }
+    return org_context
 
-    expert_cards = []
-    for c in candidates:
-        expert_cards.append({
-            "expert_profile_id": c["expert_profile_id"],
-            "name": f"{c['first_name']} {c['last_name']}",
-            "headline": c["headline"],
-            "years_of_experience": c["years_of_experience"],
-            "hourly_rate_min": c["hourly_rate_min"],
-            "hourly_rate_max": c["hourly_rate_max"],
-            "availability_status": c["availability_status"],
-            "avg_rating": c["avg_rating"],
-            "total_completed_engagements": c["total_completed_engagements"],
-            "specializations": list(c["specializations"] or []),
-            # json_agg columns arrive as JSON strings from asyncpg
-            "sector_experience": json.loads(c["sector_experience"]),
-            "engagement_types": json.loads(c["engagement_types"]),
-        })
+
+def _build_expert_card(c, sector_experience, engagement_types):
+    """
+    `sector_experience`/`engagement_types` are passed in already as native
+    lists rather than read off `c` directly, since callers source them two
+    different ways: list_matching_candidates() rows carry them as json_agg
+    STRINGS (caller must json.loads first), while expert_model.get() already
+    returns native parsed lists.
+    """
+    return {
+        "expert_profile_id": c["expert_profile_id"],
+        "name": f"{c['first_name']} {c['last_name']}",
+        "headline": c["headline"],
+        "years_of_experience": c["years_of_experience"],
+        "hourly_rate_min": c["hourly_rate_min"],
+        "hourly_rate_max": c["hourly_rate_max"],
+        "availability_status": c["availability_status"],
+        "avg_rating": c["avg_rating"],
+        "total_completed_engagements": c["total_completed_engagements"],
+        "specializations": list(c["specializations"] or []),
+        "sector_experience": sector_experience,
+        "engagement_types": engagement_types,
+    }
+
+
+def _build_user_prompt(org, infrastructure, need_description, candidates, limit):
+    org_context = _build_org_context(org, infrastructure)
+
+    expert_cards = [
+        # json_agg columns arrive as JSON strings from asyncpg
+        _build_expert_card(c, json.loads(c["sector_experience"]), json.loads(c["engagement_types"]))
+        for c in candidates
+    ]
 
     parts = [
         "ORGANIZATION:",
@@ -152,6 +169,88 @@ def _build_user_prompt(org, infrastructure, need_description, candidates, limit)
         f"Return your top matches (at most {limit}).",
     ]
     return "\n".join(parts)
+
+
+SINGLE_SCORE_SYSTEM_PROMPT = """\
+You are the matching engine for QuantumConnect, a marketplace connecting
+organizations facing post-quantum cryptography risk with verified quantum
+security experts.
+
+Given one organization (its sector, compliance requirements, current
+encryption standards, budget, urgency) and ONE specific expert, assess how
+well this expert fits THIS organization.
+
+Weigh, in rough order of importance:
+1. Sector expertise — deep experience in the organization's own sector
+   dominates; no experience in that sector is a poor match even if otherwise
+   impressive.
+2. Compliance overlap — how many of the org's compliance requirements the
+   expert knows.
+3. Engagement fit — whether the expert offers a fitting engagement type, and
+   whether typical budgets fall inside the org's budget range.
+4. Availability, track record (rating, completed engagements), and rates.
+
+Rules:
+- fit_score is 0–100 and must be honest — a bad fit should score low, do not
+  inflate it just because it's the only expert being assessed.
+- reasoning is 1–3 sentences addressed to the organization, grounded in the
+  data provided (sector years, named compliance standards, budget numbers).
+- key_strengths is 2–4 short phrases.
+"""
+
+
+def _build_single_score_prompt(org, infrastructure, expert):
+    org_context = _build_org_context(org, infrastructure)
+    expert_card = _build_expert_card(
+        expert, expert["sector_experience"], expert["engagement_types"]
+    )
+    return "\n".join([
+        "ORGANIZATION:",
+        json.dumps(org_context, default=_default),
+        "",
+        "EXPERT TO ASSESS:",
+        json.dumps(expert_card, default=_default),
+    ])
+
+
+async def score_single(org_profile_id: int, expert_profile_id: int) -> Optional[dict]:
+    """
+    Best-effort AI fit score for one specific org/expert pair, computed once
+    at POST /connections time and stored on the connection row — unlike
+    recommend(), which is live/on-demand and never stored.
+
+    Returns None on ANY failure (no GEMINI_API_KEY, network/API error,
+    unparseable response, bad org/expert id, ...) rather than raising —
+    this must never block connection creation, only the deterministic
+    match_score in match_scoring.py is required.
+    """
+    try:
+        client = _get_client()
+        org = await organization_model.get(org_profile_id)
+        infrastructure = await organization_model.find_infrastructure(org_profile_id)
+        expert = await expert_model.get(expert_profile_id)
+
+        from google.genai import errors as genai_errors, types
+
+        prompt = _build_single_score_prompt(org, infrastructure, expert)
+        response = await client.aio.models.generate_content(
+            model=settings.gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SINGLE_SCORE_SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=ExpertRecommendation,
+            ),
+        )
+        rec = response.parsed
+        if rec is None:
+            rec = ExpertRecommendation.model_validate(json.loads(response.text))
+        return {
+            "fit_score": max(0, min(100, rec.fit_score)),
+            "reasoning": rec.reasoning,
+        }
+    except Exception:
+        return None
 
 
 async def recommend(org_profile_id: int,
@@ -202,6 +301,23 @@ async def recommend(org_profile_id: int,
         card = by_id.get(rec.expert_profile_id)
         if card is None:
             continue  # model invented an ID — drop it
+
+        # Alongside Gemini's advisory fit_score, also surface the same
+        # deterministic score POST /connections would compute for this
+        # org/expert pair — reusing data already fetched above, no extra
+        # queries. org_stated_need is None here since AI Match only collects
+        # free text, not the structured enum connections use.
+        profile_match_score, _ = match_scoring.compute_factors(
+            {
+                "org": org,
+                "infrastructure": infrastructure,
+                "expert": {"availability_status": card["availability_status"]},
+                "sector_experience": json.loads(card["sector_experience"]),
+                "engagement_types": json.loads(card["engagement_types"]),
+            },
+            org_stated_need=None,
+        )
+
         results.append({
             "expert_profile_id": card["expert_profile_id"],
             "first_name": card["first_name"],
@@ -216,6 +332,7 @@ async def recommend(org_profile_id: int,
             "fit_score": max(0, min(100, rec.fit_score)),
             "reasoning": rec.reasoning,
             "key_strengths": rec.key_strengths[:4],
+            "profile_match_score": float(profile_match_score),
         })
         if len(results) >= limit:
             break
