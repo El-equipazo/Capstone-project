@@ -34,6 +34,20 @@ class ConnectionResponse(BaseModel):
     expires_at: Optional[datetime] = None
     responded_at: Optional[datetime] = None
     created_at: datetime
+    # Org profile fields joined in from list_requests
+    org_name: Optional[str] = None
+    org_sector: Optional[str] = None
+    sub_sector: Optional[str] = None
+    org_description: Optional[str] = None
+    employee_count_range: Optional[str] = None
+    country: Optional[str] = None
+    website: Optional[str] = None
+    quantum_knowledge_level: Optional[str] = None
+    budget_range: Optional[str] = None
+    urgency_level: Optional[str] = None
+    org_is_verified: Optional[bool] = None
+    contact_name: Optional[str] = None
+    contact_title: Optional[str] = None
 
 
 class ScoreFactor(BaseModel):

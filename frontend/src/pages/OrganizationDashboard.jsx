@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authApi, organizationsApi, matchingApi, connectionsApi, expertsApi } from '../api/client'
+import { authApi, organizationsApi, matchingApi, connectionsApi, expertsApi, engagementsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import RecommendationCard from '../components/matching/RecommendationCard'
@@ -10,13 +10,6 @@ import { labelize, BUDGET_RANGE_LABEL, toNumberOrNull } from '../utils/format'
 const MATCH_ERROR_MESSAGES = {
   AI_NOT_CONFIGURED: 'AI matching isn’t set up on this server yet. Ask an admin to configure it.',
   AI_UNAVAILABLE: 'The AI matching service is temporarily unavailable. Please try again in a moment.',
-}
-
-const CONNECTION_STATUS_BADGE = {
-  pending: { className: 'badge pending', label: 'Pending' },
-  accepted: { className: 'badge', label: 'Accepted' },
-  declined: { className: 'tag', label: 'Declined' },
-  expired: { className: 'tag', label: 'Expired' },
 }
 
 const EMPLOYEE_COUNT_OPTIONS = ['<50', '50-250', '250-1k', '1k-10k', '>10k']
@@ -72,14 +65,18 @@ export default function OrganizationDashboard() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedNotice, setSavedNotice] = useState(false)
+  const [connections, setConnections] = useState([])
+  const [engagements, setEngagements] = useState([])
+  const [expertsById, setExpertsById] = useState({})
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`qc_org_dismissed_${user?.user_id}`) || '[]')) }
+    catch { return new Set() }
+  })
 
   const [needDescription, setNeedDescription] = useState('')
   const [matching, setMatching] = useState(false)
   const [recommendations, setRecommendations] = useState(null)
   const [matchError, setMatchError] = useState('')
-
-  const [connections, setConnections] = useState([])
-  const [expertsById, setExpertsById] = useState({})
 
   const [infraForm, setInfraForm] = useState(infraToForm(null))
   const [infraSaving, setInfraSaving] = useState(false)
@@ -101,9 +98,10 @@ export default function OrganizationDashboard() {
 
   useEffect(() => {
     if (!profile) return
-    connectionsApi.listForOrg().then((rows) => {
-      setConnections(rows)
-      const uniqueExpertIds = [...new Set(rows.map((c) => c.expert_id))]
+    Promise.all([connectionsApi.listForOrg(), engagementsApi.list()]).then(([conns, engs]) => {
+      setConnections(conns)
+      setEngagements(engs)
+      const uniqueExpertIds = [...new Set(conns.map((c) => c.expert_id))]
       Promise.all(uniqueExpertIds.map((id) => expertsApi.getById(id).catch(() => null))).then((experts) => {
         const byId = {}
         experts.forEach((e, i) => {
@@ -260,6 +258,39 @@ export default function OrganizationDashboard() {
     }
   }
 
+  const TERMINAL = ['completed', 'cancelled']
+  const activeEngagements = engagements.filter((e) => !TERMINAL.includes(e.status))
+
+  const _pastConnections = connections
+    .filter((c) => ['declined', 'expired'].includes(c.status))
+    .map((c) => ({ id: `conn-${c.connection_id}`, label: `Expert #${c.expert_id}`, status: c.status, link: `/experts/${c.expert_id}` }))
+  const _pastEngagements = engagements
+    .filter((e) => TERMINAL.includes(e.status))
+    .map((e) => ({ id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status, link: `/engagements/${e.engagement_id}` }))
+  const allPastItems = [..._pastConnections, ..._pastEngagements]
+
+  const DISMISSED_KEY = `qc_org_dismissed_${user?.user_id}`
+
+  function dismissItem(id) {
+    setDismissed((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  function clearAllPast() {
+    const ids = allPastItems.map((i) => i.id)
+    setDismissed((prev) => {
+      const next = new Set([...prev, ...ids])
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  const pastItems = allPastItems.filter((i) => !dismissed.has(i.id))
+
   return (
     <div className="page">
       <div className="container">
@@ -348,51 +379,101 @@ export default function OrganizationDashboard() {
             </div>
 
             <div className="card" style={{ padding: 22 }}>
-              <span className="section-label">Your requests</span>
+              <span className="section-label">Engagements</span>
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {connections.length === 0 && (
+                {activeEngagements.length === 0 ? (
                   <p className="lead" style={{ fontSize: 12.5 }}>
-                    No requests sent yet —{' '}
-                    <Link to="/experts" className="xp-link-arrow">
-                      browse the expert directory
-                    </Link>{' '}
-                    to get started.
+                    No active engagements.{' '}
+                    <Link to="/experts" style={{ color: 'var(--acc)' }}>Browse the expert directory</Link>{' '}
+                    to send a connection request.
                   </p>
-                )}
-                {connections.map((c) => {
-                  const expert = expertsById[c.expert_id]
-                  const statusBadge = CONNECTION_STATUS_BADGE[c.status] ?? { className: 'tag', label: labelize(c.status) }
-                  return (
-                    <div key={c.connection_id} className="dash-request-row">
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="row gap-8 wrap" style={{ marginBottom: 6 }}>
-                          <span style={{ fontWeight: 700, fontSize: 13.5 }}>
-                            {expert ? `${expert.first_name} ${expert.last_name}` : `Expert #${c.expert_id}`}
+                ) : activeEngagements.map((e) => (
+                  <Link
+                    key={e.engagement_id}
+                    to={`/engagements/${e.engagement_id}`}
+                    style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                  >
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title || labelize(e.engagement_type)}</span>
+                        {e.expert_first_name && (
+                          <span className="lead" style={{ fontSize: 12, marginLeft: 6 }}>
+                            with {e.expert_first_name} {e.expert_last_name}
                           </span>
-                          <span className={statusBadge.className}>{statusBadge.label}</span>
-                          {c.org_stated_need && <span className="tag">{labelize(c.org_stated_need)}</span>}
+                        )}
+                      </div>
+                      <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {pastItems.length > 0 && (
+              <div className="card" style={{ padding: 22 }}>
+                <div className="row gap-8" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+                  <span className="section-label">Past requests &amp; engagements</span>
+                  <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={clearAllPast}>
+                    Clear all
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {pastItems.map((item) => (
+                    <div key={item.id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="row gap-8 wrap" style={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
+                        {item.link ? (
+                          <Link to={item.link} style={{ fontWeight: 500, fontSize: 12.5, color: 'inherit' }}>
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: 12.5 }}>{item.label}</span>
+                        )}
+                        <span className="tag" style={{ fontSize: 11 }}>{labelize(item.status)}</span>
+                      </div>
+                      <button
+                        className="btn btn-sm"
+                        style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => dismissItem(item.id)}
+                        title="Dismiss"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {connections.filter((c) => c.status === 'pending').length > 0 && (
+              <div className="card" style={{ padding: 22 }}>
+                <span className="section-label">Pending connection requests</span>
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {connections.filter((c) => c.status === 'pending').map((c) => {
+                    const expert = expertsById[c.expert_id]
+                    return (
+                      <div key={c.connection_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between' }}>
+                        <div>
+                          <span style={{ fontWeight: 600, fontSize: 13 }}>
+                            <Link to={`/experts/${c.expert_id}`} style={{ color: 'inherit' }}>
+                              {expert ? `${expert.first_name} ${expert.last_name}` : `Expert #${c.expert_id}`}
+                            </Link>
+                          </span>
+                          {c.org_stated_need && (
+                            <span className="tag" style={{ marginLeft: 8, fontSize: 11 }}>{labelize(c.org_stated_need)}</span>
+                          )}
                           {c.ai_fit_score != null && (
-                            <span className="tag" title={c.ai_reasoning || undefined}>
+                            <span className="tag" style={{ marginLeft: 8, fontSize: 11 }} title={c.ai_reasoning || undefined}>
                               AI fit {c.ai_fit_score}%
                             </span>
                           )}
                         </div>
-                        {c.initial_message && (
-                          <p className="lead" style={{ fontSize: 12.5 }}>
-                            {c.initial_message}
-                          </p>
-                        )}
+                        <span className="tag">{labelize(c.status)}</span>
                       </div>
-                      {expert && (
-                        <Link to={`/experts/${expert.expert_profile_id}`} className="btn btn-sm" style={{ flex: 'none' }}>
-                          View
-                        </Link>
-                      )}
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
