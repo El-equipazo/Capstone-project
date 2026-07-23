@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { engagementsApi } from '../api/client'
-import { useAuth } from '../context/AuthContext'
+import { useRequireAuth } from '../hooks/useRequireAuth'
+import { useEngagementChat } from '../hooks/useEngagementChat'
 import { labelize, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 
 const MILESTONE_LABEL = {
@@ -47,8 +48,7 @@ const BLANK_FORM = { title: '', description: '', due_date: '', deliverable_descr
 export default function EngagementDetail() {
   const { id } = useParams()
   const engagementId = parseInt(id, 10)
-  const { user } = useAuth()
-  const navigate = useNavigate()
+  const user = useRequireAuth()
 
   const [engagement, setEngagement] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -69,12 +69,22 @@ export default function EngagementDetail() {
   const [editingType, setEditingType] = useState(false)
   const [typeValue, setTypeValue] = useState('')
 
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+
   useEffect(() => {
-    if (!user) { navigate('/login'); return }
+    if (!user) return
     engagementsApi.getById(engagementId)
       .then((eng) => { setEngagement(eng); setLoading(false) })
       .catch(() => { setError('Engagement not found or access denied.'); setLoading(false) })
-  }, [user, engagementId, navigate])
+  }, [user, engagementId])
+
+  // Only open the chat/socket once the participant-gated fetch above has
+  // actually succeeded -- don't connect for an engagement the caller turns
+  // out not to have access to.
+  const { messages, loading: messagesLoading, error: messagesError, sendMessage } = useEngagementChat(
+    engagement ? engagementId : null
+  )
 
   if (!user) return null
   if (loading) return <div className="page"><div className="container"><p className="lead">Loading…</p></div></div>
@@ -91,6 +101,7 @@ export default function EngagementDetail() {
   const isTerminal = ['completed', 'cancelled'].includes(engagement.status)
   const backPath = role === 'expert' ? '/dashboard' : '/organization'
   const statusActions = getStatusActions(engagement.status, role)
+  const isMine = (m) => m.sender_id === user.user_id
 
   async function handleTimelineDecision(decision) {
     setActionLoading(true)
@@ -194,6 +205,18 @@ export default function EngagementDetail() {
       setEditForm({})
     } catch (err) {
       setError(err.body?.error?.message ?? 'Failed to save milestone.')
+    }
+  }
+
+  async function handleSend(e) {
+    e.preventDefault()
+    if (!draft.trim()) return
+    setSending(true)
+    try {
+      await sendMessage(draft.trim())
+      setDraft('')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -422,7 +445,7 @@ export default function EngagementDetail() {
         )}
 
         {/* Milestones */}
-        <div className="card" style={{ padding: 22 }}>
+        <div className="card" style={{ padding: 22, marginBottom: 20 }}>
           <div className="row gap-10 wrap" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
             <span className="section-label">Milestones</span>
             {role === 'expert' && !isTerminal && (
@@ -592,6 +615,38 @@ export default function EngagementDetail() {
               )}
             </div>
           ))}
+        </div>
+
+        {/* Messages */}
+        <div className="card" style={{ padding: 22 }}>
+          <span className="section-label" style={{ display: 'block', marginBottom: 14 }}>Messages</span>
+          <div className="chat-panel">
+            <div className="chat-messages">
+              {messagesLoading && <p className="lead">Loading messages…</p>}
+              {messagesError && <div className="alert alert-error">{messagesError}</div>}
+              {!messagesLoading && messages.length === 0 && (
+                <p className="lead" style={{ fontSize: 12.5 }}>
+                  No messages yet — say hello.
+                </p>
+              )}
+              {messages.map((m) => (
+                <div key={m.message_id} className={`chat-bubble ${isMine(m) ? 'mine' : 'theirs'}`}>
+                  {m.content}
+                </div>
+              ))}
+            </div>
+            <form className="chat-composer" onSubmit={handleSend}>
+              <input
+                className="field-input"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Write a message…"
+              />
+              <button className="btn btn-acc btn-sm" type="submit" disabled={sending || !draft.trim()}>
+                Send
+              </button>
+            </form>
+          </div>
         </div>
 
       </div>

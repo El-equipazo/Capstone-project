@@ -90,7 +90,7 @@ export default function ExpertDashboard() {
   const expertId = profile?.expert_profile_id
   useEffect(() => {
     if (!expertId) return
-    Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()]).then(([conns, engs]) => {
+    Promise.all([connectionsApi.listForExpert(), engagementsApi.list()]).then(([conns, engs]) => {
       setConnections(conns)
       setEngagements(engs)
     })

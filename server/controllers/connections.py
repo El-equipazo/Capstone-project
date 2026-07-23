@@ -22,6 +22,7 @@ from server.models import (
     connection_model,
     expert_model,
     match_scoring,
+    notification_model,
     organization_model,
 )
 from server.schemas.common import PaginatedResponse
@@ -192,6 +193,20 @@ async def respond_to_connection(
                               "message": "Only the recipient expert can respond"}},
         )
     updated = await connection_model.respond(connection_id, body.status)
+
+    # Notify the org side of the response. §8: "Notifications are
+    # server-generated only (connection received/responded, ...)".
+    org = await organization_model.get(updated["org_id"])
+    accepted = body.status == "accepted"
+    await notification_model.create(
+        org["user_id"],
+        "connection_accepted" if accepted else "connection_declined",
+        f"{expert['first_name']} {expert['last_name']} "
+        f"{'accepted' if accepted else 'declined'} your connection request",
+        related_entity_type="connection_request", related_entity_id=connection_id,
+        action_url=f"/connections/{connection_id}",
+    )
+
     return dict(updated)
 
 
