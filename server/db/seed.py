@@ -238,6 +238,8 @@ async def seed():
                 org_stated_need         TEXT,
                 org_stated_timeline     TEXT,
                 match_score             NUMERIC(5,2),
+                ai_fit_score            INTEGER,
+                ai_reasoning            TEXT,
                 expires_at              TIMESTAMP,
                 responded_at            TIMESTAMP,
                 created_at              TIMESTAMP DEFAULT NOW()

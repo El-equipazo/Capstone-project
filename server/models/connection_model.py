@@ -21,7 +21,8 @@ from .validators import check_enum
 async def create(*, org_id, expert_id, initiated_by_user_id,
                  initial_message=None, org_stated_need=None,
                  org_stated_timeline=None, match_score=None,
-                 expiry_days=None, factors=None):
+                 expiry_days=None, factors=None,
+                 ai_fit_score=None, ai_reasoning=None):
     """
     Create a pending connection request and (optionally) its scoring factors,
     atomically. org_stated_need may be None ("not sure").
@@ -46,15 +47,17 @@ async def create(*, org_id, expert_id, initiated_by_user_id,
                 INSERT INTO connection_requests (
                     org_id, expert_id, initiated_by_user_id, status,
                     initial_message, org_stated_need, org_stated_timeline,
-                    match_score, expires_at
+                    match_score, expires_at, ai_fit_score, ai_reasoning
                 ) VALUES ($1, $2, $3, $9, $4, $5, $6, $7,
                           CASE WHEN $8::int IS NULL THEN NULL
-                               ELSE NOW() + make_interval(days => $8::int) END)
+                               ELSE NOW() + make_interval(days => $8::int) END,
+                          $10, $11)
                 RETURNING *
                 """,
                 org_id, expert_id, initiated_by_user_id,
                 initial_message, org_stated_need, org_stated_timeline,
                 match_score, expiry_days, ConnectionStatus.PENDING,
+                ai_fit_score, ai_reasoning,
             )
             if factors:
                 await conn.executemany(
