@@ -724,8 +724,8 @@ async def list_matching_candidates(limit: int = 50):
             COALESCE((
                 SELECT json_agg(json_build_object(
                     'sector', se.sector,
-                    'years', se.years_experience_in_sector,
-                    'compliance_standards', se.compliance_standards_known
+                    'years_experience_in_sector', se.years_experience_in_sector,
+                    'compliance_standards_known', se.compliance_standards_known
                 ))
                 FROM expert_sector_experience se
                 WHERE se.expert_id = e.expert_profile_id
@@ -733,10 +733,10 @@ async def list_matching_candidates(limit: int = 50):
             COALESCE((
                 SELECT json_agg(json_build_object(
                     'engagement_type', et.engagement_type,
-                    'budget_min', et.typical_budget_min,
-                    'budget_max', et.typical_budget_max,
-                    'duration_weeks_min', et.typical_duration_weeks_min,
-                    'duration_weeks_max', et.typical_duration_weeks_max
+                    'typical_budget_min', et.typical_budget_min,
+                    'typical_budget_max', et.typical_budget_max,
+                    'typical_duration_weeks_min', et.typical_duration_weeks_min,
+                    'typical_duration_weeks_max', et.typical_duration_weeks_max
                 ))
                 FROM expert_engagement_types et
                 WHERE et.expert_id = e.expert_profile_id

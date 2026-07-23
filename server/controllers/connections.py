@@ -105,6 +105,10 @@ async def create_connection(
         org["org_profile_id"], body.expert_id, body.org_stated_need
     )
 
+    # Best-effort AI fit score, computed once here and stored — never blocks
+    # connection creation (score_single() swallows every failure internally).
+    ai_result = await ai_matching.score_single(org["org_profile_id"], body.expert_id)
+
     row = await connection_model.create(
         org_id=org["org_profile_id"],
         expert_id=body.expert_id,
@@ -115,6 +119,8 @@ async def create_connection(
         match_score=match_score,
         expiry_days=org["default_connection_expiry_days"] or 30,
         factors=factors,
+        ai_fit_score=(ai_result or {}).get("fit_score"),
+        ai_reasoning=(ai_result or {}).get("reasoning"),
     )
     return dict(row)
 

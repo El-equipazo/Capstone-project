@@ -29,6 +29,8 @@ class ConnectionResponse(BaseModel):
     org_stated_need: Optional[str] = None
     org_stated_timeline: Optional[str] = None
     match_score: Optional[float] = None        # NUMERIC(5,2) — pydantic coerces Decimal
+    ai_fit_score: Optional[int] = None         # Gemini's advisory score, computed once at creation
+    ai_reasoning: Optional[str] = None         # explanation for ai_fit_score; null alongside it
     expires_at: Optional[datetime] = None
     responded_at: Optional[datetime] = None
     created_at: datetime
@@ -85,6 +87,11 @@ class AIRecommendation(BaseModel):
     fit_score: int
     reasoning: str
     key_strengths: List[str] = []
+    # The same deterministic score POST /connections would compute for this
+    # org/expert pair (§6) — distinct from fit_score, which is Gemini's
+    # advisory read of the same candidate. Shown side by side in the UI so
+    # the two aren't mistaken for the same measurement.
+    profile_match_score: float
 
 
 class AIMatchResponse(BaseModel):

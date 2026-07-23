@@ -444,10 +444,14 @@ Response `201`:
   "initiated_by_user_id": 42,
   "status": "pending",
   "match_score": 87.5,
+  "ai_fit_score": 93,
+  "ai_reasoning": "8 years advising financial institutions and coverage of all three of your compliance requirements (PCI-DSS, GLBA, SOX); her cryptographic_audit offering fits your stated need and budget range.",
   "expires_at": "2026-08-05T14:30:00Z",
   "created_at": "2026-07-06T14:30:00Z"
 }
 ```
+
+`ai_fit_score`/`ai_reasoning` are Gemini's advisory read of this specific expert, computed once here (unlike `match_score`, they're best-effort — `null` if `GEMINI_API_KEY` isn't configured or the call fails, which never blocks the request from succeeding). Like `match_score`, they're a permanent snapshot from creation time, never recomputed.
 
 Errors: `409` an open (`pending`) request to this expert already exists for this org — enforced by a DB-level unique partial index, not just app logic · `422` expert `availability_status = unavailable`.
 
@@ -548,11 +552,14 @@ Response `200`:
       "total_completed_engagements": 23,
       "fit_score": 93,
       "reasoning": "8 years advising financial institutions and coverage of all three of your compliance requirements (PCI-DSS, GLBA, SOX); her cryptographic_audit offering fits your stated need and budget range.",
-      "key_strengths": ["financial sector depth", "PCI-DSS/GLBA/SOX", "audit-focused"]
+      "key_strengths": ["financial sector depth", "PCI-DSS/GLBA/SOX", "audit-focused"],
+      "profile_match_score": 87.5
     }
   ]
 }
 ```
+
+`profile_match_score` is the same deterministic §6 formula `POST /connections` would compute for this org/expert pair (not stored — recomputed for display). It's distinct from `fit_score`: one is a fixed formula over structured fields, the other is Gemini's live read of the candidate against this org plus whatever free text was given — the two can disagree, and both are shown so neither is mistaken for the other.
 
 Errors: `403` caller has no organization profile · `503` `AI_NOT_CONFIGURED` (server has no `GEMINI_API_KEY`) · `502` `AI_UNAVAILABLE` (LLM call failed).
 
