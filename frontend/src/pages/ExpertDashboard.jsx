@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authApi, connectionsApi, engagementsApi, expertsApi } from '../api/client'
+import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ExpertCard from '../components/ExpertCard'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
@@ -57,6 +57,15 @@ export default function ExpertDashboard() {
     proficiency_level: PROFICIENCY_LEVELS[0],
     years_in_specialization: '',
   })
+
+  const [verifyPrompt, setVerifyPrompt] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+
+  const CREDENTIAL_TYPES = ['certification', 'degree', 'license', 'publication', 'award', 'other']
+  const BLANK_CRED = { credential_type: 'certification', credential_name: '', institution: '', year_obtained: '' }
+  const [credForm, setCredForm] = useState(BLANK_CRED)
+  const [addingCred, setAddingCred] = useState(false)
+  const [credError, setCredError] = useState('')
 
   useEffect(() => {
     if (!user) {
@@ -126,6 +135,7 @@ export default function ExpertDashboard() {
         hourly_rate_max: toNumberOrNull(form.hourly_rate_max),
       })
       setProfile(result)
+      setVerifyPrompt(true)
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {
@@ -182,6 +192,72 @@ export default function ExpertDashboard() {
       }))
     } catch (err) {
       setError(err.body?.error?.message ?? 'Could not remove that specialization. Please try again.')
+    }
+  }
+
+  async function handleRequestIdentityVerification() {
+    setVerifying(true)
+    setError('')
+    try {
+      await verificationsApi.submit({ verification_type: 'identity' })
+      setVerifyPrompt(false)
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Could not submit verification request. Please try again.')
+      setVerifyPrompt(false)
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  async function handleAddCredential(e) {
+    e.preventDefault()
+    setCredError('')
+    setAddingCred(true)
+    try {
+      const result = await expertsApi.addCredential(profile.expert_profile_id, {
+        ...credForm,
+        year_obtained: toNumberOrNull(credForm.year_obtained),
+      })
+      setProfile((prev) => ({
+        ...prev,
+        credentials: [...(prev.credentials || []), { ...result, verification_status: null }],
+      }))
+      setCredForm(BLANK_CRED)
+    } catch (err) {
+      setCredError(err.body?.error?.message ?? 'Could not add credential. Please try again.')
+    } finally {
+      setAddingCred(false)
+    }
+  }
+
+  async function handleDeleteCredential(credentialId) {
+    setCredError('')
+    try {
+      await expertsApi.deleteCredential(profile.expert_profile_id, credentialId)
+      setProfile((prev) => ({
+        ...prev,
+        credentials: (prev.credentials || []).filter((c) => c.credential_id !== credentialId),
+      }))
+    } catch (err) {
+      setCredError(err.body?.error?.message ?? 'Could not remove credential.')
+    }
+  }
+
+  async function handleRequestCredentialVerification(credentialId) {
+    setCredError('')
+    try {
+      await verificationsApi.submit({
+        verification_type: 'professional_credential',
+        related_credential_id: credentialId,
+      })
+      setProfile((prev) => ({
+        ...prev,
+        credentials: (prev.credentials || []).map((c) =>
+          c.credential_id === credentialId ? { ...c, verification_status: 'pending' } : c
+        ),
+      }))
+    } catch (err) {
+      setCredError(err.body?.error?.message ?? 'Could not submit verification request.')
     }
   }
 
@@ -367,6 +443,36 @@ export default function ExpertDashboard() {
               </span>
               <ExpertCard expert={previewExpert} />
             </aside>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ---------------- Post-creation: identity verification prompt ----------------
+
+  if (verifyPrompt) {
+    return (
+      <div className="page">
+        <div className="container" style={{ maxWidth: 540 }}>
+          <span className="section-label" style={{ color: 'var(--acc)' }}>expert dashboard</span>
+          <h1 className="h2" style={{ margin: '10px 0 6px' }}>Profile created</h1>
+          <p className="lead" style={{ marginBottom: 24 }}>
+            Would you like to submit an identity verification request? Verified experts appear higher
+            in search results and build trust with organizations faster.
+          </p>
+          {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+          <div className="row gap-10">
+            <button
+              className="btn btn-acc"
+              disabled={verifying}
+              onClick={handleRequestIdentityVerification}
+            >
+              {verifying ? 'Submitting…' : 'Request identity verification'}
+            </button>
+            <button className="btn" onClick={() => setVerifyPrompt(false)}>
+              Skip for now
+            </button>
           </div>
         </div>
       </div>
@@ -686,6 +792,107 @@ export default function ExpertDashboard() {
                   <button className="btn btn-sm" type="submit">
                     Add
                   </button>
+                </form>
+              </div>
+
+              <div className="card" style={{ padding: 22 }}>
+                <span className="section-label">Credentials</span>
+                {credError && <div className="alert alert-error" style={{ margin: '10px 0' }}>{credError}</div>}
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(profile.credentials || []).length === 0 && (
+                    <p className="lead" style={{ fontSize: 12.5 }}>No credentials added yet.</p>
+                  )}
+                  {(profile.credentials || []).map((c) => (
+                    <div key={c.credential_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{c.credential_name}</div>
+                        <div className="lead" style={{ fontSize: 12, marginTop: 2 }}>
+                          {labelize(c.credential_type)}{c.institution ? ` · ${c.institution}` : ''}{c.year_obtained ? ` · ${c.year_obtained}` : ''}
+                        </div>
+                      </div>
+                      <div className="row gap-8">
+                        {c.verification_status === 'approved' && (
+                          <span className="tag" style={{ color: 'var(--acc)' }}>Verified</span>
+                        )}
+                        {c.verification_status === 'pending' && (
+                          <span className="tag">Pending review</span>
+                        )}
+                        {c.verification_status === 'rejected' && (
+                          <span className="tag" style={{ color: 'var(--err, #e53)' }}>Rejected</span>
+                        )}
+                        {(!c.verification_status || c.verification_status === 'rejected') && (
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => handleRequestCredentialVerification(c.credential_id)}
+                          >
+                            Request verification
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-sm"
+                          style={{ color: 'var(--muted)' }}
+                          onClick={() => handleDeleteCredential(c.credential_id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleAddCredential} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <span className="section-label" style={{ fontSize: 11 }}>Add credential</span>
+                  <div className="row gap-10 wrap">
+                    <div className="field-group" style={{ flex: '0 0 140px' }}>
+                      <label className="field-label">Type</label>
+                      <select
+                        className="field-input"
+                        value={credForm.credential_type}
+                        onChange={(e) => setCredForm((p) => ({ ...p, credential_type: e.target.value }))}
+                      >
+                        {CREDENTIAL_TYPES.map((t) => (
+                          <option key={t} value={t}>{labelize(t)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field-group" style={{ flex: 1 }}>
+                      <label className="field-label">Name</label>
+                      <input
+                        className="field-input"
+                        required
+                        placeholder="e.g. CISSP, BSc Computer Science"
+                        value={credForm.credential_name}
+                        onChange={(e) => setCredForm((p) => ({ ...p, credential_name: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="row gap-10 wrap">
+                    <div className="field-group" style={{ flex: 1 }}>
+                      <label className="field-label">Institution</label>
+                      <input
+                        className="field-input"
+                        placeholder="Issuing body or school"
+                        value={credForm.institution}
+                        onChange={(e) => setCredForm((p) => ({ ...p, institution: e.target.value }))}
+                      />
+                    </div>
+                    <div className="field-group" style={{ flex: '0 0 100px' }}>
+                      <label className="field-label">Year</label>
+                      <input
+                        type="number"
+                        min="1950"
+                        max="2100"
+                        className="field-input"
+                        value={credForm.year_obtained}
+                        onChange={(e) => setCredForm((p) => ({ ...p, year_obtained: e.target.value }))}
+                      />
+                    </div>
+                    <div style={{ alignSelf: 'flex-end' }}>
+                      <button className="btn btn-sm btn-acc" type="submit" disabled={addingCred}>
+                        {addingCred ? 'Adding…' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
                 </form>
               </div>
             </div>
