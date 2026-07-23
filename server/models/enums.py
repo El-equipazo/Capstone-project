@@ -67,6 +67,12 @@ MESSAGE_TYPE = {"text", "file", "milestone_update", "system_event"}
 # Clients may only POST these two; the rest are server-emitted.
 CLIENT_MESSAGE_TYPE = {"text", "file"}
 
+# Scoped to what's actually emitted today (message_received on new messages,
+# connection_accepted/declined on PATCH /connections/:id) -- not the
+# contract's full aspirational list, since milestones/reviews/verification
+# notifications belong to features that don't exist yet.
+NOTIFICATION_TYPE = {"message_received", "connection_accepted", "connection_declined"}
+
 REVIEWER_ROLE = {"organization", "expert"}
 
 VERIFICATION_TYPE = {

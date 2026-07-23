@@ -37,5 +37,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    # AI matching (POST /matching/recommendations). Optional — without a key
+    # the server still runs; only the AI endpoint answers 503.
+    # 'gemini-flash-latest' tracks the current flash model — pinned versions
+    # (e.g. gemini-2.5-flash) get retired for new API keys over time.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-flash-latest"
+
 
 settings = Settings()

@@ -21,10 +21,16 @@ from .validators import check_enum
 async def create(*, org_id, expert_id, initiated_by_user_id,
                  initial_message=None, org_stated_need=None,
                  org_stated_timeline=None, match_score=None,
-                 expires_at=None, factors=None):
+                 expiry_days=None, factors=None,
+                 ai_fit_score=None, ai_reasoning=None):
     """
     Create a pending connection request and (optionally) its scoring factors,
     atomically. org_stated_need may be None ("not sure").
+
+    `expiry_days` comes from the org's default_connection_expiry_days; the
+    deadline is computed as NOW() + expiry_days ON THE DB CLOCK so it compares
+    cleanly against the NOW() guards in respond()/expire_stale() (columns are
+    naive TIMESTAMPs — mixing in a Python-side clock invites skew).
 
     `factors` is a list of dicts: {factor_name, weight, raw_score,
     weighted_contribution?}. If given, weights must sum to ~1.00 or the DB
@@ -41,13 +47,17 @@ async def create(*, org_id, expert_id, initiated_by_user_id,
                 INSERT INTO connection_requests (
                     org_id, expert_id, initiated_by_user_id, status,
                     initial_message, org_stated_need, org_stated_timeline,
-                    match_score, expires_at
-                ) VALUES ($1, $2, $3, $9, $4, $5, $6, $7, $8)
+                    match_score, expires_at, ai_fit_score, ai_reasoning
+                ) VALUES ($1, $2, $3, $9, $4, $5, $6, $7,
+                          CASE WHEN $8::int IS NULL THEN NULL
+                               ELSE NOW() + make_interval(days => $8::int) END,
+                          $10, $11)
                 RETURNING *
                 """,
                 org_id, expert_id, initiated_by_user_id,
                 initial_message, org_stated_need, org_stated_timeline,
-                match_score, expires_at, ConnectionStatus.PENDING,
+                match_score, expiry_days, ConnectionStatus.PENDING,
+                ai_fit_score, ai_reasoning,
             )
             if factors:
                 await conn.executemany(
@@ -87,31 +97,61 @@ async def get(connection_id: int):
     return row
 
 
-async def list_for_org(org_id: int, *, status=None):
+async def list_requests(*, org_id=None, expert_id=None, status=None,
+                        page=1, limit=20):
+    """
+    Filterable, paginated listing. All filters optional and AND-ed — the
+    controller forces org_id/expert_id to the caller's own profile for
+    non-admins and passes both through for admins (contract §6 filters).
+    Returns (rows, total_items) for the §1.3 pagination envelope.
+    """
     if status is not None:
         check_enum(status, CONNECTION_STATUS, "status")
-        return await pool.fetch(
-            "SELECT * FROM connection_requests WHERE org_id = $1 AND status = $2 "
-            "ORDER BY created_at DESC",
-            org_id, status,
-        )
-    return await pool.fetch(
-        "SELECT * FROM connection_requests WHERE org_id = $1 ORDER BY created_at DESC",
-        org_id,
+
+    where, args = [], []
+    for col, val in (("cr.org_id", org_id), ("cr.expert_id", expert_id), ("cr.status", status)):
+        if val is not None:
+            args.append(val)
+            where.append(f"{col} = ${len(args)}")
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+    total = await pool.fetchval(
+        f"""SELECT COUNT(*)
+            FROM connection_requests cr
+            JOIN organization_profiles op ON op.org_profile_id = cr.org_id
+            {clause}""",
+        *args,
     )
+    rows = await pool.fetch(
+        f"""SELECT cr.*,
+                   op.org_name, op.sector AS org_sector, op.sub_sector,
+                   op.org_description, op.employee_count_range,
+                   op.country, op.website, op.quantum_knowledge_level,
+                   op.budget_range, op.urgency_level,
+                   op.is_verified AS org_is_verified,
+                   op.contact_name, op.contact_title
+            FROM connection_requests cr
+            JOIN organization_profiles op ON op.org_profile_id = cr.org_id
+            {clause}
+            ORDER BY cr.created_at DESC
+            LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}""",
+        *args, limit, (page - 1) * limit,
+    )
+    return rows, total
 
 
-async def list_for_expert(expert_id: int, *, status=None):
-    if status is not None:
-        check_enum(status, CONNECTION_STATUS, "status")
-        return await pool.fetch(
-            "SELECT * FROM connection_requests WHERE expert_id = $1 AND status = $2 "
-            "ORDER BY created_at DESC",
-            expert_id, status,
-        )
-    return await pool.fetch(
-        "SELECT * FROM connection_requests WHERE expert_id = $1 ORDER BY created_at DESC",
-        expert_id,
+async def expire_stale():
+    """
+    Flip lapsed pending requests to 'expired' (§6: clients never set it).
+    Idempotent; called opportunistically at the top of the POST/GET endpoints
+    in lieu of a scheduler — this also frees the pending-unique index so a
+    time-expired request can't cause a spurious 409 on a new one. A future
+    cron job can call this too.
+    """
+    await pool.query(
+        "UPDATE connection_requests SET status = $1 "
+        "WHERE status = $2 AND expires_at IS NOT NULL AND expires_at < NOW()",
+        ConnectionStatus.EXPIRED, ConnectionStatus.PENDING,
     )
 
 
