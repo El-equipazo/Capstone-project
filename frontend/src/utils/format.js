@@ -30,6 +30,17 @@ export const BUDGET_RANGE_LABEL = {
   undisclosed: 'Undisclosed',
 }
 
+export const ENGAGEMENT_TYPE_OPTIONS = [
+  { value: 'risk_assessment',      label: 'Risk Assessment' },
+  { value: 'cryptographic_audit',  label: 'Cryptographic Audit' },
+  { value: 'migration_roadmap',    label: 'Migration Roadmap' },
+  { value: 'executive_briefing',   label: 'Executive Briefing' },
+  { value: 'staff_training',       label: 'Staff Training' },
+  { value: 'ongoing_advisory',     label: 'Ongoing Advisory' },
+  { value: 'compliance_review',    label: 'Compliance Review' },
+  { value: 'full_migration_support', label: 'Full Migration Support' },
+]
+
 export const AVAILABILITY_LABEL = {
   available: 'Available',
   limited: 'Limited availability',

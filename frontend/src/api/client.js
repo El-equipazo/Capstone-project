@@ -227,10 +227,18 @@ export const engagementsApi = {
     })
   },
 
-  // GET /engagements is already scoped server-side by the caller's role/
-  // participation, so one generic method covers both organizations and
-  // experts -- no need for separate listForExpert/listForOrganization names.
-  async list() {
+  async list(filters = {}) {
+    const params = new URLSearchParams()
+    for (const [key, val] of Object.entries(filters)) {
+      if (val !== undefined && val !== null && val !== '') params.set(key, val)
+    }
+    const qs = params.toString() ? `?${params}` : ''
+    const result = await apiFetch(`/engagements${qs}`, { headers: authHeader() })
+    return result.data
+  },
+
+  // kept for backwards compat with ExpertDashboard
+  async listForExpert() {
     const result = await apiFetch('/engagements', { headers: authHeader() })
     return result.data
   },
@@ -239,6 +247,48 @@ export const engagementsApi = {
   // data) -- must send the auth header.
   async getById(engagementId) {
     return await apiFetch(`/engagements/${engagementId}`, { headers: authHeader() })
+  },
+
+  async update(engagementId, data) {
+    return await apiFetch(`/engagements/${engagementId}`, {
+      method: 'PATCH',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async listMilestones(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones`, { headers: authHeader() })
+  },
+
+  async createMilestone(engagementId, data) {
+    return await apiFetch(`/engagements/${engagementId}/milestones`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async updateMilestone(engagementId, milestoneId, data) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}`, {
+      method: 'PATCH',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async confirmMilestone(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/confirm`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async deleteMilestone(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}`, {
+      method: 'DELETE',
+      headers: authHeader(),
+    })
   },
 }
 

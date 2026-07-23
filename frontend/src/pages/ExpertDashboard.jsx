@@ -4,7 +4,7 @@ import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi }
 import { useAuth } from '../context/AuthContext'
 import ExpertCard from '../components/ExpertCard'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
-import { AVAILABILITY_LABEL, labelize, toNumberOrNull } from '../utils/format'
+import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
 
 const AVAILABILITY_OPTIONS = Object.keys(AVAILABILITY_LABEL)
 
@@ -51,6 +51,8 @@ export default function ExpertDashboard() {
   const [connections, setConnections] = useState([])
   const [engagements, setEngagements] = useState([])
   const [respondingId, setRespondingId] = useState(null)
+  const [proposingFor, setProposingFor] = useState(null) // connection_id awaiting timeline
+  const [timelineForm, setTimelineForm] = useState({ engagement_type: '', start_date: '', estimated_end_date: '', description: '' })
 
   const [specForm, setSpecForm] = useState({
     specialization: SPECIALIZATIONS[0],
@@ -66,6 +68,10 @@ export default function ExpertDashboard() {
   const [credForm, setCredForm] = useState(BLANK_CRED)
   const [addingCred, setAddingCred] = useState(false)
   const [credError, setCredError] = useState('')
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`qc_dismissed_${user?.user_id}`) || '[]')) }
+    catch { return new Set() }
+  })
 
   useEffect(() => {
     if (!user) {
@@ -265,28 +271,41 @@ export default function ExpertDashboard() {
     setRespondingId(connectionId)
     setError('')
     try {
-      const connection = connections.find((c) => c.connection_id === connectionId)
       await connectionsApi.respond(connectionId, status)
-
-      // Accepting used to silently auto-create an engagement server-side;
-      // that's now an explicit step (POST /engagements) so the org/expert
-      // side can supply real budget/dates later without colliding with a
-      // hidden duplicate. Fire it here so the demo experience (accept ->
-      // engagement appears) stays the same.
-      if (status === 'accepted' && connection) {
-        const engagementType = connection.org_stated_need || 'risk_assessment'
-        await engagementsApi.create({
-          connection_id: connectionId,
-          engagement_type: engagementType,
-          title: `${labelize(engagementType)} — ${connection.org_name}`,
-        })
-      }
-
-      const [conns, engs] = await Promise.all([connectionsApi.listForExpert(), engagementsApi.list()])
+      const [conns, engs] = await Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()])
       setConnections(conns)
       setEngagements(engs)
     } catch (err) {
       setError(err.body?.error?.message ?? 'Could not update this request. Please try again.')
+    } finally {
+      setRespondingId(null)
+    }
+  }
+
+  async function handleAcceptWithTimeline(e, connectionId) {
+    e.preventDefault()
+    setRespondingId(connectionId)
+    setError('')
+    try {
+      const connection = connections.find((c) => c.connection_id === connectionId)
+      const engagementType = timelineForm.engagement_type
+      await connectionsApi.respond(connectionId, 'accepted')
+      const engData = {
+        connection_id: connectionId,
+        engagement_type: engagementType,
+        title: `${labelize(engagementType)} — ${connection?.org_name}`,
+      }
+      if (timelineForm.start_date)          engData.start_date          = timelineForm.start_date
+      if (timelineForm.estimated_end_date)  engData.estimated_end_date  = timelineForm.estimated_end_date
+      if (timelineForm.description)         engData.description         = timelineForm.description
+      await engagementsApi.create(engData)
+      const [conns, engs] = await Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()])
+      setConnections(conns)
+      setEngagements(engs)
+      setProposingFor(null)
+      setTimelineForm({ engagement_type: '', start_date: '', estimated_end_date: '', description: '' })
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Could not accept this request. Please try again.')
     } finally {
       setRespondingId(null)
     }
@@ -482,8 +501,38 @@ export default function ExpertDashboard() {
   // ---------------- Profile exists: Overview / Profile tabs ----------------
 
   const pendingRequests = connections.filter((c) => c.status === 'pending')
-  const respondedRequests = connections.filter((c) => c.status !== 'pending')
-  const activeEngagements = engagements.filter((e) => e.status !== 'completed' && e.status !== 'cancelled')
+  const activeEngagements = engagements.filter((e) => !['completed', 'cancelled'].includes(e.status))
+
+  // Past items = declined/expired connections + completed/cancelled engagements
+  const _pastConnections = connections
+    .filter((c) => ['declined', 'expired'].includes(c.status))
+    .map((c) => ({ id: `conn-${c.connection_id}`, label: c.org_name, status: c.status, link: null }))
+  const _pastEngagements = engagements
+    .filter((e) => ['completed', 'cancelled'].includes(e.status))
+    .map((e) => ({ id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status, link: `/engagements/${e.engagement_id}` }))
+  const allPastItems = [..._pastConnections, ..._pastEngagements]
+
+  const DISMISSED_KEY = `qc_dismissed_${user?.user_id}`
+
+  function dismissItem(id) {
+    setDismissed((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  function clearAllPast() {
+    const ids = allPastItems.map((i) => i.id)
+    setDismissed((prev) => {
+      const next = new Set([...prev, ...ids])
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  const pastItems = allPastItems.filter((i) => !dismissed.has(i.id))
 
   const draftExpert = {
     ...profile,
@@ -559,37 +608,140 @@ export default function ExpertDashboard() {
                   </p>
                 )}
                 {pendingRequests.map((c) => (
-                  <div key={c.connection_id} className="dash-request-row">
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="row gap-8 wrap" style={{ marginBottom: 6 }}>
-                        <span style={{ fontWeight: 700, fontSize: 13.5 }}>{c.org_name}</span>
-                        <span className="tag">{labelize(c.org_sector)}</span>
-                        <span className="tag">{labelize(c.org_stated_need)}</span>
-                        <span className="tag">Match {Math.round(c.match_score)}%</span>
+                  <div key={c.connection_id} className="dash-request-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="row gap-8 wrap" style={{ marginBottom: 6 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13.5 }}>{c.org_name}</span>
+                          {c.org_is_verified && <span className="badge" style={{ fontSize: 11 }}>✓ Verified</span>}
+                          <span className="tag">{labelize(c.org_sector)}</span>
+                          {c.sub_sector && <span className="tag">{c.sub_sector}</span>}
+                          <span className="tag">Match {Math.round(c.match_score)}%</span>
+                        </div>
+
+                        {/* Request details */}
+                        <p className="lead" style={{ fontSize: 12.5, marginBottom: 6 }}>{c.initial_message}</p>
+                        <div className="row gap-8 wrap" style={{ marginBottom: 10 }}>
+                          {c.org_stated_need && <span className="tag" style={{ fontSize: 11 }}>{labelize(c.org_stated_need)}</span>}
+                          {c.org_stated_timeline && <span className="tag" style={{ fontSize: 11 }}>Timeline: {labelize(c.org_stated_timeline)}</span>}
+                        </div>
+
+                        {/* Org profile details */}
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {c.org_description && (
+                            <p style={{ fontSize: 12.5, color: 'var(--fg-muted, #666)', margin: 0 }}>{c.org_description}</p>
+                          )}
+                          <div className="row gap-8 wrap">
+                            {c.employee_count_range && <span className="tag" style={{ fontSize: 11 }}>{c.employee_count_range} employees</span>}
+                            {c.country && <span className="tag" style={{ fontSize: 11 }}>{c.country}</span>}
+                            {c.budget_range && <span className="tag" style={{ fontSize: 11 }}>{BUDGET_RANGE_LABEL[c.budget_range] ?? labelize(c.budget_range)}</span>}
+                            {c.urgency_level && <span className="tag" style={{ fontSize: 11 }}>Urgency: {labelize(c.urgency_level)}</span>}
+                            {c.quantum_knowledge_level && <span className="tag" style={{ fontSize: 11 }}>QC knowledge: {labelize(c.quantum_knowledge_level)}</span>}
+                          </div>
+                          {c.contact_name && (
+                            <span style={{ fontSize: 11.5, color: 'var(--fg-muted, #666)' }}>
+                              Contact: {c.contact_name}{c.contact_title ? ` · ${c.contact_title}` : ''}
+                            </span>
+                          )}
+                          {c.website && (
+                            <a href={c.website} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: 'var(--acc)' }}>
+                              {c.website} ↗
+                            </a>
+                          )}
+                        </div>
                       </div>
-                      <p className="lead" style={{ fontSize: 12.5, marginBottom: 6 }}>
-                        {c.initial_message}
-                      </p>
-                      <span className="lead" style={{ fontSize: 11 }}>
-                        Timeline: {labelize(c.org_stated_timeline)}
-                      </span>
+                      <div className="row gap-8" style={{ flex: 'none' }}>
+                        <button
+                          className="btn btn-sm"
+                          disabled={respondingId === c.connection_id}
+                          onClick={() => handleRespond(c.connection_id, 'declined')}
+                        >
+                          Decline
+                        </button>
+                        {proposingFor === c.connection_id ? (
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => setProposingFor(null)}
+                          >
+                            Cancel
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-acc btn-sm"
+                            disabled={respondingId === c.connection_id}
+                            onClick={() => {
+                              setProposingFor(c.connection_id)
+                              setTimelineForm({ engagement_type: c.org_stated_need || '', start_date: '', estimated_end_date: '', description: '' })
+                            }}
+                          >
+                            Accept
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="row gap-8" style={{ flex: 'none' }}>
-                      <button
-                        className="btn btn-sm"
-                        disabled={respondingId === c.connection_id}
-                        onClick={() => handleRespond(c.connection_id, 'declined')}
-                      >
-                        Decline
-                      </button>
-                      <button
-                        className="btn btn-acc btn-sm"
-                        disabled={respondingId === c.connection_id}
-                        onClick={() => handleRespond(c.connection_id, 'accepted')}
-                      >
-                        Accept
-                      </button>
-                    </div>
+
+                    {proposingFor === c.connection_id && (
+                      <form onSubmit={(e) => handleAcceptWithTimeline(e, c.connection_id)} style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                        <span className="section-label" style={{ fontSize: 11 }}>Propose a timeline</span>
+                        <div className="field-group">
+                          <label className="field-label">
+                            Engagement type
+                            {!c.org_stated_need && (
+                              <span style={{ fontWeight: 400, opacity: 0.65, marginLeft: 4 }}>— org was unsure, you decide</span>
+                            )}
+                          </label>
+                          <select
+                            className="field-input"
+                            required
+                            value={timelineForm.engagement_type}
+                            onChange={(e) => setTimelineForm((p) => ({ ...p, engagement_type: e.target.value }))}
+                          >
+                            <option value="" disabled>— Select a type —</option>
+                            {ENGAGEMENT_TYPE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="row gap-10">
+                          <div className="field-group" style={{ flex: 1 }}>
+                            <label className="field-label">Start date</label>
+                            <input
+                              className="field-input"
+                              type="date"
+                              value={timelineForm.start_date}
+                              onChange={(e) => setTimelineForm((p) => ({ ...p, start_date: e.target.value }))}
+                            />
+                          </div>
+                          <div className="field-group" style={{ flex: 1 }}>
+                            <label className="field-label">Estimated end date</label>
+                            <input
+                              className="field-input"
+                              type="date"
+                              value={timelineForm.estimated_end_date}
+                              onChange={(e) => setTimelineForm((p) => ({ ...p, estimated_end_date: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="field-group">
+                          <label className="field-label">Initial description (optional)</label>
+                          <textarea
+                            className="field-input"
+                            rows={2}
+                            value={timelineForm.description}
+                            onChange={(e) => setTimelineForm((p) => ({ ...p, description: e.target.value }))}
+                            placeholder="Briefly describe your approach or scope…"
+                          />
+                        </div>
+                        <button
+                          className="btn btn-acc"
+                          type="submit"
+                          disabled={respondingId === c.connection_id}
+                          style={{ alignSelf: 'flex-start' }}
+                        >
+                          {respondingId === c.connection_id ? 'Accepting…' : 'Confirm & Accept'}
+                        </button>
+                      </form>
+                    )}
                   </div>
                 ))}
               </div>
@@ -598,12 +750,12 @@ export default function ExpertDashboard() {
             <div className="card" style={{ padding: 22 }}>
               <span className="section-label">Engagements</span>
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {engagements.length === 0 && (
+                {activeEngagements.length === 0 && (
                   <p className="lead" style={{ fontSize: 12.5 }}>
-                    No engagements yet — accept a request above to get started.
+                    No active engagements — accept a request above to get started.
                   </p>
                 )}
-                {engagements.map((e) => (
+                {activeEngagements.map((e) => (
                   <Link
                     key={e.engagement_id}
                     to={`/engagements/${e.engagement_id}`}
@@ -611,20 +763,45 @@ export default function ExpertDashboard() {
                     style={{ justifyContent: 'space-between', textDecoration: 'none', color: 'inherit' }}
                   >
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
-                    <span className="tag">{labelize(e.status)}</span>
+                    <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
                   </Link>
                 ))}
               </div>
             </div>
 
-            {respondedRequests.length > 0 && (
+            {pastItems.length > 0 && (
               <div className="card" style={{ padding: 22 }}>
-                <span className="section-label">Past requests</span>
-                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {respondedRequests.map((c) => (
-                    <div key={c.connection_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 12.5 }}>{c.org_name}</span>
-                      <span className="tag">{labelize(c.status)}</span>
+                <div className="row gap-8" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+                  <span className="section-label">Past requests</span>
+                  <button
+                    className="btn btn-sm"
+                    style={{ fontSize: 11 }}
+                    onClick={clearAllPast}
+                  >
+                    Clear all
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {pastItems.map((item) => (
+                    <div key={item.id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="row gap-8 wrap" style={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
+                        {item.link ? (
+                          <Link to={item.link} style={{ fontWeight: 500, fontSize: 12.5, color: 'inherit' }}>
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: 12.5 }}>{item.label}</span>
+                        )}
+                        <span className="tag" style={{ fontSize: 11 }}>{labelize(item.status)}</span>
+                      </div>
+                      <button
+                        className="btn btn-sm"
+                        style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => dismissItem(item.id)}
+                        title="Dismiss"
+                      >
+                        ×
+                      </button>
                     </div>
                   ))}
                 </div>

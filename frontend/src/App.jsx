@@ -27,7 +27,7 @@ export default function App() {
         <Route path="/dashboard" element={<ExpertDashboard />} />
         <Route path="/organization" element={<OrganizationDashboard />} />
         <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/engagements/:engagementId" element={<EngagementDetail />} />
+        <Route path="/engagements/:id" element={<EngagementDetail />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />

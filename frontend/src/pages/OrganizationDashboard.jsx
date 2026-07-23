@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authApi, engagementsApi, organizationsApi } from '../api/client'
+import { authApi, connectionsApi, engagementsApi, organizationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import { labelize, BUDGET_RANGE_LABEL } from '../utils/format'
@@ -37,7 +37,12 @@ export default function OrganizationDashboard() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedNotice, setSavedNotice] = useState(false)
+  const [connections, setConnections] = useState([])
   const [engagements, setEngagements] = useState([])
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`qc_org_dismissed_${user?.user_id}`) || '[]')) }
+    catch { return new Set() }
+  })
 
   useEffect(() => {
     if (!user) {
@@ -47,18 +52,19 @@ export default function OrganizationDashboard() {
     if (user.role !== 'organization') return
     authApi.me().then(({ profile: result }) => {
       setProfile(result)
-      if (result) setForm(profileToForm(result))
+      if (result) {
+        setForm(profileToForm(result))
+        Promise.all([
+          connectionsApi.listForExpert(),  // works for orgs too — server filters by role
+          engagementsApi.list(),
+        ]).then(([conns, engs]) => {
+          setConnections(conns)
+          setEngagements(engs)
+        }).catch(() => {})
+      }
       setLoading(false)
     })
   }, [user, navigate])
-
-  // This is the first drill-down organizations get -- the dashboard didn't
-  // list engagements at all before the chat feature.
-  const orgProfileId = profile?.org_profile_id
-  useEffect(() => {
-    if (!orgProfileId) return
-    engagementsApi.list().then(setEngagements)
-  }, [orgProfileId])
 
   if (!user) return null
 
@@ -154,6 +160,39 @@ export default function OrganizationDashboard() {
     }
   }
 
+  const TERMINAL = ['completed', 'cancelled']
+  const activeEngagements = engagements.filter((e) => !TERMINAL.includes(e.status))
+
+  const _pastConnections = connections
+    .filter((c) => ['declined', 'expired'].includes(c.status))
+    .map((c) => ({ id: `conn-${c.connection_id}`, label: `Expert #${c.expert_id}`, status: c.status, link: `/experts/${c.expert_id}` }))
+  const _pastEngagements = engagements
+    .filter((e) => TERMINAL.includes(e.status))
+    .map((e) => ({ id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status, link: `/engagements/${e.engagement_id}` }))
+  const allPastItems = [..._pastConnections, ..._pastEngagements]
+
+  const DISMISSED_KEY = `qc_org_dismissed_${user?.user_id}`
+
+  function dismissItem(id) {
+    setDismissed((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  function clearAllPast() {
+    const ids = allPastItems.map((i) => i.id)
+    setDismissed((prev) => {
+      const next = new Set([...prev, ...ids])
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  const pastItems = allPastItems.filter((i) => !dismissed.has(i.id))
+
   return (
     <div className="page">
       <div className="container">
@@ -238,24 +277,91 @@ export default function OrganizationDashboard() {
             <div className="card" style={{ padding: 22 }}>
               <span className="section-label">Engagements</span>
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {engagements.length === 0 && (
+                {activeEngagements.length === 0 ? (
                   <p className="lead" style={{ fontSize: 12.5 }}>
-                    No engagements yet.
+                    No active engagements.{' '}
+                    <Link to="/experts" style={{ color: 'var(--acc)' }}>Browse the expert directory</Link>{' '}
+                    to send a connection request.
                   </p>
-                )}
-                {engagements.map((e) => (
+                ) : activeEngagements.map((e) => (
                   <Link
                     key={e.engagement_id}
                     to={`/engagements/${e.engagement_id}`}
-                    className="row gap-8 wrap"
-                    style={{ justifyContent: 'space-between', textDecoration: 'none', color: 'inherit' }}
+                    style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
                   >
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
-                    <span className="tag">{labelize(e.status)}</span>
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title || labelize(e.engagement_type)}</span>
+                        {e.expert_first_name && (
+                          <span className="lead" style={{ fontSize: 12, marginLeft: 6 }}>
+                            with {e.expert_first_name} {e.expert_last_name}
+                          </span>
+                        )}
+                      </div>
+                      <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
+                    </div>
                   </Link>
                 ))}
               </div>
             </div>
+
+            {pastItems.length > 0 && (
+              <div className="card" style={{ padding: 22 }}>
+                <div className="row gap-8" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
+                  <span className="section-label">Past requests &amp; engagements</span>
+                  <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={clearAllPast}>
+                    Clear all
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {pastItems.map((item) => (
+                    <div key={item.id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="row gap-8 wrap" style={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
+                        {item.link ? (
+                          <Link to={item.link} style={{ fontWeight: 500, fontSize: 12.5, color: 'inherit' }}>
+                            {item.label}
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: 12.5 }}>{item.label}</span>
+                        )}
+                        <span className="tag" style={{ fontSize: 11 }}>{labelize(item.status)}</span>
+                      </div>
+                      <button
+                        className="btn btn-sm"
+                        style={{ fontSize: 11, padding: '2px 8px' }}
+                        onClick={() => dismissItem(item.id)}
+                        title="Dismiss"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {connections.filter((c) => c.status === 'pending').length > 0 && (
+              <div className="card" style={{ padding: 22 }}>
+                <span className="section-label">Pending connection requests</span>
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {connections.filter((c) => c.status === 'pending').map((c) => (
+                    <div key={c.connection_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>
+                          <Link to={`/experts/${c.expert_id}`} style={{ color: 'inherit' }}>
+                            Expert #{c.expert_id}
+                          </Link>
+                        </span>
+                        {c.org_stated_need && (
+                          <span className="tag" style={{ marginLeft: 8, fontSize: 11 }}>{labelize(c.org_stated_need)}</span>
+                        )}
+                      </div>
+                      <span className="tag">{labelize(c.status)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -312,6 +312,7 @@ async def seed():
                 estimated_end_date       DATE,
                 actual_end_date          DATE,
                 cancellation_reason      TEXT,
+                proposal_feedback        TEXT,
                 created_at               TIMESTAMP DEFAULT NOW(),
                 updated_at               TIMESTAMP DEFAULT NOW()
             )
