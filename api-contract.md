@@ -687,6 +687,26 @@ Errors: `400` `message_type = "file"` without `document_id`, or `document_id` re
 
 Mark messages read. — **Auth: participant.** Body: `{ "message_ids": [901, 902] }` or `{ "all": true }` → `200 { "updated": 2 }`
 
+#### GET /engagements/:engagementId/ws (WebSocket, real-time push)
+
+Upgrades to a WebSocket connection that pushes newly-created messages to other connected participants in real time. — **Auth: participant** (see below)
+
+```
+GET /api/v1/engagements/:engagementId/ws?token=<jwt access token>
+```
+
+This is a **receive-only broadcast channel, not a chat protocol** — REST remains the only way to actually send a message (`POST .../messages` above), and the source of truth. The socket exists purely so other open clients on the same engagement see a new message arrive without polling; if nobody is connected when a message is sent, it still lands in the DB and shows up on the next `GET .../messages`.
+
+Because browsers can't attach a custom `Authorization` header to a WebSocket handshake, the JWT is passed as a `?token=` query parameter instead of a Bearer header. The server accepts the connection, then immediately closes it with a custom code if authentication or the participant check fails (accepting first is necessary — a close *before* accept doesn't reliably expose a readable code to browser JS):
+
+| Close code | Meaning |
+| ---------- | ------- |
+| `4001` | Missing/invalid token |
+| `4003` | Authenticated, but not a participant in this engagement |
+| `4004` | Engagement not found |
+
+On a successful connection, every message created via `POST .../messages` (by any participant) is pushed to the socket as a JSON frame shaped exactly like the `MessageResponse` from that endpoint (`message_id`, `engagement_id`, `sender_id`, `content`, `message_type`, `document_id`, `document_name`, `document_type`, `file_size_bytes`, `is_read`, `read_at`, `created_at`). Clients should key their local state on `message_id` so a duplicate delivery (e.g. the sender's own second open tab) is a no-op rather than a duplicate row.
+
 ### Secure documents (`secure_document_shares`)
 
 #### POST /engagements/:engagementId/documents
@@ -756,6 +776,8 @@ Notification objects:
 ```
 
 > Notifications are server-generated only (connection received/responded, message received, milestone proposed/confirmed/completed, review received, verification decision). No client POST endpoint.
+
+Implemented `type` values today: `message_received` (new message on an engagement), `connection_accepted` / `connection_declined` (expert responds to a connection request). The remaining types above (`connection_request_received`, milestone/review/verification notifications) are part of features that don't exist yet and aren't emitted — the enum is intentionally scoped to what's actually built rather than pre-declared.
 
 ---
 

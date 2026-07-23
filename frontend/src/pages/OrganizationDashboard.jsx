@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authApi, organizationsApi } from '../api/client'
+import { authApi, engagementsApi, organizationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import { labelize, BUDGET_RANGE_LABEL } from '../utils/format'
@@ -37,6 +37,7 @@ export default function OrganizationDashboard() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedNotice, setSavedNotice] = useState(false)
+  const [engagements, setEngagements] = useState([])
 
   useEffect(() => {
     if (!user) {
@@ -50,6 +51,14 @@ export default function OrganizationDashboard() {
       setLoading(false)
     })
   }, [user, navigate])
+
+  // This is the first drill-down organizations get -- the dashboard didn't
+  // list engagements at all before the chat feature.
+  const orgProfileId = profile?.org_profile_id
+  useEffect(() => {
+    if (!orgProfileId) return
+    engagementsApi.list().then(setEngagements)
+  }, [orgProfileId])
 
   if (!user) return null
 
@@ -223,6 +232,28 @@ export default function OrganizationDashboard() {
                     {profile.contact_title ? ` · ${profile.contact_title}` : ''}
                   </span>
                 )}
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: 22 }}>
+              <span className="section-label">Engagements</span>
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {engagements.length === 0 && (
+                  <p className="lead" style={{ fontSize: 12.5 }}>
+                    No engagements yet.
+                  </p>
+                )}
+                {engagements.map((e) => (
+                  <Link
+                    key={e.engagement_id}
+                    to={`/engagements/${e.engagement_id}`}
+                    className="row gap-8 wrap"
+                    style={{ justifyContent: 'space-between', textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
+                    <span className="tag">{labelize(e.status)}</span>
+                  </Link>
+                ))}
               </div>
             </div>
           </div>

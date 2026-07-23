@@ -84,7 +84,7 @@ export default function ExpertDashboard() {
   const expertId = profile?.expert_profile_id
   useEffect(() => {
     if (!expertId) return
-    Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()]).then(([conns, engs]) => {
+    Promise.all([connectionsApi.listForExpert(), engagementsApi.list()]).then(([conns, engs]) => {
       setConnections(conns)
       setEngagements(engs)
     })
@@ -282,7 +282,7 @@ export default function ExpertDashboard() {
         })
       }
 
-      const [conns, engs] = await Promise.all([connectionsApi.listForExpert(), engagementsApi.listForExpert()])
+      const [conns, engs] = await Promise.all([connectionsApi.listForExpert(), engagementsApi.list()])
       setConnections(conns)
       setEngagements(engs)
     } catch (err) {
@@ -604,10 +604,15 @@ export default function ExpertDashboard() {
                   </p>
                 )}
                 {engagements.map((e) => (
-                  <div key={e.engagement_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between' }}>
+                  <Link
+                    key={e.engagement_id}
+                    to={`/engagements/${e.engagement_id}`}
+                    className="row gap-8 wrap"
+                    style={{ justifyContent: 'space-between', textDecoration: 'none', color: 'inherit' }}
+                  >
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
                     <span className="tag">{labelize(e.status)}</span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>

@@ -35,6 +35,28 @@ def _paginate(data: list) -> dict:
     }
 
 
+async def _assert_participant_or_admin(current_user, engagement_row) -> None:
+    """Own private copy (matches the convention already established across
+    connections.py / organizations.py / experts.py) -- checked directly
+    against the engagement row's own org_id/expert_id."""
+    role = current_user["role"]
+    if role == "admin":
+        return
+    if role == "organization":
+        org = await organization_model.find_by_user(current_user["user_id"])
+        participant = org is not None and org["org_profile_id"] == engagement_row["org_id"]
+    elif role == "expert":
+        expert = await expert_model.find_by_user(current_user["user_id"])
+        participant = expert is not None and expert["expert_profile_id"] == engagement_row["expert_id"]
+    else:
+        participant = False
+    if not participant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "Not a participant in this engagement"}},
+        )
+
+
 @router.post("/engagements", status_code=201)
 async def create_engagement(
     body: EngagementCreate,
@@ -79,6 +101,13 @@ async def create_engagement(
         start_date=body.start_date,
         estimated_end_date=body.estimated_end_date,
     )
+    return row
+
+
+@router.get("/engagements/{engagement_id}")
+async def get_engagement(engagement_id: int, current_user=Depends(get_current_user)):
+    row = await engagement_model.get(engagement_id)
+    await _assert_participant_or_admin(current_user, row)
     return row
 
 

@@ -10,6 +10,7 @@ import ExpertProfile from './pages/ExpertProfile'
 import ExpertDashboard from './pages/ExpertDashboard'
 import OrganizationDashboard from './pages/OrganizationDashboard'
 import AdminDashboard from './pages/AdminDashboard'
+import EngagementDetail from './pages/EngagementDetail'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/dashboard" element={<ExpertDashboard />} />
         <Route path="/organization" element={<OrganizationDashboard />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/engagements/:engagementId" element={<EngagementDetail />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />

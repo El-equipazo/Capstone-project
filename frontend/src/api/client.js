@@ -227,9 +227,77 @@ export const engagementsApi = {
     })
   },
 
-  async listForExpert() {
+  // GET /engagements is already scoped server-side by the caller's role/
+  // participation, so one generic method covers both organizations and
+  // experts -- no need for separate listForExpert/listForOrganization names.
+  async list() {
     const result = await apiFetch('/engagements', { headers: authHeader() })
     return result.data
+  },
+
+  // Participant-gated (unlike expertsApi.getById, which is public directory
+  // data) -- must send the auth header.
+  async getById(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}`, { headers: authHeader() })
+  },
+}
+
+// ---------------- Messages -----------------------------------------------
+
+export const messagesApi = {
+  async list(engagementId, { unreadOnly, page, limit } = {}) {
+    const params = new URLSearchParams()
+    if (unreadOnly) params.set('unread', 'true')
+    if (page) params.set('page', page)
+    if (limit) params.set('limit', limit)
+    const qs = params.toString() ? `?${params}` : ''
+    // { data, pagination } envelope -- return it whole (not just .data)
+    // since the chat hook needs the pagination info too.
+    return await apiFetch(`/engagements/${engagementId}/messages${qs}`, { headers: authHeader() })
+  },
+
+  async send(engagementId, { message_type = 'text', content, document_id } = {}) {
+    return await apiFetch(`/engagements/${engagementId}/messages`, {
+      method: 'POST',
+      body: { message_type, content, ...(document_id ? { document_id } : {}) },
+      headers: authHeader(),
+    })
+  },
+
+  async markRead(engagementId, { message_ids, all } = {}) {
+    return await apiFetch(`/engagements/${engagementId}/messages/read`, {
+      method: 'POST',
+      body: all ? { all: true } : { message_ids },
+      headers: authHeader(),
+    })
+  },
+}
+
+// ---------------- Notifications -------------------------------------------
+
+export const notificationsApi = {
+  async list({ isRead } = {}) {
+    const params = new URLSearchParams()
+    if (isRead !== undefined) params.set('is_read', isRead)
+    const qs = params.toString() ? `?${params}` : ''
+    const result = await apiFetch(`/notifications${qs}`, { headers: authHeader() })
+    return result.data
+  },
+
+  async unreadCount() {
+    return await apiFetch('/notifications/unread-count', { headers: authHeader() })
+  },
+
+  async markRead(notificationId) {
+    return await apiFetch(`/notifications/${notificationId}`, {
+      method: 'PATCH',
+      body: { is_read: true },
+      headers: authHeader(),
+    })
+  },
+
+  async markAllRead() {
+    return await apiFetch('/notifications/read-all', { method: 'POST', headers: authHeader() })
   },
 }
 

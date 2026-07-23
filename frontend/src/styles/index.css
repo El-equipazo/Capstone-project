@@ -1103,3 +1103,100 @@ button, input, select, textarea {
   margin: 0 12px;
   min-width: 24px;
 }
+
+/* ---------- Engagement chat ---------- */
+.chat-panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  height: 70vh;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-bubble {
+  max-width: 62%;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: var(--acc-light);
+  color: var(--ink);
+}
+
+.chat-bubble.theirs {
+  align-self: flex-start;
+  background: var(--fill2);
+}
+
+.chat-composer {
+  border-top: 1px solid var(--line);
+  padding: 14px 20px;
+  display: flex;
+  gap: 10px;
+}
+
+.chat-composer .field-input {
+  flex: 1;
+}
+
+/* ---------- Notification bell ---------- */
+.notif-bell-wrap {
+  position: relative;
+}
+
+.notif-bell {
+  position: relative;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  background: var(--risk);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  line-height: 1.4;
+}
+
+.notif-dropdown {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 8px;
+  width: 300px;
+  max-height: 360px;
+  overflow-y: auto;
+  z-index: 40;
+}
+
+.notif-row {
+  display: block;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
