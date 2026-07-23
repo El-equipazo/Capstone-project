@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { connectionsApi, expertsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
-import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL } from '../utils/format'
+import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 
 export default function ExpertProfile() {
   const { expertId } = useParams()
@@ -12,6 +12,8 @@ export default function ExpertProfile() {
   const [requestSent, setRequestSent] = useState(false)
   const [requesting, setRequesting] = useState(false)
   const [requestError, setRequestError] = useState('')
+  const [engagementType, setEngagementType] = useState('')
+  const [initialMessage, setInitialMessage] = useState('')
 
   const { user } = useAuth()
 
@@ -19,17 +21,23 @@ export default function ExpertProfile() {
     setExpert(null)
     setNotFound(false)
     setRequestSent(false)
+    setEngagementType('')
+    setInitialMessage('')
     expertsApi
       .getById(expertId)
       .then(setExpert)
       .catch(() => setNotFound(true))
   }, [expertId])
 
-  async function handleRequestAssessment() {
+  async function handleRequestAssessment(e) {
+    e.preventDefault()
     setRequesting(true)
     setRequestError('')
     try {
-      await connectionsApi.create(Number(expertId))
+      await connectionsApi.create(Number(expertId), {
+        org_stated_need: engagementType || null,
+        initial_message: initialMessage.trim() || null,
+      })
       setRequestSent(true)
     } catch (err) {
       setRequestError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
@@ -202,30 +210,52 @@ export default function ExpertProfile() {
 
         <div className="xp-connect-card">
           <div className="xp-connect-left">
-            <span className="section-label xp-section-label">Request assessment</span>
+            <span className="section-label xp-section-label">Request engagement</span>
             {canRequestAssessment ? (
               requestSent ? (
                 <p className="xp-connect-text">Request sent — {expert.first_name} has been notified.</p>
+              ) : unavailable ? (
+                <p className="xp-connect-text" style={{ opacity: 0.6 }}>This expert is currently unavailable.</p>
               ) : (
-                <>
-                  <p className="xp-connect-text">
-                    Share your risk profile with {expert.first_name} to connect intentionally.
-                  </p>
-                  <button className="xp-tap-link" onClick={handleRequestAssessment} disabled={unavailable || requesting}>
-                    {requesting ? 'Sending…' : unavailable ? 'Currently unavailable' : 'Tap to request ↗'}
+                <form onSubmit={handleRequestAssessment} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                  <div className="field-group">
+                    <label className="field-label">Type of engagement</label>
+                    <select
+                      className="field-input"
+                      value={engagementType}
+                      onChange={(e) => setEngagementType(e.target.value)}
+                    >
+                      <option value="">Not sure — let the expert decide</option>
+                      {ENGAGEMENT_TYPE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Message <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                    <textarea
+                      className="field-input"
+                      rows={2}
+                      value={initialMessage}
+                      onChange={(e) => setInitialMessage(e.target.value)}
+                      placeholder={`Briefly describe what you're looking for…`}
+                    />
+                  </div>
+                  {requestError && <p style={{ color: 'var(--err, red)', fontSize: 12, margin: 0 }}>{requestError}</p>}
+                  <button className="xp-tap-link" type="submit" disabled={requesting} style={{ alignSelf: 'flex-start' }}>
+                    {requesting ? 'Sending…' : 'Send request ↗'}
                   </button>
-                  {requestError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginTop: 6 }}>{requestError}</p>}
-                </>
+                </form>
               )
             ) : !user ? (
               <p className="xp-connect-text">
                 <Link to={`/login?next=/experts/${expertId}`} className="xp-link-arrow">
                   Sign in as an organization
                 </Link>{' '}
-                to request an assessment.
+                to request an engagement.
               </p>
             ) : (
-              <p className="xp-connect-text">Only organizations can request assessments.</p>
+              <p className="xp-connect-text">Only organizations can request engagements.</p>
             )}
           </div>
           <div className="xp-dot-pattern" />
