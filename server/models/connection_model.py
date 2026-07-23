@@ -106,18 +106,32 @@ async def list_requests(*, org_id=None, expert_id=None, status=None,
         check_enum(status, CONNECTION_STATUS, "status")
 
     where, args = [], []
-    for col, val in (("org_id", org_id), ("expert_id", expert_id), ("status", status)):
+    for col, val in (("cr.org_id", org_id), ("cr.expert_id", expert_id), ("cr.status", status)):
         if val is not None:
             args.append(val)
             where.append(f"{col} = ${len(args)}")
     clause = (" WHERE " + " AND ".join(where)) if where else ""
 
     total = await pool.fetchval(
-        f"SELECT COUNT(*) FROM connection_requests{clause}", *args
+        f"""SELECT COUNT(*)
+            FROM connection_requests cr
+            JOIN organization_profiles op ON op.org_profile_id = cr.org_id
+            {clause}""",
+        *args,
     )
     rows = await pool.fetch(
-        f"SELECT * FROM connection_requests{clause} "
-        f"ORDER BY created_at DESC LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}",
+        f"""SELECT cr.*,
+                   op.org_name, op.sector AS org_sector, op.sub_sector,
+                   op.org_description, op.employee_count_range,
+                   op.country, op.website, op.quantum_knowledge_level,
+                   op.budget_range, op.urgency_level,
+                   op.is_verified AS org_is_verified,
+                   op.contact_name, op.contact_title
+            FROM connection_requests cr
+            JOIN organization_profiles op ON op.org_profile_id = cr.org_id
+            {clause}
+            ORDER BY cr.created_at DESC
+            LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}""",
         *args, limit, (page - 1) * limit,
     )
     return rows, total
