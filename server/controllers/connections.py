@@ -22,6 +22,7 @@ from server.models import (
     connection_model,
     expert_model,
     match_scoring,
+    notification_model,
     organization_model,
 )
 from server.schemas.common import PaginatedResponse
@@ -105,6 +106,10 @@ async def create_connection(
         org["org_profile_id"], body.expert_id, body.org_stated_need
     )
 
+    # Best-effort AI fit score, computed once here and stored — never blocks
+    # connection creation (score_single() swallows every failure internally).
+    ai_result = await ai_matching.score_single(org["org_profile_id"], body.expert_id)
+
     row = await connection_model.create(
         org_id=org["org_profile_id"],
         expert_id=body.expert_id,
@@ -115,6 +120,8 @@ async def create_connection(
         match_score=match_score,
         expiry_days=org["default_connection_expiry_days"] or 30,
         factors=factors,
+        ai_fit_score=(ai_result or {}).get("fit_score"),
+        ai_reasoning=(ai_result or {}).get("reasoning"),
     )
     return dict(row)
 
@@ -186,6 +193,20 @@ async def respond_to_connection(
                               "message": "Only the recipient expert can respond"}},
         )
     updated = await connection_model.respond(connection_id, body.status)
+
+    # Notify the org side of the response. §8: "Notifications are
+    # server-generated only (connection received/responded, ...)".
+    org = await organization_model.get(updated["org_id"])
+    accepted = body.status == "accepted"
+    await notification_model.create(
+        org["user_id"],
+        "connection_accepted" if accepted else "connection_declined",
+        f"{expert['first_name']} {expert['last_name']} "
+        f"{'accepted' if accepted else 'declined'} your connection request",
+        related_entity_type="connection_request", related_entity_id=connection_id,
+        action_url=f"/connections/{connection_id}",
+    )
+
     return dict(updated)
 
 

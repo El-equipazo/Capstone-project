@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import NotificationBell from './NotificationBell'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
@@ -47,6 +48,7 @@ export default function Navbar() {
             {user && <span className="tag nav-email">{user.email}</span>}
           </nav>
           <div className="nav-actions">
+            <NotificationBell />
             {user ? (
               <button className="btn" onClick={handleLogout}>
                 Sign out
