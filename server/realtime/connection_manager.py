@@ -56,3 +56,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+# Separate instance for pre-connection inquiry threads so room IDs don't
+# collide with engagement IDs (both are small sequential integers).
+thread_manager = ConnectionManager()

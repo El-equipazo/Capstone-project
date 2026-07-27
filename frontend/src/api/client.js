@@ -466,3 +466,48 @@ export const matchingApi = {
     })
   },
 }
+
+// ---------------- Threads (pre-connection inquiry chat) -----------------------
+
+export const threadsApi = {
+  async getOrCreate(expertProfileId) {
+    return await apiFetch('/threads', {
+      method: 'POST',
+      body: { expert_profile_id: expertProfileId },
+      headers: authHeader(),
+    })
+  },
+
+  async list() {
+    return await apiFetch('/threads', { headers: authHeader() })
+  },
+
+  async messages(threadId, { page = 1, limit = 20 } = {}) {
+    return await apiFetch(`/threads/${threadId}/messages?page=${page}&limit=${limit}`, {
+      headers: authHeader(),
+    })
+  },
+
+  async send(threadId, content) {
+    return await apiFetch(`/threads/${threadId}/messages`, {
+      method: 'POST',
+      body: { message_type: 'text', content },
+      headers: authHeader(),
+    })
+  },
+
+  async markRead(threadId) {
+    return await apiFetch(`/threads/${threadId}/messages/read`, {
+      method: 'POST',
+      body: { all: true },
+      headers: authHeader(),
+    })
+  },
+
+  wsUrl(threadId) {
+    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+    const wsBase = base.replace(/^http/, 'ws')
+    const token = authApi.getSession()?.access_token ?? ''
+    return `${wsBase}/threads/${threadId}/ws?token=${encodeURIComponent(token)}`
+  },
+}

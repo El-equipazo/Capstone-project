@@ -25,6 +25,25 @@ MIGRATIONS: list[tuple[str, str]] = [
             ADD COLUMN IF NOT EXISTS ai_reasoning TEXT;
         """,
     ),
+    (
+        "002_chat_threads_table",
+        """
+        CREATE TABLE IF NOT EXISTS chat_threads (
+            thread_id      SERIAL PRIMARY KEY,
+            org_user_id    INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            expert_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            created_at     TIMESTAMP DEFAULT NOW(),
+            UNIQUE (org_user_id, expert_user_id)
+        );
+        """,
+    ),
+    (
+        "003_messages_thread_id",
+        """
+        ALTER TABLE messages
+            ADD COLUMN IF NOT EXISTS thread_id INTEGER REFERENCES chat_threads(thread_id) ON DELETE CASCADE;
+        """,
+    ),
 ]
 
 
