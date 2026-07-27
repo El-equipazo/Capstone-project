@@ -103,7 +103,7 @@ async def send_thread_message(
     # Build a context-aware action_url: experts go to their dashboard Messages
     # tab; orgs go back to the expert's profile page.
     if current_user["user_id"] == thread["org_user_id"]:
-        action_url = "/dashboard"  # notifying the expert
+        action_url = f"/dashboard?tab=messages&thread={thread_id}"  # notifying the expert
     else:
         expert = await expert_model.find_by_user(thread["expert_user_id"])
         expert_profile_id = expert["expert_profile_id"] if expert else ""

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { authApi, connectionsApi, engagementsApi, expertsApi, threadsApi, verificationsApi } from '../api/client'
 import { useThreadChat } from '../hooks/useThreadChat'
 import { useAuth } from '../context/AuthContext'
@@ -40,10 +40,11 @@ function profileToForm(profile) {
 export default function ExpertDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'overview')
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -75,7 +76,10 @@ export default function ExpertDashboard() {
   })
 
   const [threads, setThreads] = useState([])
-  const [activeThreadId, setActiveThreadId] = useState(null)
+  const [activeThreadId, setActiveThreadId] = useState(() => {
+    const t = searchParams.get('thread')
+    return t ? parseInt(t, 10) : null
+  })
   const [threadDraft, setThreadDraft] = useState('')
   const [threadSending, setThreadSending] = useState(false)
   const { messages: threadMessages, loading: threadLoading, sendMessage: sendThreadMessage } = useThreadChat(activeThreadId)
