@@ -146,7 +146,8 @@ async def list_engagements(
         if expert is None:
             return _paginate([])
         rows = await engagement_model.list_for_expert(
-            expert["expert_profile_id"], status=status, engagement_type=engagement_type
+            expert["expert_profile_id"], status=status, engagement_type=engagement_type,
+            caller_user_id=current_user["user_id"],
         )
         return _paginate(rows)
 
@@ -155,7 +156,8 @@ async def list_engagements(
         if org is None:
             return _paginate([])
         rows = await engagement_model.list_for_org(
-            org["org_profile_id"], status=status, engagement_type=engagement_type
+            org["org_profile_id"], status=status, engagement_type=engagement_type,
+            caller_user_id=current_user["user_id"],
         )
         return _paginate(rows)
 

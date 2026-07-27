@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { connectionsApi, expertsApi, threadsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
-import { useThreadChat } from '../hooks/useThreadChat'
+import { useChat_context } from '../context/ChatContext'
 import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 
 export default function ExpertProfile() {
@@ -16,14 +16,23 @@ export default function ExpertProfile() {
   const [engagementType, setEngagementType] = useState('')
   const [initialMessage, setInitialMessage] = useState('')
 
-  const [threadId, setThreadId] = useState(null)
-  const [chatOpen, setChatOpen] = useState(false)
-  const [chatDraft, setChatDraft] = useState('')
-  const [chatSending, setChatSending] = useState(false)
-  const [chatError, setChatError] = useState('')
-
   const { user } = useAuth()
-  const { messages, loading: chatLoading, sendMessage } = useThreadChat(chatOpen ? threadId : null)
+  const { openChat } = useChat_context()
+  const [askError, setAskError] = useState('')
+  const [askLoading, setAskLoading] = useState(false)
+
+  async function handleAskQuestion() {
+    setAskError('')
+    setAskLoading(true)
+    try {
+      const thread = await threadsApi.getOrCreate(Number(expertId))
+      openChat('thread', thread.thread_id, `${expert.first_name} ${expert.last_name}`)
+    } catch {
+      setAskError('Could not open conversation. Please try again.')
+    } finally {
+      setAskLoading(false)
+    }
+  }
 
   useEffect(() => {
     setExpert(null)
@@ -36,31 +45,6 @@ export default function ExpertProfile() {
       .then(setExpert)
       .catch(() => setNotFound(true))
   }, [expertId])
-
-  async function handleAskQuestion() {
-    setChatError('')
-    try {
-      const thread = await threadsApi.getOrCreate(Number(expertId))
-      setThreadId(thread.thread_id)
-      setChatOpen(true)
-    } catch (err) {
-      setChatError(err.body?.error?.message ?? 'Could not open conversation.')
-    }
-  }
-
-  async function handleSendChat(e) {
-    e.preventDefault()
-    if (!chatDraft.trim()) return
-    setChatSending(true)
-    try {
-      await sendMessage(chatDraft.trim())
-      setChatDraft('')
-    } catch (err) {
-      setChatError(err.body?.error?.message ?? 'Failed to send.')
-    } finally {
-      setChatSending(false)
-    }
-  }
 
   async function handleRequestAssessment(e) {
     e.preventDefault()
@@ -244,6 +228,18 @@ export default function ExpertProfile() {
         <div className="xp-connect-card">
           <div className="xp-connect-left">
             <span className="section-label xp-section-label">Request engagement</span>
+            {canRequestAssessment && (
+              <div style={{ marginBottom: 12 }}>
+                <button
+                  className="btn btn-sm"
+                  onClick={handleAskQuestion}
+                  disabled={askLoading}
+                >
+                  {askLoading ? 'Opening…' : 'Ask a question'}
+                </button>
+                {askError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginTop: 4 }}>{askError}</p>}
+              </div>
+            )}
             {canRequestAssessment ? (
               requestSent ? (
                 <p className="xp-connect-text">Request sent — {expert.first_name} has been notified.</p>
@@ -293,60 +289,6 @@ export default function ExpertProfile() {
           </div>
           <div className="xp-dot-pattern" />
         </div>
-
-        {canRequestAssessment && (
-          <div style={{ marginTop: 10 }}>
-            {chatError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginBottom: 6 }}>{chatError}</p>}
-            {!chatOpen ? (
-              <button className="btn btn-sm" onClick={handleAskQuestion}>
-                Ask a question
-              </button>
-            ) : (
-              <div className="card" style={{ padding: 18 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <span className="section-label">Conversation with {expert.first_name}</span>
-                  <button onClick={() => setChatOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0, opacity: 0.5 }}>×</button>
-                </div>
-                <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                  {chatLoading ? (
-                    <p className="lead" style={{ fontSize: 12 }}>Loading…</p>
-                  ) : messages.length === 0 ? (
-                    <p className="lead" style={{ fontSize: 12, opacity: 0.6 }}>No messages yet — ask away.</p>
-                  ) : (
-                    messages.map((m) => (
-                      <div
-                        key={m.message_id}
-                        style={{
-                          alignSelf: m.sender_id === user.user_id ? 'flex-end' : 'flex-start',
-                          background: m.sender_id === user.user_id ? 'var(--acc)' : 'var(--srf)',
-                          color: m.sender_id === user.user_id ? '#fff' : 'inherit',
-                          borderRadius: 8,
-                          padding: '6px 10px',
-                          maxWidth: '75%',
-                          fontSize: 13,
-                        }}
-                      >
-                        {m.content}
-                      </div>
-                    ))
-                  )}
-                </div>
-                <form onSubmit={handleSendChat} style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    className="field-input"
-                    value={chatDraft}
-                    onChange={(e) => setChatDraft(e.target.value)}
-                    placeholder="Type a message…"
-                    style={{ flex: 1 }}
-                  />
-                  <button className="btn btn-sm" type="submit" disabled={chatSending || !chatDraft.trim()}>
-                    {chatSending ? '…' : 'Send'}
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="xp-stats-row">
           <div className="xp-stat-block">

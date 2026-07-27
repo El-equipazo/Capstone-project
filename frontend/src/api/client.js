@@ -46,6 +46,11 @@ async function apiFetch(path, { method = 'GET', body, headers = {} } = {}) {
 
   if (!res.ok) {
     const err = data?.error ?? {}
+    // A 401 with a stored session means the token has expired — clear it so the
+    // user is prompted to log in again instead of looping on stale credentials.
+    if (res.status === 401 && getStoredSession()) {
+      localStorage.removeItem(SESSION_KEY)
+    }
     throw new ApiError(res.status, err.code ?? 'ERROR', err.message ?? res.statusText)
   }
   return data

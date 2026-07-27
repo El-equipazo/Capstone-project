@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { authApi, connectionsApi, engagementsApi, expertsApi, threadsApi, verificationsApi } from '../api/client'
-import { useThreadChat } from '../hooks/useThreadChat'
+import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
@@ -41,6 +41,7 @@ export default function ExpertDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { openChat } = useChat_context()
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
@@ -48,10 +49,14 @@ export default function ExpertDashboard() {
 
   useEffect(() => {
     const t = searchParams.get('tab')
-    const thread = searchParams.get('thread')
     setTab(t || 'overview')
-    if (thread) setActiveThreadId(parseInt(thread, 10))
-  }, [searchParams])
+    // Handle notification deep-links: ?open_thread=X (new) or ?tab=messages&thread=X (legacy)
+    const threadId = searchParams.get('open_thread') || searchParams.get('thread')
+    if (threadId) {
+      openChat('thread', parseInt(threadId, 10), 'Conversation')
+      navigate('/dashboard', { replace: true })
+    }
+  }, [searchParams, openChat, navigate])
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -82,12 +87,6 @@ export default function ExpertDashboard() {
     catch { return new Set() }
   })
 
-  const [threads, setThreads] = useState([])
-  const [activeThreadId, setActiveThreadId] = useState(null)
-  const [threadDraft, setThreadDraft] = useState('')
-  const [threadSending, setThreadSending] = useState(false)
-  const { messages: threadMessages, loading: threadLoading, sendMessage: sendThreadMessage } = useThreadChat(activeThreadId)
-
   useEffect(() => {
     if (!user) {
       navigate('/login?next=/dashboard')
@@ -105,10 +104,9 @@ export default function ExpertDashboard() {
   const expertId = profile?.expert_profile_id
   useEffect(() => {
     if (!expertId) return
-    Promise.all([connectionsApi.listForExpert(), engagementsApi.list(), threadsApi.list()]).then(([conns, engs, ths]) => {
+    Promise.all([connectionsApi.listForExpert(), engagementsApi.list()]).then(([conns, engs]) => {
       setConnections(conns)
       setEngagements(engs)
-      setThreads(ths)
     })
   }, [expertId])
 
@@ -584,9 +582,6 @@ export default function ExpertDashboard() {
           <button className={`dash-tab ${tab === 'profile' ? 'on' : ''}`} onClick={() => navigate('/dashboard?tab=profile')}>
             Profile
           </button>
-          <button className={`dash-tab ${tab === 'messages' ? 'on' : ''}`} onClick={() => navigate('/dashboard?tab=messages')}>
-            Messages{threads.some(t => t.unread_count > 0) ? ' ·' : ''}
-          </button>
         </div>
 
         {error && (
@@ -826,100 +821,6 @@ export default function ExpertDashboard() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {tab === 'messages' && (
-          <div style={{ display: 'flex', gap: 20, minHeight: 400 }}>
-            <div className="card" style={{ padding: 0, width: 260, flexShrink: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--brd)' }}>
-                <span className="section-label">Inquiries</span>
-              </div>
-              {threads.length === 0 ? (
-                <p className="lead" style={{ fontSize: 12, padding: 16, opacity: 0.6 }}>No messages yet.</p>
-              ) : (
-                threads.map((t) => (
-                  <button
-                    key={t.thread_id}
-                    onClick={() => setActiveThreadId(t.thread_id)}
-                    style={{
-                      display: 'block', width: '100%', textAlign: 'left',
-                      padding: '12px 16px', border: 'none', borderBottom: '1px solid var(--brd)',
-                      background: activeThreadId === t.thread_id ? 'var(--srf)' : 'transparent',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{t.org_name || 'Organization'}</span>
-                      {t.unread_count > 0 && (
-                        <span className="badge" style={{ fontSize: 10, padding: '2px 6px' }}>{t.unread_count}</span>
-                      )}
-                    </div>
-                    {t.last_message_preview && (
-                      <span style={{ fontSize: 11, opacity: 0.6, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {t.last_message_preview}
-                      </span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-
-            <div className="card" style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column' }}>
-              {!activeThreadId ? (
-                <p className="lead" style={{ fontSize: 13, opacity: 0.6, margin: 'auto' }}>Select a conversation</p>
-              ) : (
-                <>
-                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                    {threadLoading ? (
-                      <p className="lead" style={{ fontSize: 12 }}>Loading…</p>
-                    ) : threadMessages.length === 0 ? (
-                      <p className="lead" style={{ fontSize: 12, opacity: 0.6 }}>No messages yet.</p>
-                    ) : (
-                      threadMessages.map((m) => (
-                        <div
-                          key={m.message_id}
-                          style={{
-                            alignSelf: m.sender_id === user.user_id ? 'flex-end' : 'flex-start',
-                            background: m.sender_id === user.user_id ? 'var(--acc)' : 'var(--srf)',
-                            color: m.sender_id === user.user_id ? '#fff' : 'inherit',
-                            borderRadius: 8, padding: '6px 10px',
-                            maxWidth: '75%', fontSize: 13,
-                          }}
-                        >
-                          {m.content}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault()
-                      if (!threadDraft.trim()) return
-                      setThreadSending(true)
-                      try {
-                        await sendThreadMessage(threadDraft.trim())
-                        setThreadDraft('')
-                      } finally {
-                        setThreadSending(false)
-                      }
-                    }}
-                    style={{ display: 'flex', gap: 8 }}
-                  >
-                    <input
-                      className="field-input"
-                      value={threadDraft}
-                      onChange={(e) => setThreadDraft(e.target.value)}
-                      placeholder="Reply…"
-                      style={{ flex: 1 }}
-                    />
-                    <button className="btn btn-sm" type="submit" disabled={threadSending || !threadDraft.trim()}>
-                      {threadSending ? '…' : 'Send'}
-                    </button>
-                  </form>
-                </>
-              )}
-            </div>
           </div>
         )}
 
