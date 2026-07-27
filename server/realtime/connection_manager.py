@@ -45,7 +45,7 @@ class ConnectionManager:
         # up front rather than relying on send_json's raw json.dumps per-socket.
         encoded = jsonable_encoder(payload)
         dead = []
-        for ws in sockets:
+        for ws in list(sockets):  # snapshot: disconnect() may mutate the set during awaits
             try:
                 await ws.send_json(encoded)
             except Exception:

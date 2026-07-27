@@ -73,8 +73,11 @@ export function useEngagementChat(engagementId) {
           // ignore malformed frame
         }
       }
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (unmounting.current) return
+        // Permanent errors (bad token, not a participant, engagement not found)
+        // must not trigger reconnect — the problem won't resolve on its own.
+        if (event.code >= 4001 && event.code <= 4004) return
         const attempt = reconnectAttempt.current + 1
         reconnectAttempt.current = attempt
         const delay = Math.min(RECONNECT_BASE_MS * 2 ** (attempt - 1), RECONNECT_MAX_MS)
