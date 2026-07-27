@@ -208,7 +208,11 @@ export default function EngagementDetail() {
         <span className="section-label" style={{ color: 'var(--acc)' }}>engagement</span>
         <div className="row gap-10 wrap" style={{ margin: '8px 0 4px', alignItems: 'center' }}>
           <h1 className="h2">{engagement.title || labelize(engagement.engagement_type)}</h1>
-          <span className={engagementBadgeClass(engagement.status)}>{labelize(engagement.status)}</span>
+          <span className={engagementBadgeClass(engagement.status)}>
+            {engagement.status === 'proposal_sent' && role === 'organization'
+              ? 'Proposal Received'
+              : labelize(engagement.status)}
+          </span>
         </div>
 
         {/* Counterparty info */}
@@ -393,10 +397,18 @@ export default function EngagementDetail() {
               ))}
             </div>
             <p className="lead" style={{ fontSize: 11.5, marginTop: 10 }}>
-              Status: <strong>{labelize(engagement.status)}</strong>
-              {engagement.status === 'scoping' && ' — define milestones and send the proposal when ready'}
-              {engagement.status === 'proposal_sent' && ' — waiting for the organization to accept'}
-              {engagement.status === 'proposal_accepted' && ' — both parties have agreed; start when ready'}
+              Status:{' '}
+              <strong>
+                {engagement.status === 'proposal_sent' && role === 'organization'
+                  ? 'Proposal Received'
+                  : labelize(engagement.status)}
+              </strong>
+              {engagement.status === 'scoping' && role === 'expert' && ' — define milestones and send the proposal when ready'}
+              {engagement.status === 'scoping' && role === 'organization' && ' — the expert is preparing the proposal'}
+              {engagement.status === 'proposal_sent' && role === 'expert' && ' — waiting for the organization to review and accept'}
+              {engagement.status === 'proposal_sent' && role === 'organization' && ' — review the milestones and accept, or request changes'}
+              {engagement.status === 'proposal_accepted' && role === 'expert' && ' — both parties have agreed; start when ready'}
+              {engagement.status === 'proposal_accepted' && role === 'organization' && ' — both parties have agreed; the expert will start when ready'}
               {engagement.status === 'active' && ' — work is underway'}
               {engagement.status === 'on_hold' && ' — engagement is paused'}
             </p>
