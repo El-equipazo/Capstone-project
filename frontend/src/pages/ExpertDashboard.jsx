@@ -45,6 +45,13 @@ export default function ExpertDashboard() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'overview')
+
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    const thread = searchParams.get('thread')
+    setTab(t || 'overview')
+    if (thread) setActiveThreadId(parseInt(thread, 10))
+  }, [searchParams])
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -76,10 +83,7 @@ export default function ExpertDashboard() {
   })
 
   const [threads, setThreads] = useState([])
-  const [activeThreadId, setActiveThreadId] = useState(() => {
-    const t = searchParams.get('thread')
-    return t ? parseInt(t, 10) : null
-  })
+  const [activeThreadId, setActiveThreadId] = useState(null)
   const [threadDraft, setThreadDraft] = useState('')
   const [threadSending, setThreadSending] = useState(false)
   const { messages: threadMessages, loading: threadLoading, sendMessage: sendThreadMessage } = useThreadChat(activeThreadId)
@@ -574,13 +578,13 @@ export default function ExpertDashboard() {
         </div>
 
         <div className="dash-tabs">
-          <button className={`dash-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>
+          <button className={`dash-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => navigate('/dashboard')}>
             Overview
           </button>
-          <button className={`dash-tab ${tab === 'profile' ? 'on' : ''}`} onClick={() => setTab('profile')}>
+          <button className={`dash-tab ${tab === 'profile' ? 'on' : ''}`} onClick={() => navigate('/dashboard?tab=profile')}>
             Profile
           </button>
-          <button className={`dash-tab ${tab === 'messages' ? 'on' : ''}`} onClick={() => setTab('messages')}>
+          <button className={`dash-tab ${tab === 'messages' ? 'on' : ''}`} onClick={() => navigate('/dashboard?tab=messages')}>
             Messages{threads.some(t => t.unread_count > 0) ? ' ·' : ''}
           </button>
         </div>

@@ -11,7 +11,7 @@ so re-running is always a no-op. Add new migrations at the bottom of the list.
 import asyncio
 import logging
 
-from server.db.connection_pool import pool, close_pool
+from server.db.connection_pool import get_pool, close_pool
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +48,10 @@ MIGRATIONS: list[tuple[str, str]] = [
 
 
 async def run():
+    db = await get_pool()
     for name, sql in MIGRATIONS:
         logger.info("applying migration: %s", name)
-        await pool.execute(sql)
+        await db.execute(sql)
         logger.info("done: %s", name)
 
 

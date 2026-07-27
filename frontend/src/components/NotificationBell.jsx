@@ -61,6 +61,7 @@ export default function NotificationBell() {
     notificationsApi.markRead(notificationId).catch(() => {})
     setItems((prev) => prev.filter((n) => n.notification_id !== notificationId))
     setCount((prev) => Math.max(0, prev - 1))
+    setOpen(false)
   }
 
   if (!user) return null
