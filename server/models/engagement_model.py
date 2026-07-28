@@ -84,9 +84,8 @@ def _check_list_filters(status: str = None, engagement_type: str = None) -> None
     check_enum(engagement_type, ENGAGEMENT_TYPE, "engagement_type", allow_none=True)
 
 
-async def list_for_expert(expert_id: int, *, status: str = None, engagement_type: str = None,
-                          caller_user_id: int = None) -> list:
-    """Return engagements for an expert, with org_name and unread message count joined in."""
+async def list_for_expert(expert_id: int, *, status: str = None,
+                          engagement_type: str = None) -> list:
     _check_list_filters(status, engagement_type)
     params = [expert_id]
     where = "e.expert_id = $1"
@@ -97,16 +96,6 @@ async def list_for_expert(expert_id: int, *, status: str = None, engagement_type
         params.append(engagement_type)
         where += f" AND e.engagement_type = ${len(params)}"
 
-    if caller_user_id is not None:
-        params.append(caller_user_id)
-        unread_sql = f"""(
-            SELECT COUNT(*) FROM messages m
-            WHERE m.engagement_id = e.engagement_id
-              AND m.is_read = false AND m.sender_id != ${len(params)}
-        ) AS unread_count"""
-    else:
-        unread_sql = "0 AS unread_count"
-
     rows = await pool.fetch(
         f"""
         SELECT e.engagement_id, e.connection_id, e.org_id, e.expert_id,
@@ -115,9 +104,10 @@ async def list_for_expert(expert_id: int, *, status: str = None, engagement_type
                e.start_date, e.estimated_end_date, e.actual_end_date,
                e.created_at, e.updated_at,
                op.org_name,
-               {unread_sql}
+               op.user_id AS org_user_id, ep.user_id AS expert_user_id
         FROM engagements e
         JOIN organization_profiles op ON op.org_profile_id = e.org_id
+        JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
         WHERE {where}
         ORDER BY e.created_at DESC
         """,
@@ -126,8 +116,8 @@ async def list_for_expert(expert_id: int, *, status: str = None, engagement_type
     return [dict(r) for r in rows]
 
 
-async def list_for_org(org_id: int, *, status: str = None, engagement_type: str = None,
-                       caller_user_id: int = None) -> list:
+async def list_for_org(org_id: int, *, status: str = None,
+                       engagement_type: str = None) -> list:
     _check_list_filters(status, engagement_type)
     params = [org_id]
     where = "e.org_id = $1"
@@ -138,16 +128,6 @@ async def list_for_org(org_id: int, *, status: str = None, engagement_type: str 
         params.append(engagement_type)
         where += f" AND e.engagement_type = ${len(params)}"
 
-    if caller_user_id is not None:
-        params.append(caller_user_id)
-        unread_sql = f"""(
-            SELECT COUNT(*) FROM messages m
-            WHERE m.engagement_id = e.engagement_id
-              AND m.is_read = false AND m.sender_id != ${len(params)}
-        ) AS unread_count"""
-    else:
-        unread_sql = "0 AS unread_count"
-
     rows = await pool.fetch(
         f"""
         SELECT e.engagement_id, e.connection_id, e.org_id, e.expert_id,
@@ -157,9 +137,10 @@ async def list_for_org(org_id: int, *, status: str = None, engagement_type: str 
                e.created_at, e.updated_at,
                ep.first_name AS expert_first_name, ep.last_name AS expert_last_name,
                ep.headline AS expert_headline,
-               {unread_sql}
+               op.user_id AS org_user_id, ep.user_id AS expert_user_id
         FROM engagements e
         JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
+        JOIN organization_profiles op ON op.org_profile_id = e.org_id
         WHERE {where}
         ORDER BY e.created_at DESC
         """,

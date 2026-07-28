@@ -317,37 +317,6 @@ export const engagementsApi = {
   },
 }
 
-// ---------------- Messages -----------------------------------------------
-
-export const messagesApi = {
-  async list(engagementId, { unreadOnly, page, limit } = {}) {
-    const params = new URLSearchParams()
-    if (unreadOnly) params.set('unread', 'true')
-    if (page) params.set('page', page)
-    if (limit) params.set('limit', limit)
-    const qs = params.toString() ? `?${params}` : ''
-    // { data, pagination } envelope -- return it whole (not just .data)
-    // since the chat hook needs the pagination info too.
-    return await apiFetch(`/engagements/${engagementId}/messages${qs}`, { headers: authHeader() })
-  },
-
-  async send(engagementId, { message_type = 'text', content, document_id } = {}) {
-    return await apiFetch(`/engagements/${engagementId}/messages`, {
-      method: 'POST',
-      body: { message_type, content, ...(document_id ? { document_id } : {}) },
-      headers: authHeader(),
-    })
-  },
-
-  async markRead(engagementId, { message_ids, all } = {}) {
-    return await apiFetch(`/engagements/${engagementId}/messages/read`, {
-      method: 'POST',
-      body: all ? { all: true } : { message_ids },
-      headers: authHeader(),
-    })
-  },
-}
-
 // ---------------- Notifications -------------------------------------------
 
 export const notificationsApi = {
@@ -508,6 +477,10 @@ export const threadsApi = {
       body: { all: true },
       headers: authHeader(),
     })
+  },
+
+  async getOrCreateForEngagement(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/thread`, { headers: authHeader() })
   },
 
   wsUrl(threadId) {

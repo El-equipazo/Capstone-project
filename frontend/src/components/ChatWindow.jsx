@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 
 function ConversationPane({ active, onSent }) {
   const { user } = useAuth()
-  const { messages, loading, error, sendMessage } = useChat(active?.type, active?.id)
+  const { messages, loading, error, sendMessage } = useChat(active?.id)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef(null)
@@ -168,14 +168,14 @@ export default function ChatWindow() {
           )}
           {conversations.map((c) => (
             <button
-              key={`${c.type}-${c.id}`}
-              onClick={() => openChat(c.type, c.id, c.title)}
+              key={c.id}
+              onClick={() => openChat(c.id, c.title)}
               style={{
                 display: 'block', width: '100%', textAlign: 'left',
                 padding: '10px 14px', border: 'none',
                 borderBottom: '1px solid rgba(128,128,128,0.3)',
                 borderLeft: c.unread_count > 0 ? '3px solid var(--acc)' : '3px solid transparent',
-                background: active?.type === c.type && active?.id === c.id ? 'var(--srf)' : 'transparent',
+                background: active?.id === c.id ? 'var(--srf)' : 'transparent',
                 cursor: 'pointer',
               }}
             >
@@ -184,7 +184,7 @@ export default function ChatWindow() {
                   {c.title}
                 </span>
               </div>
-              <span style={{ fontSize: 11, opacity: 0.5 }}>{c.type === 'thread' ? 'Inquiry' : 'Engagement'}</span>
+              <span style={{ fontSize: 11, opacity: 0.5 }}>Chat</span>
             </button>
           ))}
         </div>

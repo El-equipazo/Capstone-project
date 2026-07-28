@@ -17,7 +17,7 @@ from server.models.errors import (
     ValidationError,
 )
 from server.controllers import (
-    admin, auth, connections, engagements, experts, messages, notifications,
+    admin, auth, connections, engagements, experts, notifications,
     organizations, threads, verifications,
 )
 
@@ -130,7 +130,6 @@ app.include_router(experts.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
 app.include_router(connections.router, prefix="/api/v1")
 app.include_router(engagements.router, prefix="/api/v1")
-app.include_router(messages.router, prefix="/api/v1")
 app.include_router(threads.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(verifications.router, prefix="/api/v1")

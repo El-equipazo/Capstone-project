@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { engagementsApi, threadsApi } from '../api/client'
+import { threadsApi } from '../api/client'
 import { useAuth } from './AuthContext'
 
 const ChatContext = createContext(null)
@@ -15,40 +15,18 @@ export function ChatProvider({ children }) {
   const loadConversations = useCallback(async () => {
     if (!user) return
     try {
-      const [engs, threads] = await Promise.all([
-        engagementsApi.list(),
-        threadsApi.list(),
-      ])
+      const threads = await threadsApi.list()
 
-      const engConvs = engs.map((e) => ({
-        type: 'engagement',
-        id: e.engagement_id,
-        title: e.title || e.org_name || `${e.expert_first_name} ${e.expert_last_name}` || 'Engagement',
-        unread_count: e.unread_count ?? 0,
-        last_activity: e.updated_at,
-        org_user_id: e.org_user_id,
-        expert_user_id: e.expert_user_id,
-      }))
+      const convs = threads.map((t) => ({
+        id: t.thread_id,
+        title: user.role === 'organization'
+          ? `${t.expert_first_name} ${t.expert_last_name}`
+          : (t.org_name || 'Organization'),
+        unread_count: t.unread_count ?? 0,
+        last_activity: t.last_message_at || t.created_at,
+      })).sort((a, b) => new Date(b.last_activity) - new Date(a.last_activity))
 
-      // Suppress threads that already have an engagement — one chat per pair.
-      const engPairs = new Set(engs.map((e) => `${e.org_user_id},${e.expert_user_id}`))
-
-      const threadConvs = threads
-        .filter((t) => !engPairs.has(`${t.org_user_id},${t.expert_user_id}`))
-        .map((t) => ({
-          type: 'thread',
-          id: t.thread_id,
-          title: user.role === 'organization'
-            ? `${t.expert_first_name} ${t.expert_last_name}`
-            : (t.org_name || 'Organization'),
-          unread_count: t.unread_count ?? 0,
-          last_activity: t.last_message_at || t.created_at,
-        }))
-
-      const all = [...engConvs, ...threadConvs].sort(
-        (a, b) => new Date(b.last_activity) - new Date(a.last_activity)
-      )
-      setConversations(all)
+      setConversations(convs)
     } catch {
       // non-fatal — window still renders, sidebar just empty
     }
@@ -58,8 +36,8 @@ export function ChatProvider({ children }) {
     loadConversations()
   }, [loadConversations])
 
-  const openChat = useCallback((type, id, title) => {
-    setActive({ type, id, title })
+  const openChat = useCallback((id, title) => {
+    setActive({ id, title })
     setIsOpen(true)
     setIsMinimized(false)
     // refresh list so unread counts are current
@@ -78,7 +56,7 @@ export function ChatProvider({ children }) {
     if (!active) return
     setConversations((prev) =>
       prev.map((c) =>
-        c.type === active.type && c.id === active.id ? { ...c, unread_count: 0 } : c
+        c.id === active.id ? { ...c, unread_count: 0 } : c
       )
     )
   }, [active])

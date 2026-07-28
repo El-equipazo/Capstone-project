@@ -1,30 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { authApi, messagesApi, threadsApi } from '../api/client'
+import { authApi, threadsApi } from '../api/client'
 
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 15000
 
-function buildUrls(type, id) {
+function buildUrls(id) {
   const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
   const wsBase = base.replace(/^http/, 'ws')
   const token = authApi.getSession()?.access_token ?? ''
-  if (type === 'thread') {
-    return {
-      rest: () => threadsApi.messages(id),
-      send: (content) => threadsApi.send(id, content),
-      markRead: () => threadsApi.markRead(id),
-      ws: `${wsBase}/threads/${id}/ws?token=${encodeURIComponent(token)}`,
-    }
-  }
   return {
-    rest: () => messagesApi.list(id),
-    send: (content) => messagesApi.send(id, { message_type: 'text', content }),
-    markRead: () => messagesApi.markRead(id, { all: true }),
-    ws: `${wsBase}/engagements/${id}/ws?token=${encodeURIComponent(token)}`,
+    rest: () => threadsApi.messages(id),
+    send: (content) => threadsApi.send(id, content),
+    markRead: () => threadsApi.markRead(id),
+    ws: `${wsBase}/threads/${id}/ws?token=${encodeURIComponent(token)}`,
   }
 }
 
-export function useChat(type, id) {
+export function useChat(id) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -41,13 +33,13 @@ export function useChat(type, id) {
   }, [])
 
   useEffect(() => {
-    if (!type || !id) return
+    if (!id) return
     let cancelled = false
     seenIds.current = new Set()
     setMessages([])
     setLoading(true)
     setError('')
-    const urls = buildUrls(type, id)
+    const urls = buildUrls(id)
     urls
       .rest()
       .then((page) => {
@@ -66,12 +58,12 @@ export function useChat(type, id) {
         setLoading(false)
       })
     return () => { cancelled = true }
-  }, [type, id])
+  }, [id])
 
   useEffect(() => {
-    if (!type || !id) return
+    if (!id) return
     unmounting.current = false
-    const urls = buildUrls(type, id)
+    const urls = buildUrls(id)
 
     function connect() {
       const socket = new WebSocket(urls.ws)
@@ -97,16 +89,16 @@ export function useChat(type, id) {
       clearTimeout(reconnectTimer.current)
       socketRef.current?.close()
     }
-  }, [type, id, upsert])
+  }, [id, upsert])
 
   const sendMessage = useCallback(
     async (content) => {
-      const urls = buildUrls(type, id)
+      const urls = buildUrls(id)
       const created = await urls.send(content)
       upsert(created)
       return created
     },
-    [type, id, upsert]
+    [id, upsert]
   )
 
   return { messages, loading, error, sendMessage }

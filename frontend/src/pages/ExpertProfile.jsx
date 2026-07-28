@@ -27,7 +27,7 @@ export default function ExpertProfile() {
     setAskLoading(true)
     try {
       const thread = await threadsApi.getOrCreate(Number(expertId))
-      openChat('thread', thread.thread_id, `${expert.first_name} ${expert.last_name}`)
+      openChat(thread.thread_id, `${expert.first_name} ${expert.last_name}`)
     } catch {
       setAskError('Could not open conversation. Please try again.')
     } finally {
@@ -39,7 +39,7 @@ export default function ExpertProfile() {
   useEffect(() => {
     const threadId = searchParams.get('open_thread')
     if (!threadId || !expert) return
-    openChat('thread', parseInt(threadId, 10), `${expert.first_name} ${expert.last_name}`)
+    openChat(parseInt(threadId, 10), `${expert.first_name} ${expert.last_name}`)
   }, [searchParams, expert, openChat])
 
   useEffect(() => {

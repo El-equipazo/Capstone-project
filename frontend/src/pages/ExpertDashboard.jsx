@@ -53,7 +53,7 @@ export default function ExpertDashboard() {
     // Handle notification deep-links: ?open_thread=X (new) or ?tab=messages&thread=X (legacy)
     const threadId = searchParams.get('open_thread') || searchParams.get('thread')
     if (threadId) {
-      openChat('thread', parseInt(threadId, 10), 'Conversation')
+      openChat(parseInt(threadId, 10), 'Conversation')
       navigate('/dashboard', { replace: true })
     }
   }, [searchParams, openChat, navigate])

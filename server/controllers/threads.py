@@ -1,10 +1,16 @@
 """
-threads — pre-connection inquiry chat (api-contract.md §9).
+threads — unified chat for all org/expert conversations.
 
-Orgs initiate threads from an expert's profile; experts receive and reply.
-One thread per org-expert pair. Messages persist through the full lifecycle
-so the same conversation is visible once a connection request and engagement
-exist. REST is the only write path; the websocket is a pure push channel.
+One thread per org/expert pair, shared across pre-connection inquiry and any
+active engagement. All messages live in the messages table keyed on thread_id.
+
+  POST  /threads                          org creates/retrieves thread by expert profile
+  GET   /threads                          list threads for current user
+  GET   /engagements/{id}/thread          get (or create) the thread for an engagement
+  GET   /threads/{id}/messages            paginated message history
+  POST  /threads/{id}/messages            send a message
+  POST  /threads/{id}/messages/read       mark messages read
+  WS    /threads/{id}/ws                  real-time push channel
 """
 from __future__ import annotations
 
@@ -15,7 +21,10 @@ from fastapi import (
 )
 
 from server.dependencies import get_current_user, get_current_user_ws, require_role
-from server.models import expert_model, message_model, notification_model, organization_model, thread_model
+from server.models import (
+    engagement_model, expert_model, message_model,
+    notification_model, organization_model, thread_model,
+)
 from server.models.errors import NotFoundError
 from server.realtime.connection_manager import thread_manager
 from server.schemas.common import PaginatedResponse
@@ -50,14 +59,37 @@ async def create_thread(
     current_user=Depends(require_role("organization")),
 ):
     expert = await expert_model.get(body.expert_profile_id)
-    expert_user_id = expert["user_id"]
-    thread = await thread_model.get_or_create(current_user["user_id"], expert_user_id)
+    thread = await thread_model.get_or_create(current_user["user_id"], expert["user_id"])
     return thread
 
 
 @router.get("/threads", response_model=list[ThreadResponse])
 async def list_threads(current_user=Depends(get_current_user)):
     return await thread_model.list_for_user(current_user["user_id"])
+
+
+@router.get("/engagements/{engagement_id}/thread", response_model=ThreadResponse)
+async def get_thread_for_engagement(
+    engagement_id: int,
+    current_user=Depends(get_current_user),
+):
+    """Return (or create) the shared thread for this engagement's org/expert pair."""
+    engagement = await engagement_model.get(engagement_id)
+
+    org = await organization_model.get(engagement["org_id"])
+    expert = await expert_model.get(engagement["expert_id"])
+
+    # Verify the caller is a participant before revealing or creating the thread.
+    is_org = current_user["role"] == "organization" and org["user_id"] == current_user["user_id"]
+    is_expert = current_user["role"] == "expert" and expert["user_id"] == current_user["user_id"]
+    if not (is_org or is_expert or current_user["role"] == "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "Not a participant in this engagement"}},
+        )
+
+    thread = await thread_model.get_or_create(org["user_id"], expert["user_id"])
+    return thread
 
 
 @router.get("/threads/{thread_id}/messages",
@@ -93,21 +125,14 @@ async def send_thread_message(
     thread = await thread_model.get(thread_id)
     await _assert_participant(current_user, thread)
 
-    message = await message_model.create_for_thread(
+    message = await message_model.create(
         thread_id, current_user["user_id"],
         body.message_type, content=body.content,
     )
 
     other_user_id = await _other_user_id(thread, current_user["user_id"])
 
-    # Build a context-aware action_url: experts go to their dashboard Messages
-    # tab; orgs go back to the expert's profile page.
-    if current_user["user_id"] == thread["org_user_id"]:
-        action_url = f"/dashboard?open_thread={thread_id}"  # notifying the expert
-    else:
-        expert = await expert_model.find_by_user(thread["expert_user_id"])
-        expert_profile_id = expert["expert_profile_id"] if expert else ""
-        action_url = f"/experts/{expert_profile_id}?open_thread={thread_id}"  # notifying the org
+    action_url = f"/messages?open_thread={thread_id}"
 
     await notification_model.create(
         other_user_id, "message_received",
@@ -129,7 +154,7 @@ async def mark_thread_messages_read(
 ):
     thread = await thread_model.get(thread_id)
     await _assert_participant(current_user, thread)
-    updated = await message_model.mark_read_for_thread(
+    updated = await message_model.mark_read(
         thread_id, current_user["user_id"],
         message_ids=body.message_ids, all=body.all,
     )

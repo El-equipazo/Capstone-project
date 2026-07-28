@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { engagementsApi } from '../api/client'
+import { engagementsApi, threadsApi } from '../api/client'
 import { useRequireAuth } from '../hooks/useRequireAuth'
 import { useChat_context } from '../context/ChatContext'
 import { labelize, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
@@ -615,7 +615,13 @@ export default function EngagementDetail() {
           <span className="section-label">Messages</span>
           <button
             className="btn btn-sm"
-            onClick={() => openChat('engagement', engagementId, engagement.title || engagement.org_name || engagement.expert_first_name)}
+            onClick={async () => {
+              try {
+                const thread = await threadsApi.getOrCreateForEngagement(engagementId)
+                const title = engagement.title || engagement.org_name || engagement.expert_first_name
+                openChat(thread.thread_id, title)
+              } catch { /* non-fatal */ }
+            }}
           >
             Open Chat
           </button>
