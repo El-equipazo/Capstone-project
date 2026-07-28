@@ -113,6 +113,18 @@ export default function ExpertDashboard() {
     )
   }
 
+  // Single source of truth for a credential's verification state — the
+  // `verification_status` field some code used to set client-side on the
+  // credential object was never actually populated from the backend on
+  // page load (list_credentials()/_full_profile() only return `is_verified`,
+  // a plain boolean), so it was always undefined on a fresh load and the
+  // "Request verification" button showed even for already-approved
+  // credentials. Deriving it from the real verification_records fetch fixes
+  // that for approved/pending/rejected alike.
+  function credentialStatus(credentialId) {
+    return latestVerificationFor(credentialId)?.status ?? null
+  }
+
   if (!user) return null
 
   if (user.role !== 'expert') {
@@ -243,7 +255,7 @@ export default function ExpertDashboard() {
       })
       setProfile((prev) => ({
         ...prev,
-        credentials: [...(prev.credentials || []), { ...result, verification_status: null }],
+        credentials: [...(prev.credentials || []), result],
       }))
       setCredForm(BLANK_CRED)
     } catch (err) {
@@ -275,13 +287,7 @@ export default function ExpertDashboard() {
         related_credential_id: credentialId,
         submitted_document_urls: documentUrls.length ? documentUrls : undefined,
       })
-      setProfile((prev) => ({
-        ...prev,
-        credentials: (prev.credentials || []).map((c) =>
-          c.credential_id === credentialId ? { ...c, verification_status: 'pending' } : c
-        ),
-      }))
-      verificationsApi.list().then(setVerifications).catch(() => {})
+      setVerifications(await verificationsApi.list())
       setVerifyFormFor(null)
       setVerifyDocUrls([])
     } catch (err) {
@@ -1021,7 +1027,9 @@ export default function ExpertDashboard() {
                   {(profile.credentials || []).length === 0 && (
                     <p className="lead" style={{ fontSize: 12.5 }}>No credentials added yet.</p>
                   )}
-                  {(profile.credentials || []).map((c) => (
+                  {(profile.credentials || []).map((c) => {
+                    const status = credentialStatus(c.credential_id)
+                    return (
                     <div key={c.credential_id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                     <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ flex: 1 }}>
@@ -1031,16 +1039,16 @@ export default function ExpertDashboard() {
                         </div>
                       </div>
                       <div className="row gap-8">
-                        {c.verification_status === 'approved' && (
+                        {status === 'approved' && (
                           <span className="tag" style={{ color: 'var(--acc)' }}>Verified</span>
                         )}
-                        {c.verification_status === 'pending' && (
+                        {status === 'pending' && (
                           <span className="tag">Pending review</span>
                         )}
-                        {c.verification_status === 'rejected' && (
+                        {status === 'rejected' && (
                           <span className="tag" style={{ color: 'var(--err, #e53)' }}>Rejected</span>
                         )}
-                        {(!c.verification_status || c.verification_status === 'rejected') && (
+                        {status !== 'approved' && status !== 'pending' && (
                           <button
                             className="btn btn-sm"
                             onClick={() => {
@@ -1123,7 +1131,7 @@ export default function ExpertDashboard() {
                       </div>
                     )}
                     </div>
-                  ))}
+                  )})}
                 </div>
 
                 <form onSubmit={handleAddCredential} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
