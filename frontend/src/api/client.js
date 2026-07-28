@@ -435,6 +435,13 @@ export const adminApi = {
     })
   },
 
+  async reviewVerificationWithAI(verificationId) {
+    return await apiFetch(`/admin/verifications/${verificationId}/ai-review`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
   async setExpertVerified(expertProfileId, isVerified) {
     return await apiFetch(`/admin/experts/${expertProfileId}/verify`, {
       method: 'PATCH',

@@ -10,6 +10,16 @@ const ROLE_COLOR = {
   admin: '#7c3aed',
 }
 
+const AI_RECOMMENDATION_STYLE = {
+  approve: { background: '#059669', borderColor: '#059669', color: '#fff' },
+  reject: { background: '#dc2626', borderColor: '#dc2626', color: '#fff' },
+}
+
+const AI_REVIEW_ERROR_MESSAGES = {
+  AI_NOT_CONFIGURED: 'AI review isn’t set up on this server yet. Ask an admin to configure it.',
+  AI_UNAVAILABLE: 'The AI review service is temporarily unavailable. Please try again in a moment.',
+}
+
 function VerifiedBadge({ isVerified, status }) {
   return isVerified ? (
     <span className="badge">✓ Verified</span>
@@ -43,6 +53,8 @@ export default function AdminDashboard() {
   const [pendingCount, setPendingCount] = useState(0)
   const [deciding, setDeciding] = useState({})
   const [vNotes, setVNotes] = useState({})
+  const [aiReviewing, setAiReviewing] = useState({})
+  const [aiReviewError, setAiReviewError] = useState({})
 
   async function loadExperts(filter) {
     setExpertsLoading(true)
@@ -159,6 +171,25 @@ export default function AdminDashboard() {
       setError(err.body?.error?.message ?? 'Something went wrong.')
     } finally {
       setDeciding((p) => ({ ...p, [verificationId]: false }))
+    }
+  }
+
+  async function handleAIReview(verificationId) {
+    setAiReviewing((p) => ({ ...p, [verificationId]: true }))
+    setAiReviewError((p) => ({ ...p, [verificationId]: '' }))
+    try {
+      const updated = await adminApi.reviewVerificationWithAI(verificationId)
+      setVerifications((prev) =>
+        prev.map((v) => (v.verification_id === verificationId ? { ...v, ...updated } : v))
+      )
+    } catch (err) {
+      const code = err.body?.error?.code
+      setAiReviewError((p) => ({
+        ...p,
+        [verificationId]: AI_REVIEW_ERROR_MESSAGES[code] ?? err.body?.error?.message ?? 'Something went wrong. Please try again.',
+      }))
+    } finally {
+      setAiReviewing((p) => ({ ...p, [verificationId]: false }))
     }
   }
 
@@ -376,11 +407,71 @@ export default function AdminDashboard() {
                         </span>
                       </div>
 
+                      {v.verification_type === 'professional_credential' && (
+                        <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <p className="lead" style={{ fontSize: 12 }}>
+                            {v.institution && <>Institution: {v.institution}</>}
+                            {v.year_obtained && <> · Obtained {v.year_obtained}</>}
+                            {v.expiry_date && <> · Expires {new Date(v.expiry_date).toLocaleDateString()}</>}
+                          </p>
+                          <div className="row gap-8 wrap">
+                            {v.credential_verification_url && (
+                              <a href={v.credential_verification_url} target="_blank" rel="noreferrer" className="tag">
+                                Credential link ↗
+                              </a>
+                            )}
+                            {(v.submitted_document_urls || []).map((url, i) => (
+                              <a key={url} href={url} target="_blank" rel="noreferrer" className="tag">
+                                Document {i + 1} ↗
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {v.status === 'approved' && v.admin_notes && (
                         <p className="lead" style={{ fontSize: 12, marginTop: 4 }}>{v.admin_notes}</p>
                       )}
                       {v.status === 'rejected' && v.rejection_reason && (
                         <p style={{ fontSize: 12, color: '#dc2626', marginTop: 4 }}>{v.rejection_reason}</p>
+                      )}
+
+                      {v.verification_type === 'professional_credential' && (
+                        <div style={{ marginTop: 10 }}>
+                          {v.ai_reviewed_at && (
+                            <div className="card" style={{ padding: 14, background: 'var(--bg)', marginBottom: 8 }}>
+                              <div className="row gap-8" style={{ marginBottom: 6 }}>
+                                <span className="badge" style={AI_RECOMMENDATION_STYLE[v.ai_recommendation]}>
+                                  AI: {labelize(v.ai_recommendation)}
+                                </span>
+                                <span className="tag">Confidence: {labelize(v.ai_confidence)}</span>
+                              </div>
+                              <p className="lead" style={{ fontSize: 12 }}>{v.ai_reasoning}</p>
+                              {(v.ai_red_flags || []).length > 0 && (
+                                <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#dc2626' }}>
+                                  {v.ai_red_flags.map((flag) => <li key={flag}>{flag}</li>)}
+                                </ul>
+                              )}
+                              <p className="lead" style={{ fontSize: 10.5, marginTop: 6, fontStyle: 'italic' }}>
+                                Advisory only — not an authoritative verification. You still decide below.
+                              </p>
+                            </div>
+                          )}
+                          {v.status === 'pending' && (
+                            <>
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                disabled={aiReviewing[v.verification_id]}
+                                onClick={() => handleAIReview(v.verification_id)}
+                              >
+                                {aiReviewing[v.verification_id] ? 'Asking Gemini…' : v.ai_reviewed_at ? 'Re-review with AI' : 'Ask AI to Review'}
+                              </button>
+                              {aiReviewError[v.verification_id] && (
+                                <p style={{ fontSize: 12, color: '#dc2626', marginTop: 6 }}>{aiReviewError[v.verification_id]}</p>
+                              )}
+                            </>
+                          )}
+                        </div>
                       )}
 
                       {v.status === 'pending' && (

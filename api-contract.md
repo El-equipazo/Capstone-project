@@ -903,6 +903,34 @@ Response `200`. Side effects:
 - Approving a record with `verification_type != 'professional_credential'` flips `is_verified` on the corresponding org/expert profile (and `verification_status` on expert profiles).
 - Approving a record with `related_credential_id` set makes that specific credential show `is_verified: true` on subsequent `GET /experts/:expertId/credentials` calls — no separate action needed.
 
+#### POST /admin/verifications/:verificationId/ai-review
+
+Admin manually triggers an AI (Gemini) pre-screen of a `professional_credential`
+verification — the credential's claimed details plus its submitted document
+files, if any. — **Auth: admin**
+
+**Advisory only.** Neither Gemini nor any LLM can authoritatively confirm a
+credential is genuine — there's no integration with any credentialing body's
+registry. This assesses plausibility, internal consistency, and visible signs
+of a fabricated document, and never changes `status` itself; the admin still
+calls `PATCH /admin/verifications/:verificationId` to actually decide.
+
+No request body. Response `200`, the verification record with:
+
+```json
+{
+  "ai_recommendation": "approve",
+  "ai_confidence": "medium",
+  "ai_reasoning": "CISSP is a real ISC2 certification; the claimed year and institution are internally consistent, and the submitted document visually resembles a standard ISC2 certificate. Could not confirm the certificate number against ISC2's registry — no such integration exists.",
+  "ai_red_flags": [],
+  "ai_reviewed_at": "2026-07-27T14:30:00Z"
+}
+```
+
+Errors: `422` verification isn't `professional_credential` type or has no
+linked credential · `503` `AI_NOT_CONFIGURED` (no `GEMINI_API_KEY`) · `502`
+`AI_UNAVAILABLE` (Gemini call failed).
+
 ---
 
 ## 10. Risk Assessment

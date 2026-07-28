@@ -396,6 +396,21 @@ async def list_credentials(expert_id: int):
     )
 
 
+async def get_credential(credential_id: int):
+    row = await pool.fetchrow(
+        """
+        SELECT credential_id, expert_id, credential_type, credential_name,
+               institution, year_obtained, expiry_date, verification_url
+        FROM expert_credentials
+        WHERE credential_id = $1
+        """,
+        credential_id,
+    )
+    if row is None:
+        raise NotFoundError("credential not found")
+    return dict(row)
+
+
 async def update_credential(expert_id: int, credential_id: int, patch: dict):
     if not patch:
         row = await pool.fetchrow(

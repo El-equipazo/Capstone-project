@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from server.dependencies import require_role
-from server.models import admin_model
+from server.models import admin_model, ai_verification, expert_model
 
 router = APIRouter(tags=["admin"])
 
@@ -85,6 +85,55 @@ async def decide_verification(
         admin_notes=body.admin_notes,
         rejection_reason=body.rejection_reason,
         expires_at=expires_at,
+    )
+
+
+@router.post("/admin/verifications/{verification_id}/ai-review")
+async def ai_review_verification(
+    verification_id: int,
+    current_user=Depends(require_role("admin")),
+):
+    """
+    Advisory only — Gemini assesses the credential's claimed details plus any
+    submitted document files and returns a recommendation, but this never
+    decides anything itself. The admin still calls PATCH .../verifications/:id
+    to actually approve/reject.
+    """
+    verification = await admin_model.get_verification(verification_id)
+    if verification["verification_type"] != "professional_credential":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": {"code": "WRONG_TYPE",
+                              "message": "AI review only applies to professional_credential verifications"}},
+        )
+    if not verification["related_credential_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": {"code": "NO_CREDENTIAL",
+                              "message": "This verification isn't linked to a credential"}},
+        )
+
+    credential = await expert_model.get_credential(verification["related_credential_id"])
+
+    try:
+        assessment = await ai_verification.review_credential(credential, verification)
+    except ai_verification.AIConfigurationError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"code": "AI_NOT_CONFIGURED", "message": str(e)}},
+        )
+    except ai_verification.AIUnavailableError as e:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": {"code": "AI_UNAVAILABLE", "message": str(e)}},
+        )
+
+    return await admin_model.save_ai_review(
+        verification_id,
+        recommendation=assessment["recommendation"],
+        confidence=assessment["confidence"],
+        reasoning=assessment["reasoning"],
+        red_flags=assessment["red_flags"],
     )
 
 
