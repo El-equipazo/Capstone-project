@@ -607,12 +607,12 @@ export default function AdminDashboard() {
                                   </button>
                                   {isCredential && (
                                     <button
-                                      className="btn btn-sm btn-ghost"
+                                      className="btn btn-sm btn-acc"
                                       disabled={aiReviewing[v.verification_id]}
                                       title="Ask AI to review"
                                       onClick={() => handleAIReview(v.verification_id)}
                                     >
-                                      {aiReviewing[v.verification_id] ? '…' : '✨ AI'}
+                                      {aiReviewing[v.verification_id] ? 'Reviewing…' : 'AI Review'}
                                     </button>
                                   )}
                                 </div>
