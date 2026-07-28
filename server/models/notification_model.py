@@ -79,3 +79,12 @@ async def mark_all_read(user_id: int) -> int:
         user_id,
     )
     return int(result.split()[-1])
+
+
+async def mark_read_by_action_url(user_id: int, url_fragment: str) -> None:
+    """Mark all unread notifications whose action_url contains url_fragment."""
+    await pool.query(
+        "UPDATE notifications SET is_read = true, read_at = NOW() "
+        "WHERE user_id = $1 AND is_read = false AND action_url LIKE $2",
+        user_id, f"%{url_fragment}%",
+    )

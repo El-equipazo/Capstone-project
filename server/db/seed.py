@@ -53,6 +53,7 @@ async def seed():
             "reviews",
             "notifications",
             "messages",
+            "chat_threads",
             "secure_document_shares",
             "engagement_milestones",
             "engagements",
@@ -365,19 +366,28 @@ async def seed():
             )
         """)
 
-        # messages -- file attachments now reference secure_document_shares
-        # via document_id instead of inline file_url/file_name/file_size_bytes.
+        await conn.execute("""
+            CREATE TABLE chat_threads (
+                thread_id      SERIAL PRIMARY KEY,
+                org_user_id    INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                expert_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                created_at     TIMESTAMP DEFAULT NOW(),
+                UNIQUE (org_user_id, expert_user_id)
+            )
+        """)
+
+        # All messages belong to a chat_thread. Engagements share the thread
+        # for their org/expert pair — no separate engagement-scoped message store.
         await conn.execute("""
             CREATE TABLE messages (
-                message_id       SERIAL PRIMARY KEY,
-                engagement_id    INTEGER REFERENCES engagements(engagement_id) ON DELETE CASCADE,
-                sender_id        INTEGER REFERENCES users(user_id),
-                content          TEXT,
-                message_type     TEXT NOT NULL DEFAULT 'text',
-                document_id      INTEGER REFERENCES secure_document_shares(document_id) ON DELETE SET NULL,
-                is_read          BOOLEAN DEFAULT false,
-                read_at          TIMESTAMP,
-                created_at       TIMESTAMP DEFAULT NOW()
+                message_id   SERIAL PRIMARY KEY,
+                thread_id    INTEGER NOT NULL REFERENCES chat_threads(thread_id) ON DELETE CASCADE,
+                sender_id    INTEGER REFERENCES users(user_id),
+                content      TEXT,
+                message_type TEXT NOT NULL DEFAULT 'text',
+                is_read      BOOLEAN DEFAULT false,
+                read_at      TIMESTAMP,
+                created_at   TIMESTAMP DEFAULT NOW()
             )
         """)
 
@@ -814,31 +824,37 @@ async def seed():
             RETURNING document_id
         """, engagement['engagement_id'], org_user['user_id'])
 
-        # -- MESSAGES (file message links secure_document_shares via document_id)
+        # -- CHAT THREAD (one per org/expert pair) --------------------------------
+        thread = await conn.fetchrow("""
+            INSERT INTO chat_threads (org_user_id, expert_user_id)
+            VALUES ($1, $2)
+            RETURNING thread_id
+        """, org_user['user_id'], expert_user['user_id'])
+
+        # -- MESSAGES ----------------------------------------------------------
         await conn.execute("""
             INSERT INTO messages (
-                engagement_id, sender_id, content, message_type, document_id, is_read, read_at
+                thread_id, sender_id, content, message_type, is_read, read_at
             ) VALUES
                 ($1, $2,
                  'Hi Dr. Chen, glad to be working with you. I have attached our network diagram. Let me know if you need anything before the kickoff call.',
-                 'file', $4, true, NOW() - INTERVAL '4 days'),
+                 'text', true, NOW() - INTERVAL '4 days'),
 
                 ($1, $3,
                  'Thank you! I have reviewed the documents. Preliminary observation: your core banking system is using RSA-2048 for TLS termination -- that will be the highest priority item. See you Thursday!',
-                 'text', NULL, true, NOW() - INTERVAL '3 days'),
+                 'text', true, NOW() - INTERVAL '3 days'),
 
                 ($1, $2,
                  'Quick question -- does the audit cover our ATM network? Our ATMs are managed by a third-party vendor.',
-                 'text', NULL, true, NOW() - INTERVAL '1 day'),
+                 'text', true, NOW() - INTERVAL '1 day'),
 
                 ($1, $3,
                  'Yes, third-party ATM vendors are in scope. I will assess their cryptographic guarantees and whether their contracts require quantum-safe upgrades. This is a common gap for community banks.',
-                 'text', NULL, false, NULL)
+                 'text', false, NULL)
         """,
-            engagement['engagement_id'],
+            thread['thread_id'],
             org_user['user_id'],
             expert_user['user_id'],
-            document['document_id']
         )
 
         # -- NOTIFICATIONS -----------------------------------------------------

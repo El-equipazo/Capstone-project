@@ -20,6 +20,7 @@ from server.dependencies import get_current_user, require_role
 from server.models import (
     ai_matching,
     connection_model,
+    engagement_model,
     expert_model,
     match_scoring,
     notification_model,
@@ -99,6 +100,15 @@ async def create_connection(
             "org_name": org_name,
             "sector": "other",
         })
+
+    # Block duplicate requests: one open engagement per org/expert pair is enough.
+    # body.expert_id is the expert_profile_id — matches engagement_model columns directly.
+    open_eng = await engagement_model.find_open_between(org["org_profile_id"], body.expert_id)
+    if open_eng:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": {"code": "CONFLICT", "message": "You already have an open engagement with this expert"}},
+        )
 
     # Server computes the score + factor breakdown (404 unknown expert /
     # 422 unavailable bubble up from the scorer).

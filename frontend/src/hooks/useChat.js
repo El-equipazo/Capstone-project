@@ -1,22 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { authApi, messagesApi } from '../api/client'
+import { authApi, threadsApi } from '../api/client'
 
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 15000
 
-function wsUrlFor(engagementId) {
-  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
-  const wsBase = base.replace(/^http/, 'ws') // http -> ws, https -> wss
+function buildUrls(id) {
+  const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  const wsBase = base.startsWith('/')
+    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}${base}`
+    : base.replace(/^http/, 'ws')
   const token = authApi.getSession()?.access_token ?? ''
-  return `${wsBase}/engagements/${engagementId}/ws?token=${encodeURIComponent(token)}`
+  return {
+    rest: () => threadsApi.messages(id),
+    send: (content) => threadsApi.send(id, content),
+    markRead: () => threadsApi.markRead(id),
+    ws: `${wsBase}/threads/${id}/ws?token=${encodeURIComponent(token)}`,
+  }
 }
 
-// REST is the only write path (messagesApi.send); the websocket is a pure
-// receive-only broadcast of messages the server already persisted. Every
-// insertion -- the REST response for the sender's own send, and every WS
-// frame -- goes through the same upsert() keyed on message_id, so a
-// duplicate delivery (e.g. a second open tab) is a no-op instead of a bug.
-export function useEngagementChat(engagementId) {
+export function useChat(id) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -33,50 +35,47 @@ export function useEngagementChat(engagementId) {
   }, [])
 
   useEffect(() => {
-    if (!engagementId) return
+    if (!id) return
     let cancelled = false
+    seenIds.current = new Set()
+    setMessages([])
     setLoading(true)
-    messagesApi
-      .list(engagementId)
+    setError('')
+    const urls = buildUrls(id)
+    urls
+      .rest()
       .then((page) => {
         if (cancelled) return
-        const ordered = [...page.data].reverse() // API is newest-first; render oldest -> newest
+        const ordered = [...page.data].reverse()
         ordered.forEach((m) => seenIds.current.add(m.message_id))
         setMessages(ordered)
         setLoading(false)
-        messagesApi.markRead(engagementId, { all: true }).catch(() => {})
+        urls.markRead().then(() => {
+          window.dispatchEvent(new Event('notifications:refresh'))
+        }).catch(() => {})
       })
       .catch((err) => {
         if (cancelled) return
         setError(err.body?.error?.message ?? 'Could not load messages.')
         setLoading(false)
       })
-    return () => {
-      cancelled = true
-    }
-  }, [engagementId])
+    return () => { cancelled = true }
+  }, [id])
 
   useEffect(() => {
-    if (!engagementId) return
+    if (!id) return
     unmounting.current = false
+    const urls = buildUrls(id)
 
     function connect() {
-      const socket = new WebSocket(wsUrlFor(engagementId))
+      const socket = new WebSocket(urls.ws)
       socketRef.current = socket
-      socket.onopen = () => {
-        reconnectAttempt.current = 0
-      }
+      socket.onopen = () => { reconnectAttempt.current = 0 }
       socket.onmessage = (event) => {
-        try {
-          upsert(JSON.parse(event.data))
-        } catch {
-          // ignore malformed frame
-        }
+        try { upsert(JSON.parse(event.data)) } catch { /* ignore malformed frame */ }
       }
       socket.onclose = (event) => {
         if (unmounting.current) return
-        // Permanent errors (bad token, not a participant, engagement not found)
-        // must not trigger reconnect — the problem won't resolve on its own.
         if (event.code >= 4001 && event.code <= 4004) return
         const attempt = reconnectAttempt.current + 1
         reconnectAttempt.current = attempt
@@ -92,19 +91,16 @@ export function useEngagementChat(engagementId) {
       clearTimeout(reconnectTimer.current)
       socketRef.current?.close()
     }
-  }, [engagementId, upsert])
+  }, [id, upsert])
 
   const sendMessage = useCallback(
-    async (content, opts = {}) => {
-      const created = await messagesApi.send(engagementId, {
-        message_type: opts.messageType ?? 'text',
-        content,
-        document_id: opts.documentId,
-      })
-      upsert(created) // don't wait for the WS echo -- the REST response is authoritative
+    async (content) => {
+      const urls = buildUrls(id)
+      const created = await urls.send(content)
+      upsert(created)
       return created
     },
-    [engagementId, upsert]
+    [id, upsert]
   )
 
   return { messages, loading, error, sendMessage }

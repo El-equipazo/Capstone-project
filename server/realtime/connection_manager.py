@@ -1,11 +1,10 @@
 """
-connection_manager — in-memory registry of open engagement chat sockets.
+connection_manager — in-memory registry of open chat sockets.
 
 Single-process, no Redis/pub-sub: correct scope for this deployment (one
-uvicorn worker, no multi-process fan-out). Each engagement_id maps to the set
+uvicorn worker, no multi-process fan-out). Each thread_id maps to the set
 of currently-connected websockets for it; broadcast() pushes a JSON payload
-to all of them. This is a pure push channel -- REST is the only write path
-(see server/controllers/messages.py), so nothing here ever reads from the DB.
+to all of them. This is a pure push channel — REST is the only write path.
 
 Dev note: uvicorn --reload spawns a fresh process on every file change, which
 resets this module-level singleton and silently drops all open sockets.
@@ -55,4 +54,4 @@ class ConnectionManager:
             self.disconnect(engagement_id, ws)
 
 
-manager = ConnectionManager()
+thread_manager = ConnectionManager()

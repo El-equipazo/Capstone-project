@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
@@ -39,10 +40,23 @@ function profileToForm(profile) {
 export default function ExpertDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { openChat } = useChat_context()
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'overview')
+
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    setTab(t || 'overview')
+    // Handle notification deep-links: ?open_thread=X (new) or ?tab=messages&thread=X (legacy)
+    const threadId = searchParams.get('open_thread') || searchParams.get('thread')
+    if (threadId) {
+      openChat(parseInt(threadId, 10), 'Conversation')
+      navigate('/dashboard', { replace: true })
+    }
+  }, [searchParams, openChat, navigate])
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -562,10 +576,10 @@ export default function ExpertDashboard() {
         </div>
 
         <div className="dash-tabs">
-          <button className={`dash-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>
+          <button className={`dash-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => navigate('/dashboard')}>
             Overview
           </button>
-          <button className={`dash-tab ${tab === 'profile' ? 'on' : ''}`} onClick={() => setTab('profile')}>
+          <button className={`dash-tab ${tab === 'profile' ? 'on' : ''}`} onClick={() => navigate('/dashboard?tab=profile')}>
             Profile
           </button>
         </div>

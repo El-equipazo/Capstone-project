@@ -2,7 +2,7 @@
 // All callers use the same function signatures as the old localStorage mock,
 // so no page components needed to change.
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const SESSION_KEY = 'qc_session'
 
 class ApiError extends Error {
@@ -46,6 +46,12 @@ async function apiFetch(path, { method = 'GET', body, headers = {} } = {}) {
 
   if (!res.ok) {
     const err = data?.error ?? {}
+    // A 401 with a stored session means the token has expired — clear it so the
+    // user is prompted to log in again instead of looping on stale credentials.
+    if (res.status === 401 && getStoredSession()) {
+      localStorage.removeItem(SESSION_KEY)
+      window.dispatchEvent(new Event('auth:session-expired'))
+    }
     throw new ApiError(res.status, err.code ?? 'ERROR', err.message ?? res.statusText)
   }
   return data
@@ -311,37 +317,6 @@ export const engagementsApi = {
   },
 }
 
-// ---------------- Messages -----------------------------------------------
-
-export const messagesApi = {
-  async list(engagementId, { unreadOnly, page, limit } = {}) {
-    const params = new URLSearchParams()
-    if (unreadOnly) params.set('unread', 'true')
-    if (page) params.set('page', page)
-    if (limit) params.set('limit', limit)
-    const qs = params.toString() ? `?${params}` : ''
-    // { data, pagination } envelope -- return it whole (not just .data)
-    // since the chat hook needs the pagination info too.
-    return await apiFetch(`/engagements/${engagementId}/messages${qs}`, { headers: authHeader() })
-  },
-
-  async send(engagementId, { message_type = 'text', content, document_id } = {}) {
-    return await apiFetch(`/engagements/${engagementId}/messages`, {
-      method: 'POST',
-      body: { message_type, content, ...(document_id ? { document_id } : {}) },
-      headers: authHeader(),
-    })
-  },
-
-  async markRead(engagementId, { message_ids, all } = {}) {
-    return await apiFetch(`/engagements/${engagementId}/messages/read`, {
-      method: 'POST',
-      body: all ? { all: true } : { message_ids },
-      headers: authHeader(),
-    })
-  },
-}
-
 // ---------------- Notifications -------------------------------------------
 
 export const notificationsApi = {
@@ -464,5 +439,56 @@ export const matchingApi = {
       body: { need_description, limit },
       headers: authHeader(),
     })
+  },
+}
+
+// ---------------- Threads (pre-connection inquiry chat) -----------------------
+
+export const threadsApi = {
+  async getOrCreate(expertProfileId) {
+    return await apiFetch('/threads', {
+      method: 'POST',
+      body: { expert_profile_id: expertProfileId },
+      headers: authHeader(),
+    })
+  },
+
+  async list() {
+    return await apiFetch('/threads', { headers: authHeader() })
+  },
+
+  async messages(threadId, { page = 1, limit = 20 } = {}) {
+    return await apiFetch(`/threads/${threadId}/messages?page=${page}&limit=${limit}`, {
+      headers: authHeader(),
+    })
+  },
+
+  async send(threadId, content) {
+    return await apiFetch(`/threads/${threadId}/messages`, {
+      method: 'POST',
+      body: { message_type: 'text', content },
+      headers: authHeader(),
+    })
+  },
+
+  async markRead(threadId) {
+    return await apiFetch(`/threads/${threadId}/messages/read`, {
+      method: 'POST',
+      body: { all: true },
+      headers: authHeader(),
+    })
+  },
+
+  async getOrCreateForEngagement(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/thread`, { headers: authHeader() })
+  },
+
+  wsUrl(threadId) {
+    const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    const wsBase = base.startsWith('/')
+      ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}${base}`
+      : base.replace(/^http/, 'ws')
+    const token = authApi.getSession()?.access_token ?? ''
+    return `${wsBase}/threads/${threadId}/ws?token=${encodeURIComponent(token)}`
   },
 }

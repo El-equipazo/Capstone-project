@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { notificationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useChat_context } from '../context/ChatContext'
 
 // First interval-polling precedent in this codebase (everything else is
 // on-demand fetch or the chat websocket) -- notifications aren't
@@ -12,6 +13,7 @@ const POLL_MS = 25000
 
 export default function NotificationBell() {
   const { user } = useAuth()
+  const { openChat, conversations } = useChat_context()
   const [count, setCount] = useState(0)
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
@@ -33,9 +35,11 @@ export default function NotificationBell() {
     }
     poll()
     const id = setInterval(poll, POLL_MS)
+    window.addEventListener('notifications:refresh', poll)
     return () => {
       cancelled = true
       clearInterval(id)
+      window.removeEventListener('notifications:refresh', poll)
     }
   }, [user])
 
@@ -61,6 +65,7 @@ export default function NotificationBell() {
     notificationsApi.markRead(notificationId).catch(() => {})
     setItems((prev) => prev.filter((n) => n.notification_id !== notificationId))
     setCount((prev) => Math.max(0, prev - 1))
+    setOpen(false)
   }
 
   if (!user) return null
@@ -97,6 +102,26 @@ export default function NotificationBell() {
                 {n.body && <div style={{ marginTop: 2, color: 'var(--muted)' }}>{n.body}</div>}
               </>
             )
+
+            const threadIdStr = n.action_url
+              ? new URLSearchParams(n.action_url.split('?')[1] ?? '').get('open_thread')
+              : null
+
+            if (threadIdStr) {
+              const threadId = parseInt(threadIdStr, 10)
+              const title = conversations.find((c) => c.id === threadId)?.title ?? 'Chat'
+              return (
+                <button
+                  key={n.notification_id}
+                  className="notif-row"
+                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+                  onClick={() => { handleRowClick(n.notification_id); openChat(threadId, title) }}
+                >
+                  {content}
+                </button>
+              )
+            }
+
             return n.action_url ? (
               <Link
                 key={n.notification_id}
