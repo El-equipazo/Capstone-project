@@ -73,6 +73,7 @@ export default function ExpertDashboard() {
   const [verifyDocUrls, setVerifyDocUrls] = useState([])
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [verifications, setVerifications] = useState([])
   const [submittingVerification, setSubmittingVerification] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_dismissed_${user?.user_id}`) || '[]')) }
@@ -100,7 +101,17 @@ export default function ExpertDashboard() {
       setConnections(conns)
       setEngagements(engs)
     })
+    verificationsApi.list().then(setVerifications).catch(() => {})
   }, [expertId])
+
+  // Most recent professional_credential verification for one credential, if any —
+  // list_for_user() already orders by created_at DESC, so [0] is the latest
+  // (a credential can be resubmitted after a rejection).
+  function latestVerificationFor(credentialId) {
+    return verifications.find(
+      (v) => v.verification_type === 'professional_credential' && v.related_credential_id === credentialId
+    )
+  }
 
   if (!user) return null
 
@@ -270,6 +281,7 @@ export default function ExpertDashboard() {
           c.credential_id === credentialId ? { ...c, verification_status: 'pending' } : c
         ),
       }))
+      verificationsApi.list().then(setVerifications).catch(() => {})
       setVerifyFormFor(null)
       setVerifyDocUrls([])
     } catch (err) {
@@ -1052,6 +1064,26 @@ export default function ExpertDashboard() {
                         </button>
                       </div>
                     </div>
+
+                    {(() => {
+                      const latest = latestVerificationFor(c.credential_id)
+                      if (!latest) return null
+                      if (latest.status === 'approved' && latest.admin_notes) {
+                        return (
+                          <p className="lead" style={{ fontSize: 12, marginTop: 4, color: 'var(--acc)' }}>
+                            Approved: {latest.admin_notes}
+                          </p>
+                        )
+                      }
+                      if (latest.status === 'rejected' && latest.rejection_reason) {
+                        return (
+                          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--err, #e53)' }}>
+                            Rejected: {latest.rejection_reason}
+                          </p>
+                        )
+                      }
+                      return null
+                    })()}
 
                     {verifyFormFor === c.credential_id && (
                       <div style={{ marginTop: 10, padding: 14, background: 'var(--bg)', borderRadius: 8 }}>
