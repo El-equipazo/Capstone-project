@@ -10,3 +10,6 @@ dist-ssr
 __pycache__/
 *.pyc
 *.pyo
+
+# Local file uploads (server/storage.py) — runtime artifacts, not source
+uploads/

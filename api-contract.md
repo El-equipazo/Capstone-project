@@ -837,6 +837,30 @@ Errors: `422` engagement not `completed` · `409` this side already reviewed · 
 
 `GET /admin/reviews?is_flagged=true` · `PATCH /admin/reviews/:reviewId` (`{ "is_flagged": false }` or `{ "is_public": false }`) — **Auth: admin**
 
+### File uploads
+
+#### POST /uploads
+
+`multipart/form-data`: `file` — **Auth: any authenticated user**
+
+Generic upload, not tied to any one feature — currently used to attach
+documents to a `professional_credential` verification request (below), but
+not scoped to that. Backed by local disk storage (a real deployment would
+use S3/GCS with signed upload URLs instead). Allowed types: PDF, PNG, JPEG,
+WEBP. Max size: 10MB.
+
+Response `200`:
+
+```json
+{ "url": "http://localhost:8000/uploads/3f2a1c9e8b7d4f6a9c2e1b3d.pdf" }
+```
+
+The returned URL is absolute (not browser-relative) since it may also be
+fetched server-side (e.g. by the AI credential review feature), not only
+opened in a browser tab.
+
+Errors: `400` `UNSUPPORTED_TYPE` (not PDF/PNG/JPEG/WEBP) · `400` `FILE_TOO_LARGE`.
+
 ### Verification (`verification_records`)
 
 Verification is unified here — there is no separate per-credential verification toggle. A credential counts as verified when it has a linked `verification_records` row approved by an admin.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi } from '../api/client'
+import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi, uploadsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ExpertCard from '../components/ExpertCard'
 import TagInput from '../components/organization/TagInput'
@@ -71,6 +71,8 @@ export default function ExpertDashboard() {
   const [credError, setCredError] = useState('')
   const [verifyFormFor, setVerifyFormFor] = useState(null)
   const [verifyDocUrls, setVerifyDocUrls] = useState([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [submittingVerification, setSubmittingVerification] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_dismissed_${user?.user_id}`) || '[]')) }
@@ -274,6 +276,19 @@ export default function ExpertDashboard() {
       setCredError(err.body?.error?.message ?? 'Could not submit verification request.')
     } finally {
       setSubmittingVerification(false)
+    }
+  }
+
+  async function handleUploadDocument(file) {
+    setUploadError('')
+    setUploadingDoc(true)
+    try {
+      const { url } = await uploadsApi.upload(file)
+      setVerifyDocUrls((prev) => [...prev, url])
+    } catch (err) {
+      setUploadError(err.body?.error?.message ?? 'Could not upload file. Please try again.')
+    } finally {
+      setUploadingDoc(false)
     }
   }
 
@@ -1046,6 +1061,25 @@ export default function ExpertDashboard() {
                           onChange={setVerifyDocUrls}
                           placeholder="https://... (link to a certificate image or PDF)"
                         />
+                        <div style={{ marginTop: 8 }}>
+                          <label className="btn btn-sm" style={{ cursor: 'pointer', display: 'inline-block' }}>
+                            {uploadingDoc ? 'Uploading…' : 'Upload from your computer'}
+                            <input
+                              type="file"
+                              accept="application/pdf,image/png,image/jpeg,image/webp"
+                              style={{ display: 'none' }}
+                              disabled={uploadingDoc}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) handleUploadDocument(file)
+                                e.target.value = ''
+                              }}
+                            />
+                          </label>
+                          {uploadError && (
+                            <p style={{ fontSize: 12, color: 'var(--err, #e53)', marginTop: 6 }}>{uploadError}</p>
+                          )}
+                        </div>
                         <button
                           className="btn btn-acc btn-sm"
                           style={{ marginTop: 10 }}

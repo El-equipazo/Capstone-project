@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.config import settings
@@ -16,9 +17,10 @@ from server.models.errors import (
     TransitionError,
     ValidationError,
 )
+from server.storage import UPLOAD_DIR
 from server.controllers import (
     admin, auth, connections, engagements, experts, messages, notifications,
-    organizations, verifications,
+    organizations, uploads, verifications,
 )
 
 
@@ -42,6 +44,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve uploaded files back out (StaticFiles requires the directory to exist
+# at mount time — save_upload() also creates it lazily on first write).
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # --- Controller HTTPExceptions → contract error envelope (§1.1) ---
@@ -133,3 +140,4 @@ app.include_router(engagements.router, prefix="/api/v1")
 app.include_router(messages.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(verifications.router, prefix="/api/v1")
+app.include_router(uploads.router, prefix="/api/v1")
