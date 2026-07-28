@@ -12,6 +12,8 @@
   --risk-light: #fbeeea;
   --good: #3f7145;
   --good-light: #eaf1e9;
+  --danger: #dc2626;
+  --danger-light: #fdecec;
   --radius: 10px;
   --radius-lg: 14px;
   --shadow: 0 1px 3px rgba(20, 22, 30, 0.06), 0 1px 2px rgba(20, 22, 30, 0.08);
@@ -277,6 +279,49 @@ button, input, select, textarea {
   background: #fbf6e8;
   color: #8a6d1d;
   border-color: #e3d29c;
+}
+
+.badge.approved {
+  background: var(--good-light);
+  color: var(--good);
+  border-color: #b9d0bb;
+}
+
+.badge.rejected,
+.badge.ai-reject {
+  background: var(--danger-light);
+  color: var(--danger);
+  border-color: #f3c6c6;
+}
+
+.badge.ai-approve {
+  background: var(--good-light);
+  color: var(--good);
+  border-color: #b9d0bb;
+}
+
+.badge.ai-needs_more_info {
+  background: #fbf6e8;
+  color: #8a6d1d;
+  border-color: #e3d29c;
+}
+
+.badge.role-expert {
+  background: var(--good-light);
+  color: var(--good);
+  border-color: #b9d0bb;
+}
+
+.badge.role-organization {
+  background: var(--acc-light);
+  color: var(--acc);
+  border-color: #c3d3e6;
+}
+
+.badge.role-admin {
+  background: #f1eafb;
+  color: #6b3fa0;
+  border-color: #d9c7f0;
 }
 
 .tag {
@@ -719,6 +764,63 @@ button, input, select, textarea {
   justify-content: center;
   font-weight: 700;
   color: var(--acc);
+  flex: none;
+}
+
+.avatar.avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+/* ---------- Admin data tables ---------- */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table thead th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--fill2);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-table thead th:first-child { border-top-left-radius: var(--radius); }
+.admin-table thead th:last-child { border-top-right-radius: var(--radius); }
+
+.admin-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:hover > td {
+  background: var(--fill2);
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr.expanded-detail:hover > td {
+  background: transparent;
+}
+
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
   flex: none;
 }
 
