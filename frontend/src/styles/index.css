@@ -14,6 +14,9 @@
   --good-light: #eaf1e9;
   --danger: #dc2626;
   --danger-light: #fdecec;
+  --pending: #8a6d1d;
+  --pending-light: #fbf6e8;
+  --pending-border: #e3d29c;
   --cat-1: #1f3a5f;
   --cat-2: #3f6b74;
   --cat-3: #7a5980;
@@ -281,9 +284,9 @@ button, input, select, textarea {
 }
 
 .badge.pending {
-  background: #fbf6e8;
-  color: #8a6d1d;
-  border-color: #e3d29c;
+  background: var(--pending-light);
+  color: var(--pending);
+  border-color: var(--pending-border);
 }
 
 .badge.approved {
@@ -306,9 +309,9 @@ button, input, select, textarea {
 }
 
 .badge.ai-needs_more_info {
-  background: #fbf6e8;
-  color: #8a6d1d;
-  border-color: #e3d29c;
+  background: var(--pending-light);
+  color: var(--pending);
+  border-color: var(--pending-border);
 }
 
 .badge.role-expert {
@@ -816,6 +819,78 @@ button, input, select, textarea {
 
 .admin-table tbody tr.expanded-detail:hover > td {
   background: transparent;
+}
+
+.admin-table thead th.center,
+.admin-table tbody td.center {
+  text-align: center;
+}
+
+.admin-table tbody tr.attn td {
+  background: rgba(138, 109, 29, 0.05);
+}
+
+.admin-table tbody tr.attn.danger td {
+  background: rgba(220, 38, 38, 0.045);
+}
+
+.identity-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-ring {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  flex: none;
+}
+
+.avatar-ring.good { box-shadow: 0 0 0 2px var(--good); }
+.avatar-ring.pending { box-shadow: 0 0 0 2px var(--pending-border); }
+.avatar-ring.danger { box-shadow: 0 0 0 2px var(--danger); }
+.avatar-ring .avatar { width: 100%; height: 100%; font-size: 11px; }
+
+.id-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.id-text .primary {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.id-text .secondary {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.submission-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.actions-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.submitted-date {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .btn-icon {

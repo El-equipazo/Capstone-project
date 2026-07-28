@@ -357,37 +357,42 @@ export default function AdminDashboard() {
                   <thead>
                     <tr>
                       <th>Expert</th>
-                      <th>Email</th>
                       <th>Headline</th>
                       <th>Availability</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      <th className="center">Status</th>
+                      <th className="center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredExperts.map((e) => (
-                      <tr key={e.expert_profile_id}>
+                    {filteredExperts.map((e) => {
+                      const rowTone = !e.is_active ? 'danger' : !e.is_verified ? 'pending' : null
+                      return (
+                      <tr key={e.expert_profile_id} className={rowTone === 'danger' ? 'attn danger' : rowTone === 'pending' ? 'attn' : ''}>
                         <td>
-                          <Link to={`/experts/${e.expert_profile_id}`} className="row gap-8" style={{ color: 'inherit', textDecoration: 'none' }}>
-                            <span className="avatar avatar-sm">{initials(`${e.first_name} ${e.last_name}`)}</span>
-                            <span style={{ fontWeight: 600 }}>{e.first_name} {e.last_name}</span>
+                          <Link to={`/experts/${e.expert_profile_id}`} className="identity-cell" style={{ color: 'inherit', textDecoration: 'none' }}>
+                            <span className={`avatar-ring ${e.is_verified ? 'good' : 'pending'}`}>
+                              <span className="avatar">{initials(`${e.first_name} ${e.last_name}`)}</span>
+                            </span>
+                            <span className="id-text">
+                              <span className="primary">{e.first_name} {e.last_name}</span>
+                              <span className="secondary">{e.email}</span>
+                            </span>
                           </Link>
                         </td>
-                        <td style={{ color: 'var(--muted)' }}>{e.email}</td>
                         <td style={{ color: 'var(--muted)' }}>{e.headline ?? '—'}</td>
                         <td>
                           <span className="tag">{AVAILABILITY_LABEL[e.availability_status] ?? e.availability_status}</span>
                         </td>
-                        <td>
-                          <div className="row gap-6 wrap">
+                        <td className="center">
+                          <div className="row gap-6 wrap" style={{ justifyContent: 'center' }}>
                             <span className={`badge ${e.is_verified ? 'approved' : 'pending'}`}>
                               {e.is_verified ? '✓ Verified' : labelize(e.verification_status ?? 'unsubmitted')}
                             </span>
                             {!e.is_active && <span className="badge rejected">deactivated</span>}
                           </div>
                         </td>
-                        <td>
-                          <div className="row gap-8">
+                        <td className="center">
+                          <div className="actions-row">
                             <button
                               className={`btn btn-sm ${e.is_verified ? 'btn-ghost' : 'btn-acc'}`}
                               disabled={verifyingExpert[e.expert_profile_id]}
@@ -407,7 +412,8 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -461,34 +467,39 @@ export default function AdminDashboard() {
                   <thead>
                     <tr>
                       <th>Organization</th>
-                      <th>Email</th>
                       <th>Industry</th>
                       <th>Company size</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      <th className="center">Status</th>
+                      <th className="center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrgs.map((o) => (
-                      <tr key={o.org_profile_id}>
+                    {filteredOrgs.map((o) => {
+                      const rowTone = !o.is_active ? 'danger' : !o.is_verified ? 'pending' : null
+                      return (
+                      <tr key={o.org_profile_id} className={rowTone === 'danger' ? 'attn danger' : rowTone === 'pending' ? 'attn' : ''}>
                         <td>
-                          <div className="row gap-8">
-                            <span className="avatar avatar-sm">{initials(o.org_name)}</span>
-                            <span style={{ fontWeight: 600 }}>{o.org_name}</span>
+                          <div className="identity-cell">
+                            <span className={`avatar-ring ${o.is_verified ? 'good' : 'pending'}`}>
+                              <span className="avatar">{initials(o.org_name)}</span>
+                            </span>
+                            <span className="id-text">
+                              <span className="primary">{o.org_name}</span>
+                              <span className="secondary">{o.email}</span>
+                            </span>
                           </div>
                         </td>
-                        <td style={{ color: 'var(--muted)' }}>{o.email}</td>
                         <td style={{ color: 'var(--muted)' }}>{o.sub_sector || '—'}</td>
                         <td>{o.employee_count_range ? <span className="tag">{o.employee_count_range}</span> : '—'}</td>
-                        <td>
-                          <div className="row gap-6 wrap">
+                        <td className="center">
+                          <div className="row gap-6 wrap" style={{ justifyContent: 'center' }}>
                             <span className={`badge ${o.is_verified ? 'approved' : 'pending'}`}>
                               {o.is_verified ? '✓ Verified' : 'Pending'}
                             </span>
                             {!o.is_active && <span className="badge rejected">deactivated</span>}
                           </div>
                         </td>
-                        <td>
+                        <td className="center">
                           <button
                             className="btn btn-ghost btn-sm"
                             disabled={deactivatingOrg[o.user_id]}
@@ -499,7 +510,8 @@ export default function AdminDashboard() {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -552,14 +564,11 @@ export default function AdminDashboard() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th></th>
-                      <th>User</th>
-                      <th>Role</th>
-                      <th>Type</th>
-                      <th>Credential</th>
-                      <th>Status</th>
-                      <th>Submitted</th>
-                      <th>Actions</th>
+                      <th className="center"></th>
+                      <th>Submitted by</th>
+                      <th>Submission</th>
+                      <th className="center">Status</th>
+                      <th className="center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -568,10 +577,11 @@ export default function AdminDashboard() {
                       const inFlight = deciding[v.verification_id]
                       const isExpanded = expandedVerification === v.verification_id
                       const isCredential = v.verification_type === 'professional_credential'
+                      const ringTone = v.status === 'approved' ? 'good' : v.status === 'rejected' ? 'danger' : 'pending'
                       return (
                         <Fragment key={v.verification_id}>
-                          <tr>
-                            <td>
+                          <tr className={v.status === 'pending' ? 'attn' : ''}>
+                            <td className="center">
                               <button
                                 className="btn btn-ghost btn-icon"
                                 onClick={() => setExpandedVerification(isExpanded ? null : v.verification_id)}
@@ -581,25 +591,33 @@ export default function AdminDashboard() {
                               </button>
                             </td>
                             <td>
-                              <div className="row gap-8">
-                                <span className="avatar avatar-sm">{initials(v.user_email)}</span>
-                                <span style={{ fontWeight: 600 }}>{v.user_email}</span>
+                              <div className="identity-cell">
+                                <span className={`avatar-ring ${ringTone}`}>
+                                  <span className="avatar">{initials(v.user_email)}</span>
+                                </span>
+                                <span className="id-text">
+                                  <span className="primary">{v.user_email}</span>
+                                  <span className="secondary"><span className={`badge role-${v.user_role}`}>{v.user_role}</span></span>
+                                </span>
                               </div>
                             </td>
-                            <td><span className={`badge role-${v.user_role}`}>{v.user_role}</span></td>
-                            <td><span className="tag">{labelize(v.verification_type)}</span></td>
-                            <td style={{ color: 'var(--muted)' }}>{v.credential_name ?? '—'}</td>
                             <td>
+                              <div className="submission-cell">
+                                <span className="tag">{labelize(v.verification_type)}</span>
+                                {v.credential_name && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{v.credential_name}</span>}
+                              </div>
+                            </td>
+                            <td className="center">
                               {v.status === 'pending' ? (
                                 <span className="badge pending">pending</span>
                               ) : (
                                 <span className={`badge ${v.status === 'approved' ? 'approved' : 'rejected'}`}>{v.status}</span>
                               )}
+                              <div className="submitted-date" style={{ marginTop: 4 }}>{new Date(v.created_at).toLocaleDateString()}</div>
                             </td>
-                            <td style={{ color: 'var(--muted)' }}>{new Date(v.created_at).toLocaleDateString()}</td>
-                            <td>
+                            <td className="center">
                               {v.status === 'pending' ? (
-                                <div className="row gap-6">
+                                <div className="actions-row">
                                   <button
                                     className="btn btn-icon"
                                     style={{ background: 'var(--good)', color: '#fff' }}
@@ -637,7 +655,7 @@ export default function AdminDashboard() {
 
                           {isExpanded && (
                             <tr className="expanded-detail">
-                              <td colSpan={8} style={{ background: 'var(--bg)' }}>
+                              <td colSpan={5} style={{ background: 'var(--bg)' }}>
                                 <div style={{ padding: '4px 10px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                                   {isCredential && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
