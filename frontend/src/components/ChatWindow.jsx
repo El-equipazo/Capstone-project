@@ -79,6 +79,17 @@ function ConversationPane({ active, onSent }) {
 export default function ChatWindow() {
   const { isOpen, isMinimized, active, conversations, totalUnread, openChat, minimize, maximize, closeChat, markActiveRead, loadConversations } = useChat_context()
   const { user } = useAuth()
+  const prevUnread = useRef(0)
+  const [highlighted, setHighlighted] = useState(false)
+
+  useEffect(() => {
+    if (totalUnread > prevUnread.current && (!isOpen || isMinimized)) {
+      setHighlighted(true)
+      const t = setTimeout(() => setHighlighted(false), 2000)
+      return () => clearTimeout(t)
+    }
+    prevUnread.current = totalUnread
+  }, [totalUnread, isOpen, isMinimized])
 
   if (!user) return null
 
@@ -89,31 +100,41 @@ export default function ChatWindow() {
     // fall through to full-window render below
   } else {
     return (
-      <div
-        onClick={maximize}
-        style={{
-          position: 'fixed', bottom: 0, right: 24,
-          minWidth: 280,
-          background: 'var(--bg)',
-          border: '2px solid var(--acc)',
-          borderBottom: 'none',
-          borderRadius: '8px 8px 0 0',
-          padding: '10px 18px', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 10,
-          boxShadow: '0 -4px 18px rgba(0,0,0,0.18)',
-          zIndex: 1000,
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
-          {active?.title || 'Messages'}
-        </span>
-        {totalUnread > 0 && (
-          <span className="badge" style={{ fontSize: 11, padding: '2px 7px', background: 'var(--acc)', color: '#fff', borderRadius: 99 }}>
-            {totalUnread}
+      <>
+        <style>{`
+          @keyframes chat-pulse {
+            0%   { box-shadow: 0 -4px 18px rgba(0,0,0,0.18); border-color: var(--acc); }
+            40%  { box-shadow: 0 -6px 28px rgba(var(--acc-rgb, 99,102,241), 0.6); border-color: var(--acc); }
+            100% { box-shadow: 0 -4px 18px rgba(0,0,0,0.18); border-color: var(--acc); }
+          }
+        `}</style>
+        <div
+          onClick={isMinimized ? maximize : () => { loadConversations(); maximize() }}
+          style={{
+            position: 'fixed', bottom: 0, right: 24,
+            minWidth: 280,
+            background: 'var(--bg)',
+            border: `2px solid var(--acc)`,
+            borderBottom: 'none',
+            borderRadius: '8px 8px 0 0',
+            padding: '10px 18px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 -4px 18px rgba(0,0,0,0.18)',
+            zIndex: 1000,
+            animation: highlighted ? 'chat-pulse 0.6s ease-in-out 3' : 'none',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
+            {active?.title || 'Messages'}
           </span>
-        )}
-        <span style={{ fontSize: 16, opacity: 0.4, lineHeight: 1 }}>↑</span>
-      </div>
+          {totalUnread > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', background: 'var(--acc)', color: '#fff', borderRadius: 99 }}>
+              {totalUnread}
+            </span>
+          )}
+          <span style={{ fontSize: 16, opacity: 0.4, lineHeight: 1 }}>↑</span>
+        </div>
+      </>
     )
   }
 
@@ -153,19 +174,15 @@ export default function ChatWindow() {
                 display: 'block', width: '100%', textAlign: 'left',
                 padding: '10px 14px', border: 'none',
                 borderBottom: '1px solid rgba(128,128,128,0.3)',
+                borderLeft: c.unread_count > 0 ? '3px solid var(--acc)' : '3px solid transparent',
                 background: active?.type === c.type && active?.id === c.id ? 'var(--srf)' : 'transparent',
                 cursor: 'pointer',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{ fontWeight: c.unread_count > 0 ? 700 : 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
                   {c.title}
                 </span>
-                {c.unread_count > 0 && (
-                  <span className="badge" style={{ fontSize: 10, padding: '2px 5px', background: 'var(--acc)', color: '#fff', flexShrink: 0 }}>
-                    {c.unread_count}
-                  </span>
-                )}
               </div>
               <span style={{ fontSize: 11, opacity: 0.5 }}>{c.type === 'thread' ? 'Inquiry' : 'Engagement'}</span>
             </button>

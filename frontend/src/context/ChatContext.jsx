@@ -23,24 +23,27 @@ export function ChatProvider({ children }) {
       const engConvs = engs.map((e) => ({
         type: 'engagement',
         id: e.engagement_id,
-        title: e.title || (e.org_name ?? e.expert_first_name
-          ? (e.org_name || `${e.expert_first_name} ${e.expert_last_name}`)
-          : 'Engagement'),
-        subtitle: e.org_name || `${e.expert_first_name} ${e.expert_last_name}`,
+        title: e.title || e.org_name || `${e.expert_first_name} ${e.expert_last_name}` || 'Engagement',
         unread_count: e.unread_count ?? 0,
         last_activity: e.updated_at,
+        org_user_id: e.org_user_id,
+        expert_user_id: e.expert_user_id,
       }))
 
-      const threadConvs = threads.map((t) => ({
-        type: 'thread',
-        id: t.thread_id,
-        title: user.role === 'organization'
-          ? `${t.expert_first_name} ${t.expert_last_name}`
-          : (t.org_name || 'Organization'),
-        subtitle: user.role === 'organization' ? 'Inquiry' : 'Inquiry',
-        unread_count: t.unread_count ?? 0,
-        last_activity: t.last_message_at || t.created_at,
-      }))
+      // Suppress threads that already have an engagement — one chat per pair.
+      const engPairs = new Set(engs.map((e) => `${e.org_user_id},${e.expert_user_id}`))
+
+      const threadConvs = threads
+        .filter((t) => !engPairs.has(`${t.org_user_id},${t.expert_user_id}`))
+        .map((t) => ({
+          type: 'thread',
+          id: t.thread_id,
+          title: user.role === 'organization'
+            ? `${t.expert_first_name} ${t.expert_last_name}`
+            : (t.org_name || 'Organization'),
+          unread_count: t.unread_count ?? 0,
+          last_activity: t.last_message_at || t.created_at,
+        }))
 
       const all = [...engConvs, ...threadConvs].sort(
         (a, b) => new Date(b.last_activity) - new Date(a.last_activity)

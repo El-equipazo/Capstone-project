@@ -56,7 +56,9 @@ export function useChat(type, id) {
         ordered.forEach((m) => seenIds.current.add(m.message_id))
         setMessages(ordered)
         setLoading(false)
-        urls.markRead().catch(() => {})
+        urls.markRead().then(() => {
+          window.dispatchEvent(new Event('notifications:refresh'))
+        }).catch(() => {})
       })
       .catch((err) => {
         if (cancelled) return

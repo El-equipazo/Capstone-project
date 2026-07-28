@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { connectionsApi, expertsApi, threadsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
@@ -18,6 +18,7 @@ export default function ExpertProfile() {
 
   const { user } = useAuth()
   const { openChat } = useChat_context()
+  const [searchParams] = useSearchParams()
   const [askError, setAskError] = useState('')
   const [askLoading, setAskLoading] = useState(false)
 
@@ -33,6 +34,13 @@ export default function ExpertProfile() {
       setAskLoading(false)
     }
   }
+
+  // Notification deep-link: /experts/:id?open_thread=X opens the chat immediately.
+  useEffect(() => {
+    const threadId = searchParams.get('open_thread')
+    if (!threadId || !expert) return
+    openChat('thread', parseInt(threadId, 10), `${expert.first_name} ${expert.last_name}`)
+  }, [searchParams, expert, openChat])
 
   useEffect(() => {
     setExpert(null)

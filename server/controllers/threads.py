@@ -107,7 +107,7 @@ async def send_thread_message(
     else:
         expert = await expert_model.find_by_user(thread["expert_user_id"])
         expert_profile_id = expert["expert_profile_id"] if expert else ""
-        action_url = f"/experts/{expert_profile_id}"  # notifying the org
+        action_url = f"/experts/{expert_profile_id}?open_thread={thread_id}"  # notifying the org
 
     await notification_model.create(
         other_user_id, "message_received",
@@ -132,6 +132,9 @@ async def mark_thread_messages_read(
     updated = await message_model.mark_read_for_thread(
         thread_id, current_user["user_id"],
         message_ids=body.message_ids, all=body.all,
+    )
+    await notification_model.mark_read_by_action_url(
+        current_user["user_id"], f"open_thread={thread_id}"
     )
     return {"updated": updated}
 

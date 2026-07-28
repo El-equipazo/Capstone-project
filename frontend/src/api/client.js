@@ -50,6 +50,7 @@ async function apiFetch(path, { method = 'GET', body, headers = {} } = {}) {
     // user is prompted to log in again instead of looping on stale credentials.
     if (res.status === 401 && getStoredSession()) {
       localStorage.removeItem(SESSION_KEY)
+      window.dispatchEvent(new Event('auth:session-expired'))
     }
     throw new ApiError(res.status, err.code ?? 'ERROR', err.message ?? res.statusText)
   }

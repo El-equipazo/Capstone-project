@@ -33,9 +33,11 @@ export default function NotificationBell() {
     }
     poll()
     const id = setInterval(poll, POLL_MS)
+    window.addEventListener('notifications:refresh', poll)
     return () => {
       cancelled = true
       clearInterval(id)
+      window.removeEventListener('notifications:refresh', poll)
     }
   }, [user])
 

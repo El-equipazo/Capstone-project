@@ -133,6 +133,9 @@ async def mark_messages_read(
         engagement_id, current_user["user_id"],
         message_ids=body.message_ids, all=body.all,
     )
+    await notification_model.mark_read_by_action_url(
+        current_user["user_id"], f"/engagements/{engagement_id}"
+    )
     return {"updated": updated}
 
 

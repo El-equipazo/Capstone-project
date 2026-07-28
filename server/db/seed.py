@@ -365,12 +365,24 @@ async def seed():
             )
         """)
 
+        await conn.execute("""
+            CREATE TABLE chat_threads (
+                thread_id      SERIAL PRIMARY KEY,
+                org_user_id    INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                expert_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                created_at     TIMESTAMP DEFAULT NOW(),
+                UNIQUE (org_user_id, expert_user_id)
+            )
+        """)
+
         # messages -- file attachments now reference secure_document_shares
         # via document_id instead of inline file_url/file_name/file_size_bytes.
+        # thread_id links pre-connection inquiry messages to chat_threads.
         await conn.execute("""
             CREATE TABLE messages (
                 message_id       SERIAL PRIMARY KEY,
                 engagement_id    INTEGER REFERENCES engagements(engagement_id) ON DELETE CASCADE,
+                thread_id        INTEGER REFERENCES chat_threads(thread_id) ON DELETE CASCADE,
                 sender_id        INTEGER REFERENCES users(user_id),
                 content          TEXT,
                 message_type     TEXT NOT NULL DEFAULT 'text',

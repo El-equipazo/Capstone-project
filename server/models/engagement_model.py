@@ -65,6 +65,20 @@ async def create(
     return dict(row)
 
 
+async def find_open_between(org_id: int, expert_id: int):
+    """Return the first non-terminal engagement between this org and expert, or None."""
+    db = await pool.get_pool()
+    return await db.fetchrow(
+        """
+        SELECT engagement_id, status FROM engagements
+        WHERE org_id = $1 AND expert_id = $2
+          AND status NOT IN ('completed', 'cancelled')
+        LIMIT 1
+        """,
+        org_id, expert_id,
+    )
+
+
 def _check_list_filters(status: str = None, engagement_type: str = None) -> None:
     check_enum(status, ENGAGEMENT_STATUS, "status", allow_none=True)
     check_enum(engagement_type, ENGAGEMENT_TYPE, "engagement_type", allow_none=True)
