@@ -5,8 +5,10 @@ const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 15000
 
 function buildUrls(id) {
-  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
-  const wsBase = base.replace(/^http/, 'ws')
+  const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  const wsBase = base.startsWith('/')
+    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}${base}`
+    : base.replace(/^http/, 'ws')
   const token = authApi.getSession()?.access_token ?? ''
   return {
     rest: () => threadsApi.messages(id),

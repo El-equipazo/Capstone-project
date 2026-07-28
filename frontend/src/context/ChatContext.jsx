@@ -49,7 +49,6 @@ export function ChatProvider({ children }) {
   const closeChat = useCallback(() => {
     setIsOpen(false)
     setIsMinimized(false)
-    setActive(null)
   }, [])
 
   const markActiveRead = useCallback(() => {

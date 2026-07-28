@@ -77,7 +77,7 @@ function ConversationPane({ active, onSent }) {
 }
 
 export default function ChatWindow() {
-  const { isOpen, isMinimized, active, conversations, totalUnread, openChat, minimize, maximize, closeChat, markActiveRead, loadConversations } = useChat_context()
+  const { isOpen, isMinimized, active, conversations, totalUnread, openChat, minimize, maximize, markActiveRead, loadConversations } = useChat_context()
   const { user } = useAuth()
   const prevUnread = useRef(0)
   const [highlighted, setHighlighted] = useState(false)
@@ -125,7 +125,7 @@ export default function ChatWindow() {
           }}
         >
           <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
-            {active?.title || 'Messages'}
+            Messages
           </span>
           {totalUnread > 0 && (
             <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', background: 'var(--acc)', color: '#fff', borderRadius: 99 }}>
@@ -153,10 +153,7 @@ export default function ChatWindow() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--brd)' }}>
         <span className="section-label">Messages</span>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={minimize} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.5 }}>—</button>
-          <button onClick={closeChat} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, opacity: 0.5 }}>×</button>
-        </div>
+        <button onClick={minimize} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.5 }}>—</button>
       </div>
 
       {/* Body */}

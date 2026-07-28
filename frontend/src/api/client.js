@@ -2,7 +2,7 @@
 // All callers use the same function signatures as the old localStorage mock,
 // so no page components needed to change.
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const SESSION_KEY = 'qc_session'
 
 class ApiError extends Error {
@@ -484,8 +484,10 @@ export const threadsApi = {
   },
 
   wsUrl(threadId) {
-    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
-    const wsBase = base.replace(/^http/, 'ws')
+    const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    const wsBase = base.startsWith('/')
+      ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}${base}`
+      : base.replace(/^http/, 'ws')
     const token = authApi.getSession()?.access_token ?? ''
     return `${wsBase}/threads/${threadId}/ws?token=${encodeURIComponent(token)}`
   },
