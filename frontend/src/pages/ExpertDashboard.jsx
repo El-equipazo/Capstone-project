@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ExpertCard from '../components/ExpertCard'
+import TagInput from '../components/organization/TagInput'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
 
@@ -68,6 +69,9 @@ export default function ExpertDashboard() {
   const [credForm, setCredForm] = useState(BLANK_CRED)
   const [addingCred, setAddingCred] = useState(false)
   const [credError, setCredError] = useState('')
+  const [verifyFormFor, setVerifyFormFor] = useState(null)
+  const [verifyDocUrls, setVerifyDocUrls] = useState([])
+  const [submittingVerification, setSubmittingVerification] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_dismissed_${user?.user_id}`) || '[]')) }
     catch { return new Set() }
@@ -249,12 +253,14 @@ export default function ExpertDashboard() {
     }
   }
 
-  async function handleRequestCredentialVerification(credentialId) {
+  async function handleRequestCredentialVerification(credentialId, documentUrls) {
     setCredError('')
+    setSubmittingVerification(true)
     try {
       await verificationsApi.submit({
         verification_type: 'professional_credential',
         related_credential_id: credentialId,
+        submitted_document_urls: documentUrls.length ? documentUrls : undefined,
       })
       setProfile((prev) => ({
         ...prev,
@@ -262,8 +268,12 @@ export default function ExpertDashboard() {
           c.credential_id === credentialId ? { ...c, verification_status: 'pending' } : c
         ),
       }))
+      setVerifyFormFor(null)
+      setVerifyDocUrls([])
     } catch (err) {
       setCredError(err.body?.error?.message ?? 'Could not submit verification request.')
+    } finally {
+      setSubmittingVerification(false)
     }
   }
 
@@ -985,7 +995,8 @@ export default function ExpertDashboard() {
                     <p className="lead" style={{ fontSize: 12.5 }}>No credentials added yet.</p>
                   )}
                   {(profile.credentials || []).map((c) => (
-                    <div key={c.credential_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div key={c.credential_id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{c.credential_name}</div>
                         <div className="lead" style={{ fontSize: 12, marginTop: 2 }}>
@@ -1005,9 +1016,16 @@ export default function ExpertDashboard() {
                         {(!c.verification_status || c.verification_status === 'rejected') && (
                           <button
                             className="btn btn-sm"
-                            onClick={() => handleRequestCredentialVerification(c.credential_id)}
+                            onClick={() => {
+                              if (verifyFormFor === c.credential_id) {
+                                setVerifyFormFor(null)
+                              } else {
+                                setVerifyFormFor(c.credential_id)
+                                setVerifyDocUrls([])
+                              }
+                            }}
                           >
-                            Request verification
+                            {verifyFormFor === c.credential_id ? 'Cancel' : 'Request verification'}
                           </button>
                         )}
                         <button
@@ -1018,6 +1036,26 @@ export default function ExpertDashboard() {
                           Remove
                         </button>
                       </div>
+                    </div>
+
+                    {verifyFormFor === c.credential_id && (
+                      <div style={{ marginTop: 10, padding: 14, background: 'var(--bg)', borderRadius: 8 }}>
+                        <TagInput
+                          label="Supporting documents (optional)"
+                          values={verifyDocUrls}
+                          onChange={setVerifyDocUrls}
+                          placeholder="https://... (link to a certificate image or PDF)"
+                        />
+                        <button
+                          className="btn btn-acc btn-sm"
+                          style={{ marginTop: 10 }}
+                          disabled={submittingVerification}
+                          onClick={() => handleRequestCredentialVerification(c.credential_id, verifyDocUrls)}
+                        >
+                          {submittingVerification ? 'Submitting…' : 'Submit request'}
+                        </button>
+                      </div>
+                    )}
                     </div>
                   ))}
                 </div>
