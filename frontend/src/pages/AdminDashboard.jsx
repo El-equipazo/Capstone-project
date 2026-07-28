@@ -104,6 +104,7 @@ export default function AdminDashboard() {
   const [vFilter, setVFilter] = useState('pending')
   const [vSearch, setVSearch] = useState('')
   const [expandedVerification, setExpandedVerification] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
   const [deciding, setDeciding] = useState({})
   const [vNotes, setVNotes] = useState({})
   const [aiReviewing, setAiReviewing] = useState({})
@@ -640,11 +641,37 @@ export default function AdminDashboard() {
                                           </a>
                                         )}
                                         {(v.submitted_document_urls || []).map((url, i) => (
-                                          <a key={url} href={url} target="_blank" rel="noreferrer" className="tag">
-                                            Document {i + 1} ↗
-                                          </a>
+                                          <button
+                                            key={url}
+                                            type="button"
+                                            className="tag"
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => setPreviewUrl(previewUrl === url ? null : url)}
+                                          >
+                                            {previewUrl === url ? 'Hide document' : `View document ${i + 1}`}
+                                          </button>
                                         ))}
                                       </div>
+                                      {(v.submitted_document_urls || []).includes(previewUrl) && (
+                                        <div style={{ marginTop: 4 }}>
+                                          {previewUrl.toLowerCase().endsWith('.pdf') ? (
+                                            <iframe
+                                              src={previewUrl}
+                                              title="Submitted document"
+                                              style={{ width: '100%', height: 480, border: '1px solid var(--line)', borderRadius: 8 }}
+                                            />
+                                          ) : (
+                                            <img
+                                              src={previewUrl}
+                                              alt="Submitted document"
+                                              style={{ maxWidth: '100%', maxHeight: 480, border: '1px solid var(--line)', borderRadius: 8, display: 'block' }}
+                                            />
+                                          )}
+                                          <a href={previewUrl} target="_blank" rel="noreferrer" className="lead" style={{ fontSize: 11, display: 'inline-block', marginTop: 4 }}>
+                                            Open full size ↗
+                                          </a>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
 
