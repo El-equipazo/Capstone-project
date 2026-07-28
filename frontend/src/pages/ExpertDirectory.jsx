@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { expertsApi } from '../api/client'
-import { SPECIALIZATIONS, SECTORS, ENGAGEMENT_TYPES } from '../data/mockExperts'
+import { SPECIALIZATIONS, ENGAGEMENT_TYPES } from '../data/mockExperts'
 import ExpertCard from '../components/ExpertCard'
 import { labelize } from '../utils/format'
 
@@ -10,7 +10,6 @@ const RATE_MAX_OPTIONS = ['250', '350', '500']
 const EMPTY_FILTERS = {
   q: '',
   specialization: '',
-  sector: '',
   engagement_type: '',
   availability: '',
   rate_max: '',
@@ -54,11 +53,11 @@ export default function ExpertDirectory() {
             expert directory
           </span>
           <h1 className="h1" style={{ fontSize: 26, margin: '8px 0 6px' }}>
-            Verified quantum-security experts for high-risk organizations
+            Verified quantum-security experts for high-risk financial institutions
           </h1>
           <p className="lead">
-            Filter by specialization, sector experience, engagement type, and availability to
-            find the expert best suited to your risk profile.
+            Filter by specialization, engagement type, and availability to find the expert best
+            suited to your risk profile.
           </p>
         </div>
 
@@ -85,18 +84,6 @@ export default function ExpertDirectory() {
                   key={s}
                   className={`chip ${filters.specialization === s ? 'on' : ''}`}
                   onClick={() => toggleFilter('specialization', s)}
-                >
-                  {labelize(s)}
-                </span>
-              ))}
-            </FilterGroup>
-
-            <FilterGroup label="Sector experience">
-              {SECTORS.map((s) => (
-                <span
-                  key={s}
-                  className={`chip ${filters.sector === s ? 'on' : ''}`}
-                  onClick={() => toggleFilter('sector', s)}
                 >
                   {labelize(s)}
                 </span>
@@ -167,7 +154,6 @@ export default function ExpertDirectory() {
               <span className="lead" style={{ fontWeight: 600, color: 'var(--ink)' }}>
                 {loading ? 'Searching…' : `${results?.length ?? 0} expert${results?.length === 1 ? '' : 's'} match your filters`}
               </span>
-              <span className="tag">verified only</span>
             </div>
 
             {!loading && results?.length === 0 && (

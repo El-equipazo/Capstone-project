@@ -19,6 +19,28 @@ export function formatCurrencyRange(min, max) {
   return fmt(min ?? max)
 }
 
+// organization_profiles.budget_range enum — labelize() would render '10k_50k'
+// as "10k 50k" (just a space, no indication it's a range), so this gets its
+// own explicit label map instead.
+export const BUDGET_RANGE_LABEL = {
+  under_10k: 'Under $10k',
+  '10k_50k': '$10k–$50k',
+  '50k_250k': '$50k–$250k',
+  '250k_plus': '$250k+',
+  undisclosed: 'Undisclosed',
+}
+
+export const ENGAGEMENT_TYPE_OPTIONS = [
+  { value: 'risk_assessment',      label: 'Risk Assessment' },
+  { value: 'cryptographic_audit',  label: 'Cryptographic Audit' },
+  { value: 'migration_roadmap',    label: 'Migration Roadmap' },
+  { value: 'executive_briefing',   label: 'Executive Briefing' },
+  { value: 'staff_training',       label: 'Staff Training' },
+  { value: 'ongoing_advisory',     label: 'Ongoing Advisory' },
+  { value: 'compliance_review',    label: 'Compliance Review' },
+  { value: 'full_migration_support', label: 'Full Migration Support' },
+]
+
 export const AVAILABILITY_LABEL = {
   available: 'Available',
   limited: 'Limited availability',
@@ -29,4 +51,17 @@ export const AVAILABILITY_LABEL = {
 export function formatWorkPeriod(startDate, endDate) {
   const fmt = (d) => new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
   return `${fmt(startDate)} – ${endDate ? fmt(endDate) : 'Present'}`
+}
+
+export function toNumberOrNull(value) {
+  return value === '' ? null : Number(value)
+}
+
+// Shared by Login and SignUp so both land a freshly authenticated user in the
+// same place for their role, rather than each page reimplementing its own copy.
+export function landingPathFor(role) {
+  if (role === 'organization') return '/organization'
+  if (role === 'expert') return '/dashboard'
+  if (role === 'admin') return '/admin'
+  return '/'
 }

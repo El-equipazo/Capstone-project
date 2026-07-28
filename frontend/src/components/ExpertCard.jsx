@@ -3,7 +3,7 @@ import { formatRate, labelize, AVAILABILITY_LABEL } from '../utils/format'
 
 export default function ExpertCard({ expert }) {
   const initials = `${expert.first_name[0]}${expert.last_name[0]}`
-  const topSpecialties = expert.specializations.slice(0, 3)
+  const topSpecialties = (expert.specializations ?? []).slice(0, 3)
   const fillPct = Math.max(0, Math.min(1, (expert.avg_rating ?? 0) / 5)) * 100
 
   return (

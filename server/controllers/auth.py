@@ -117,10 +117,11 @@ async def refresh(body: RefreshRequest):
 
 
 @router.post("/auth/logout", status_code=204)
-async def logout(current_user=Depends(get_current_user)):
-    # Refresh tokens are self-expiring JWTs; the client discards both tokens on
-    # logout. True server-side invalidation would require a token blocklist
-    # (e.g. a DB table or Redis set) — add that if revocation before expiry matters.
+async def logout():
+    # No server-side session state to clear — tokens are self-expiring JWTs and
+    # the client discards them. This endpoint is intentionally public so an
+    # expired token doesn't produce a 401. Add a blocklist here if revocation
+    # before expiry becomes a requirement.
     return Response(status_code=204)
 
 

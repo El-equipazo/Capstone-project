@@ -187,6 +187,8 @@ Request:
 ```json
 {
   "org_name": "JPMorgan Chase",
+  "contact_name": "Rob Otter",
+  "contact_title": "Head of Global Technology Applied Research",
   "sector": "financial",
   "sub_sector": "banking",
   "founded_year": 1799,
@@ -442,10 +444,14 @@ Response `201`:
   "initiated_by_user_id": 42,
   "status": "pending",
   "match_score": 87.5,
+  "ai_fit_score": 93,
+  "ai_reasoning": "8 years advising financial institutions and coverage of all three of your compliance requirements (PCI-DSS, GLBA, SOX); her cryptographic_audit offering fits your stated need and budget range.",
   "expires_at": "2026-08-05T14:30:00Z",
   "created_at": "2026-07-06T14:30:00Z"
 }
 ```
+
+`ai_fit_score`/`ai_reasoning` are Gemini's advisory read of this specific expert, computed once here (unlike `match_score`, they're best-effort — `null` if `GEMINI_API_KEY` isn't configured or the call fails, which never blocks the request from succeeding). Like `match_score`, they're a permanent snapshot from creation time, never recomputed.
 
 Errors: `409` an open (`pending`) request to this expert already exists for this org — enforced by a DB-level unique partial index, not just app logic · `422` expert `availability_status = unavailable`.
 
@@ -467,13 +473,13 @@ Response `200`:
 ```json
 {
   "connection_id": 501,
-  "match_score": 87.5,
+  "match_score": 82.5,
   "factors": [
     {
       "factor_name": "sector_match",
-      "weight": 0.3,
+      "weight": 0.4,
       "raw_score": 100.0,
-      "weighted_contribution": 30.0
+      "weighted_contribution": 40.0
     },
     {
       "factor_name": "compliance_overlap",
@@ -483,21 +489,23 @@ Response `200`:
     },
     {
       "factor_name": "budget_fit",
-      "weight": 0.2,
-      "raw_score": 75.0,
-      "weighted_contribution": 15.0
+      "weight": 0.15,
+      "raw_score": 50.0,
+      "weighted_contribution": 7.5
     },
     {
       "factor_name": "availability_fit",
-      "weight": 0.25,
-      "raw_score": 80.0,
-      "weighted_contribution": 20.0
+      "weight": 0.2,
+      "raw_score": 62.5,
+      "weighted_contribution": 12.5
     }
   ]
 }
 ```
 
 The server writes all factor rows for a connection in a single transaction — the DB enforces that their weights sum to 1.00 before the transaction commits, so this endpoint should never return a set of factors with an inconsistent total.
+
+Sector fit deliberately carries the largest weight (0.40) and is graded by the expert's years of experience in the org's sector — an expert with no experience in that sector scores 0 on the factor, so cross-sector matches (say, a healthcare org and an education-focused expert) rank near the bottom regardless of the other factors.
 
 ### PATCH /connections/:connectionId
 
@@ -509,6 +517,51 @@ Response `200` (sets `responded_at`).
 Errors: `410` request already expired · `422` not in `pending` state.
 
 > `expired` status is set by a scheduled job when `NOW() > expires_at` and status is still `pending`. Clients never set it directly.
+
+### POST /matching/recommendations
+
+AI matching: the organization hits "Match me" and the server has an LLM (Google Gemini) rank the verified expert directory against the org's stored profile + infrastructure, plus an optional free-text description of what they need. — **Auth: organization**
+
+The result is **advisory and never stored** — the deterministic `match_score` + factor breakdown above is still computed on every connection request. Recommendations only include verified experts whose `availability_status` is not `unavailable`.
+
+Request (both fields optional):
+
+```json
+{
+  "need_description": "We need an independent audit of our payment rails before our next regulator exam.",
+  "limit": 5
+}
+```
+
+Response `200`:
+
+```json
+{
+  "model": "gemini-flash-latest",
+  "recommendations": [
+    {
+      "expert_profile_id": 7,
+      "first_name": "Sarah",
+      "last_name": "Chen",
+      "headline": "Post-Quantum Cryptography Specialist",
+      "hourly_rate_min": 350.0,
+      "hourly_rate_max": 500.0,
+      "availability_status": "available",
+      "is_verified": true,
+      "avg_rating": 4.9,
+      "total_completed_engagements": 23,
+      "fit_score": 93,
+      "reasoning": "8 years advising financial institutions and coverage of all three of your compliance requirements (PCI-DSS, GLBA, SOX); her cryptographic_audit offering fits your stated need and budget range.",
+      "key_strengths": ["financial sector depth", "PCI-DSS/GLBA/SOX", "audit-focused"],
+      "profile_match_score": 87.5
+    }
+  ]
+}
+```
+
+`profile_match_score` is the same deterministic §6 formula `POST /connections` would compute for this org/expert pair (not stored — recomputed for display). It's distinct from `fit_score`: one is a fixed formula over structured fields, the other is Gemini's live read of the candidate against this org plus whatever free text was given — the two can disagree, and both are shown so neither is mistaken for the other.
+
+Errors: `403` caller has no organization profile · `503` `AI_NOT_CONFIGURED` (server has no `GEMINI_API_KEY`) · `502` `AI_UNAVAILABLE` (LLM call failed).
 
 ---
 
@@ -641,6 +694,26 @@ Errors: `400` `message_type = "file"` without `document_id`, or `document_id` re
 
 Mark messages read. — **Auth: participant.** Body: `{ "message_ids": [901, 902] }` or `{ "all": true }` → `200 { "updated": 2 }`
 
+#### GET /engagements/:engagementId/ws (WebSocket, real-time push)
+
+Upgrades to a WebSocket connection that pushes newly-created messages to other connected participants in real time. — **Auth: participant** (see below)
+
+```
+GET /api/v1/engagements/:engagementId/ws?token=<jwt access token>
+```
+
+This is a **receive-only broadcast channel, not a chat protocol** — REST remains the only way to actually send a message (`POST .../messages` above), and the source of truth. The socket exists purely so other open clients on the same engagement see a new message arrive without polling; if nobody is connected when a message is sent, it still lands in the DB and shows up on the next `GET .../messages`.
+
+Because browsers can't attach a custom `Authorization` header to a WebSocket handshake, the JWT is passed as a `?token=` query parameter instead of a Bearer header. The server accepts the connection, then immediately closes it with a custom code if authentication or the participant check fails (accepting first is necessary — a close *before* accept doesn't reliably expose a readable code to browser JS):
+
+| Close code | Meaning |
+| ---------- | ------- |
+| `4001` | Missing/invalid token |
+| `4003` | Authenticated, but not a participant in this engagement |
+| `4004` | Engagement not found |
+
+On a successful connection, every message created via `POST .../messages` (by any participant) is pushed to the socket as a JSON frame shaped exactly like the `MessageResponse` from that endpoint (`message_id`, `engagement_id`, `sender_id`, `content`, `message_type`, `document_id`, `document_name`, `document_type`, `file_size_bytes`, `is_read`, `read_at`, `created_at`). Clients should key their local state on `message_id` so a duplicate delivery (e.g. the sender's own second open tab) is a no-op rather than a duplicate row.
+
 ### Secure documents (`secure_document_shares`)
 
 #### POST /engagements/:engagementId/documents
@@ -710,6 +783,8 @@ Notification objects:
 ```
 
 > Notifications are server-generated only (connection received/responded, message received, milestone proposed/confirmed/completed, review received, verification decision). No client POST endpoint.
+
+Implemented `type` values today: `message_received` (new message on an engagement), `connection_accepted` / `connection_declined` (expert responds to a connection request). The remaining types above (`connection_request_received`, milestone/review/verification notifications) are part of features that don't exist yet and aren't emitted — the enum is intentionally scoped to what's actually built rather than pre-declared.
 
 ---
 

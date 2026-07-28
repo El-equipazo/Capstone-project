@@ -7,3 +7,9 @@ python-multipart>=0.0.9
 asyncpg>=0.29.0
 passlib[bcrypt]>=1.7.4
 bcrypt>=3.2.2,<4.0.0
+google-genai>=1.0.0
+# uvicorn[standard] is *supposed* to pull this in transitively for websocket
+# support, but that couldn't be confirmed in every environment -- pin it
+# explicitly so `@router.websocket(...)` (server/controllers/messages.py)
+# doesn't fail at handshake time with a missing-implementation error.
+websockets>=12.0

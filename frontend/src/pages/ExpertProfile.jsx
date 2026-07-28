@@ -1,36 +1,49 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { expertsApi } from '../api/client'
+import { Link, useParams } from 'react-router-dom'
+import { connectionsApi, expertsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
-import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL } from '../utils/format'
+import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 
 export default function ExpertProfile() {
   const { expertId } = useParams()
   const [expert, setExpert] = useState(null)
   const [notFound, setNotFound] = useState(false)
   const [requestSent, setRequestSent] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+  const [requestError, setRequestError] = useState('')
+  const [engagementType, setEngagementType] = useState('')
+  const [initialMessage, setInitialMessage] = useState('')
 
   const { user } = useAuth()
-  const navigate = useNavigate()
 
   useEffect(() => {
     setExpert(null)
     setNotFound(false)
     setRequestSent(false)
+    setEngagementType('')
+    setInitialMessage('')
     expertsApi
       .getById(expertId)
       .then(setExpert)
       .catch(() => setNotFound(true))
   }, [expertId])
 
-  function handleRequestAssessment() {
-    if (!user) {
-      navigate(`/login?next=/experts/${expertId}`)
-      return
+  async function handleRequestAssessment(e) {
+    e.preventDefault()
+    setRequesting(true)
+    setRequestError('')
+    try {
+      await connectionsApi.create(Number(expertId), {
+        org_stated_need: engagementType || null,
+        initial_message: initialMessage.trim() || null,
+      })
+      setRequestSent(true)
+    } catch (err) {
+      setRequestError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setRequesting(false)
     }
-    // POST /connections would fire here against the real API.
-    setRequestSent(true)
   }
 
   if (notFound) {
@@ -56,9 +69,11 @@ export default function ExpertProfile() {
     )
   }
 
-  // POST /connections is Auth: organization — hide the CTA for signed-in experts/admins
-  // (anonymous visitors still see it and are routed through login, where role is decided).
-  const canRequestAssessment = !user || user.role === 'organization'
+  // POST /connections is Auth: organization — only render the actionable CTA
+  // for a confirmed organization account. Anonymous/expert/admin visitors get
+  // an explanatory message instead (with a sign-in link for anonymous ones)
+  // rather than a button that would either no-op or 403 against a real API.
+  const canRequestAssessment = user?.role === 'organization'
   const unavailable = expert.availability_status === 'unavailable'
 
   return (
@@ -78,7 +93,6 @@ export default function ExpertProfile() {
             <PortraitPlaceholder />
           </div>
           <div className="xp-index">
-            <div className="xp-bignum">{expert.total_completed_engagements}</div>
             <div className="xp-status-row">
               <span className="xp-status-dot" style={{ opacity: unavailable ? 0.3 : 1 }} />
               {AVAILABILITY_LABEL[expert.availability_status]}
@@ -108,100 +122,140 @@ export default function ExpertProfile() {
           <p className="xp-about-text">{expert.bio}</p>
         </section>
 
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Specializations</span>
-          <div className="xp-plain-list">
-            {expert.specializations.map((s) => (
-              <span key={s.specialization_id}>
-                {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Credentials &amp; certifications</span>
-          <div className="xp-row-list">
-            {expert.credentials.map((c) => (
-              <div className="xp-row-item" key={c.credential_id}>
-                <span className="label">{c.credential_name}</span>
-                <span className="meta">
-                  {c.institution} · {c.year_obtained} · {c.is_verified ? 'Verified' : 'Pending verification'}
+        {expert.specializations.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Specializations</span>
+            <div className="xp-plain-list">
+              {expert.specializations.map((s) => (
+                <span key={s.specialization_id}>
+                  {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
                 </span>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Work history</span>
-          <div className="xp-row-list">
-            {expert.work_history.map((w) => (
-              <div className="xp-row-item xp-row-item-stack" key={w.work_history_id}>
-                <div className="xp-row-item-top">
-                  <span className="label">
-                    {w.job_title} — {w.organization_name}
-                  </span>
-                  <span className="meta">{formatWorkPeriod(w.start_date, w.end_date)}</span>
-                </div>
-                {w.description && <span className="meta">{w.description}</span>}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
-          <div className="xp-row-list">
-            {expert.sector_experience.map((s) => (
-              <div className="xp-row-item xp-row-item-stack" key={s.sector_exp_id}>
-                <div className="xp-row-item-top">
-                  <span className="label">{labelize(s.sector)}</span>
-                  <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
-                </div>
-                <span className="meta">{s.compliance_standards_known.join(', ')}</span>
-                {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
-          <div className="xp-row-list">
-            {expert.engagement_types.map((t) => (
-              <div className="xp-row-item xp-row-item-stack" key={t.eng_type_id}>
-                <div className="xp-row-item-top">
-                  <span className="label">{labelize(t.engagement_type)}</span>
+        {expert.credentials.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Credentials &amp; certifications</span>
+            <div className="xp-row-list">
+              {expert.credentials.map((c) => (
+                <div className="xp-row-item" key={c.credential_id}>
+                  <span className="label">{c.credential_name}</span>
                   <span className="meta">
-                    {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
+                    {c.institution} · {c.year_obtained} · {c.is_verified ? 'Verified' : 'Pending verification'}
                   </span>
                 </div>
-                <span className="meta">{t.approach_description}</span>
-                <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {expert.work_history.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Work history</span>
+            <div className="xp-row-list">
+              {expert.work_history.map((w) => (
+                <div className="xp-row-item xp-row-item-stack" key={w.work_history_id}>
+                  <div className="xp-row-item-top">
+                    <span className="label">
+                      {w.job_title} — {w.organization_name}
+                    </span>
+                    <span className="meta">{formatWorkPeriod(w.start_date, w.end_date)}</span>
+                  </div>
+                  {w.description && <span className="meta">{w.description}</span>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {expert.sector_experience.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
+            <div className="xp-row-list">
+              {expert.sector_experience.map((s) => (
+                <div className="xp-row-item xp-row-item-stack" key={s.sector_exp_id}>
+                  <div className="xp-row-item-top">
+                    <span className="label">{labelize(s.sector)}</span>
+                    <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
+                  </div>
+                  <span className="meta">{s.compliance_standards_known.join(', ')}</span>
+                  {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {expert.engagement_types.length > 0 && (
+          <section className="xp-section">
+            <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
+            <div className="xp-row-list">
+              {expert.engagement_types.map((t) => (
+                <div className="xp-row-item xp-row-item-stack" key={t.eng_type_id}>
+                  <div className="xp-row-item-top">
+                    <span className="label">{labelize(t.engagement_type)}</span>
+                    <span className="meta">
+                      {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
+                    </span>
+                  </div>
+                  <span className="meta">{t.approach_description}</span>
+                  <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="xp-connect-card">
           <div className="xp-connect-left">
-            <span className="section-label xp-section-label">Request assessment</span>
+            <span className="section-label xp-section-label">Request engagement</span>
             {canRequestAssessment ? (
               requestSent ? (
                 <p className="xp-connect-text">Request sent — {expert.first_name} has been notified.</p>
+              ) : unavailable ? (
+                <p className="xp-connect-text" style={{ opacity: 0.6 }}>This expert is currently unavailable.</p>
               ) : (
-                <>
-                  <p className="xp-connect-text">
-                    Share your risk profile with {expert.first_name} to connect intentionally.
-                  </p>
-                  <button className="xp-tap-link" onClick={handleRequestAssessment} disabled={unavailable}>
-                    {unavailable ? 'Currently unavailable' : 'Tap to request ↗'}
+                <form onSubmit={handleRequestAssessment} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                  <div className="field-group">
+                    <label className="field-label">Type of engagement</label>
+                    <select
+                      className="field-input"
+                      value={engagementType}
+                      onChange={(e) => setEngagementType(e.target.value)}
+                    >
+                      <option value="">Not sure — let the expert decide</option>
+                      {ENGAGEMENT_TYPE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Message <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                    <textarea
+                      className="field-input"
+                      rows={2}
+                      value={initialMessage}
+                      onChange={(e) => setInitialMessage(e.target.value)}
+                      placeholder={`Briefly describe what you're looking for…`}
+                    />
+                  </div>
+                  {requestError && <p style={{ color: 'var(--err, red)', fontSize: 12, margin: 0 }}>{requestError}</p>}
+                  <button className="xp-tap-link" type="submit" disabled={requesting} style={{ alignSelf: 'flex-start' }}>
+                    {requesting ? 'Sending…' : 'Send request ↗'}
                   </button>
-                </>
+                </form>
               )
+            ) : !user ? (
+              <p className="xp-connect-text">
+                <Link to={`/login?next=/experts/${expertId}`} className="xp-link-arrow">
+                  Sign in as an organization
+                </Link>{' '}
+                to request an engagement.
+              </p>
             ) : (
-              <p className="xp-connect-text">Only organizations can request assessments.</p>
+              <p className="xp-connect-text">Only organizations can request engagements.</p>
             )}
           </div>
           <div className="xp-dot-pattern" />

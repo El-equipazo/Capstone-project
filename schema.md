@@ -20,6 +20,8 @@ organization_profiles
 org_profile_id                  SERIAL PRIMARY KEY
 user_id                         INTEGER UNIQUE REFERENCES users(user_id) ON DELETE CASCADE
 org_name                        TEXT NOT NULL
+contact_name                    TEXT -- primary point of contact for this account
+contact_title                   TEXT -- e.g. 'Head of Security', 'CISO'
 sector                          TEXT NOT NULL -- 'financial' | 'healthcare' | 'government' |
                                  -- 'nonprofit' | 'legal' | 'energy' | 'education' | 'other'
 sub_sector                      TEXT
@@ -265,6 +267,8 @@ initial_message        TEXT
 org_stated_need        TEXT -- canonical engagement_type enum; NULL = "not sure"
 org_stated_timeline    TEXT -- 'asap' | 'within_3mo' | 'within_6mo' | 'within_year' | 'just_exploring'
 match_score            NUMERIC(5,2) -- system-computed 0–100
+ai_fit_score           INTEGER -- Gemini's advisory 0–100, computed once at creation; NULL if AI unconfigured/unavailable
+ai_reasoning           TEXT -- 1–3 sentence explanation for ai_fit_score; NULL alongside it
 expires_at             TIMESTAMP -- computed from org's default_connection_expiry_days
 responded_at           TIMESTAMP
 created_at             TIMESTAMP DEFAULT NOW()

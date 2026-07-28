@@ -2,8 +2,6 @@
 
 A full-stack marketplace connecting high-risk organizations with verified post-quantum cryptography experts. Built with React, FastAPI, and PostgreSQL.
 
----
-
 ## Mission Statement
 
 This project proposes the development of a specialized application designed to connect quantum security experts with high-risk organizations, enabling proactive assessment and remediation before a quantum breakthrough renders current protections obsolete.

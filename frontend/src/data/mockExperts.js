@@ -12,9 +12,16 @@ export const SPECIALIZATIONS = [
   'quantum_risk_assessment',
 ]
 
+// expert_specializations.proficiency_level enum (schema.md §2).
+export const PROFICIENCY_LEVELS = ['familiar', 'proficient', 'expert', 'leading_researcher']
+
+// expert_profiles.preferred_engagement_length enum (schema.md §1).
+export const ENGAGEMENT_LENGTHS = ['short_term', 'long_term', 'both']
+
 // Canonical `sector` enum (schema.md §3) — shared by organization_profiles.sector
-// and expert_sector_experience.sector.
-export const SECTORS = ['financial', 'healthcare', 'government', 'nonprofit', 'legal', 'energy', 'education', 'other']
+// and expert_sector_experience.sector. Lattice currently only serves financial
+// institutions, so this is a single-value enum rather than the full schema list.
+export const SECTORS = ['financial']
 
 // Canonical `engagement_type` enum (schema.md §3) — shared by engagements,
 // expert_engagement_types, and connection_requests.org_stated_need.
@@ -44,7 +51,7 @@ export const mockExperts = [
     first_name: 'Sarah',
     last_name: 'Chen',
     headline: 'Post-Quantum Cryptography Specialist | NIST PQC Standards Expert',
-    bio: 'Dr. Chen is a leading researcher in post-quantum cryptography with 14 years of experience advising financial institutions and government agencies on NIST PQC migration strategies. Her work focuses on translating FIPS 203/204/205 into infrastructure-specific remediation plans.',
+    bio: 'Dr. Chen is a leading researcher in post-quantum cryptography with 14 years of experience advising financial institutions on NIST PQC migration strategies. Her work focuses on translating FIPS 203/204/205 into infrastructure-specific remediation plans.',
     years_of_experience: 14,
     linkedin_url: 'https://linkedin.com/in/dr-sarah-chen',
     hourly_rate_min: 350.0,
@@ -85,8 +92,8 @@ export const mockExperts = [
     expert_profile_id: 12,
     first_name: 'Marcus',
     last_name: 'Webb',
-    headline: 'PQC Migration Lead, ex-National Laboratory',
-    bio: 'Marcus spent 11 years at a US national laboratory building post-quantum migration playbooks for critical infrastructure operators before moving to independent consulting.',
+    headline: 'PQC Migration Lead for Market Infrastructure & Clearing Systems',
+    bio: 'Marcus spent 11 years at a US national laboratory building post-quantum migration playbooks before moving to independent consulting, where he now focuses on exchanges, clearinghouses, and market-infrastructure operators migrating settlement systems to post-quantum cryptography.',
     years_of_experience: 16,
     linkedin_url: 'https://linkedin.com/in/marcus-webb-pqc',
     hourly_rate_min: 275.0,
@@ -106,27 +113,26 @@ export const mockExperts = [
       { verification_id: 105, verification_type: 'professional_credential', related_credential_id: 5, status: 'approved' },
     ],
     work_history: [
-      { work_history_id: 3, organization_name: 'Independent Consulting', job_title: 'PQC Migration Consultant', employment_type: 'consulting', start_date: '2020-01-01', end_date: null, is_current: true, description: 'Advises energy and government clients on post-quantum migration roadmaps.', order_index: 1 },
-      { work_history_id: 4, organization_name: 'Oak Ridge National Laboratory', job_title: 'Senior Research Scientist', employment_type: 'government', start_date: '2009-03-01', end_date: '2019-12-31', is_current: false, description: 'Built PQC migration playbooks for critical infrastructure operators.', order_index: 2 },
+      { work_history_id: 3, organization_name: 'Independent Consulting', job_title: 'PQC Migration Consultant', employment_type: 'consulting', start_date: '2020-01-01', end_date: null, is_current: true, description: 'Advises exchanges and clearinghouses on post-quantum migration roadmaps.', order_index: 1 },
+      { work_history_id: 4, organization_name: 'Oak Ridge National Laboratory', job_title: 'Senior Research Scientist', employment_type: 'government', start_date: '2009-03-01', end_date: '2019-12-31', is_current: false, description: 'Built post-quantum migration playbooks later applied to financial market infrastructure.', order_index: 2 },
     ],
     specializations: [
       { specialization_id: 3, specialization: 'pqc_migration_planning', proficiency_level: 'expert', years_in_specialization: 9 },
       { specialization_id: 4, specialization: 'hsm_architecture', proficiency_level: 'expert', years_in_specialization: 7 },
     ],
     sector_experience: [
-      { sector_exp_id: 2, sector: 'energy', years_experience_in_sector: 11, compliance_standards_known: ['NERC CIP', 'IEC 62443'], anonymized_client_examples: 'Regional energy grid operator PQC migration roadmap (2022–2024).' },
-      { sector_exp_id: 3, sector: 'government', years_experience_in_sector: 6, compliance_standards_known: ['FIPS 140-3', 'NIST 800-53'], anonymized_client_examples: 'Federal agency legacy PKI migration assessment.' },
+      { sector_exp_id: 2, sector: 'financial', years_experience_in_sector: 11, compliance_standards_known: ['SEC Reg SCI', 'CPMI-IOSCO PFMI'], anonymized_client_examples: 'Regional stock exchange PQC migration roadmap (2022–2024); clearinghouse settlement-system cryptographic audit (2023).' },
     ],
     engagement_types: [
-      { eng_type_id: 3, engagement_type: 'migration_roadmap', typical_duration_weeks_min: 30, typical_duration_weeks_max: 60, typical_budget_min: 300000, typical_budget_max: 1200000, approach_description: 'Long-asset-lifecycle migration planning for OT/IT hybrid environments.' },
+      { eng_type_id: 3, engagement_type: 'migration_roadmap', typical_duration_weeks_min: 30, typical_duration_weeks_max: 60, typical_budget_min: 300000, typical_budget_max: 1200000, approach_description: 'Long-asset-lifecycle migration planning for legacy trading and settlement systems.' },
     ],
   },
   {
     expert_profile_id: 19,
     first_name: 'Priya',
     last_name: 'Raman',
-    headline: 'Healthcare Data Security & PQC Compliance Advisor',
-    bio: 'Priya helps hospital systems and health insurers protect long-lived patient records against harvest-now-decrypt-later risk while staying HIPAA-compliant throughout migration.',
+    headline: 'Insurance & Long-Lived Records Security Advisor',
+    bio: 'Priya helps insurers and retail banks protect long-lived customer financial records against harvest-now-decrypt-later risk while staying GLBA and PCI-DSS-compliant throughout migration.',
     years_of_experience: 9,
     linkedin_url: 'https://linkedin.com/in/priya-raman-security',
     hourly_rate_min: 220.0,
@@ -138,7 +144,7 @@ export const mockExperts = [
     avg_rating: 4.8,
     total_completed_engagements: 11,
     credentials: [
-      { credential_id: 6, credential_type: 'certification', credential_name: 'HCISPP', institution: 'ISC2', year_obtained: 2018 },
+      { credential_id: 6, credential_type: 'certification', credential_name: 'CRISC', institution: 'ISACA', year_obtained: 2018 },
       { credential_id: 7, credential_type: 'certification', credential_name: 'CISSP', institution: 'ISC2', year_obtained: 2019 },
     ],
     verification_records: [
@@ -146,18 +152,18 @@ export const mockExperts = [
       { verification_id: 107, verification_type: 'professional_credential', related_credential_id: 7, status: 'pending' },
     ],
     work_history: [
-      { work_history_id: 5, organization_name: 'Independent Consulting', job_title: 'Healthcare Security & PQC Advisor', employment_type: 'consulting', start_date: '2021-01-01', end_date: null, is_current: true, description: 'Advises hospital systems and insurers on HIPAA-aligned quantum risk assessments.', order_index: 1 },
-      { work_history_id: 6, organization_name: 'Kaiser Permanente', job_title: 'Security Analyst', employment_type: 'full_time', start_date: '2016-06-01', end_date: '2020-12-31', is_current: false, description: 'Managed encryption inventory and compliance for patient data systems.', order_index: 2 },
+      { work_history_id: 5, organization_name: 'Independent Consulting', job_title: 'Insurance Security & PQC Advisor', employment_type: 'consulting', start_date: '2021-01-01', end_date: null, is_current: true, description: 'Advises insurers and retail banks on GLBA-aligned quantum risk assessments.', order_index: 1 },
+      { work_history_id: 6, organization_name: 'MetLife', job_title: 'Security Analyst', employment_type: 'full_time', start_date: '2016-06-01', end_date: '2020-12-31', is_current: false, description: 'Managed encryption inventory and compliance for policyholder data systems.', order_index: 2 },
     ],
     specializations: [
       { specialization_id: 5, specialization: 'quantum_risk_assessment', proficiency_level: 'expert', years_in_specialization: 6 },
       { specialization_id: 6, specialization: 'cryptographic_audit', proficiency_level: 'proficient', years_in_specialization: 5 },
     ],
     sector_experience: [
-      { sector_exp_id: 4, sector: 'healthcare', years_experience_in_sector: 9, compliance_standards_known: ['HIPAA', 'HITRUST'], anonymized_client_examples: 'Regional hospital system long-lived-record exposure assessment (2024).' },
+      { sector_exp_id: 4, sector: 'financial', years_experience_in_sector: 9, compliance_standards_known: ['GLBA', 'PCI-DSS'], anonymized_client_examples: 'Regional insurer long-lived-policyholder-record exposure assessment (2024).' },
     ],
     engagement_types: [
-      { eng_type_id: 4, engagement_type: 'risk_assessment', typical_duration_weeks_min: 3, typical_duration_weeks_max: 6, typical_budget_min: 25000, typical_budget_max: 60000, approach_description: 'HNDL exposure scoring for long-lived patient records with HIPAA-aligned remediation.' },
+      { eng_type_id: 4, engagement_type: 'risk_assessment', typical_duration_weeks_min: 3, typical_duration_weeks_max: 6, typical_budget_min: 25000, typical_budget_max: 60000, approach_description: 'HNDL exposure scoring for long-lived policyholder and account records with GLBA-aligned remediation.' },
     ],
   },
   {
@@ -201,8 +207,8 @@ export const mockExperts = [
     expert_profile_id: 31,
     first_name: 'Elena',
     last_name: 'Vasquez',
-    headline: 'Government & Defense Cryptographic Compliance Lead',
-    bio: 'Elena advises government agencies on migrating classified communications infrastructure to NIST-approved post-quantum algorithms.',
+    headline: 'Central Bank & SIFI Cryptographic Compliance Lead',
+    bio: 'Elena advises central banks and systemically important financial institutions on migrating classified settlement and payment infrastructure to NIST-approved post-quantum algorithms.',
     years_of_experience: 20,
     linkedin_url: 'https://linkedin.com/in/elena-vasquez-crypto',
     hourly_rate_min: 400.0,
@@ -222,18 +228,18 @@ export const mockExperts = [
       { verification_id: 110, verification_type: 'professional_credential', related_credential_id: 10, status: 'approved' },
     ],
     work_history: [
-      { work_history_id: 9, organization_name: 'Independent Consulting', job_title: 'Cryptographic Compliance Advisor', employment_type: 'consulting', start_date: '2022-01-01', end_date: null, is_current: true, description: 'Advises federal agencies on CNSA 2.0-aligned migration roadmaps.', order_index: 1 },
-      { work_history_id: 10, organization_name: 'National Security Agency', job_title: 'Senior Cryptographer', employment_type: 'government', start_date: '2004-01-01', end_date: '2021-12-31', is_current: false, description: '20-year career spanning classified communications cryptography.', order_index: 2 },
+      { work_history_id: 9, organization_name: 'Independent Consulting', job_title: 'Cryptographic Compliance Advisor', employment_type: 'consulting', start_date: '2022-01-01', end_date: null, is_current: true, description: 'Advises central banks and systemically important financial institutions on CNSA 2.0-aligned migration roadmaps.', order_index: 1 },
+      { work_history_id: 10, organization_name: 'National Security Agency', job_title: 'Senior Cryptographer', employment_type: 'government', start_date: '2004-01-01', end_date: '2021-12-31', is_current: false, description: '20-year career in classified communications cryptography, later applied to financial-sector settlement infrastructure.', order_index: 2 },
     ],
     specializations: [
       { specialization_id: 9, specialization: 'post_quantum_cryptography', proficiency_level: 'leading_researcher', years_in_specialization: 12 },
       { specialization_id: 10, specialization: 'pqc_migration_planning', proficiency_level: 'expert', years_in_specialization: 8 },
     ],
     sector_experience: [
-      { sector_exp_id: 6, sector: 'government', years_experience_in_sector: 20, compliance_standards_known: ['FIPS 140-3', 'CNSA 2.0'], anonymized_client_examples: 'Federal agency classified-comms PQC migration roadmap (2023–ongoing).' },
+      { sector_exp_id: 6, sector: 'financial', years_experience_in_sector: 20, compliance_standards_known: ['FIPS 140-3', 'CNSA 2.0'], anonymized_client_examples: 'Central bank real-time gross settlement system PQC migration roadmap (2023–ongoing).' },
     ],
     engagement_types: [
-      { eng_type_id: 6, engagement_type: 'migration_roadmap', typical_duration_weeks_min: 40, typical_duration_weeks_max: 80, typical_budget_min: 500000, typical_budget_max: 2000000, approach_description: 'CNSA 2.0-aligned migration roadmap for classified communications infrastructure.' },
+      { eng_type_id: 6, engagement_type: 'migration_roadmap', typical_duration_weeks_min: 40, typical_duration_weeks_max: 80, typical_budget_min: 500000, typical_budget_max: 2000000, approach_description: 'CNSA 2.0-aligned migration roadmap for classified settlement and payment infrastructure.' },
     ],
   },
   {
@@ -281,6 +287,3 @@ for (const expert of mockExperts) {
     credential.is_verified = isCredentialVerified(expert, credential.credential_id)
   }
 }
-
-// Only verified experts are ever returned to non-admins per api-contract.md §5.
-export const verifiedMockExperts = mockExperts.filter((e) => e.is_verified)
