@@ -36,45 +36,57 @@ function countBy(items, getKey, buckets) {
   return buckets.map((b) => ({ label: labelize(b), count: counts[b] }))
 }
 
-function CountsCard({ title, items }) {
+function CountsCard({ title, hero, secondary }) {
   return (
     <div className="card" style={{ padding: 18 }}>
       <span className="section-label">{title}</span>
-      <div className="row gap-10" style={{ justifyContent: 'space-between', marginTop: 14 }}>
-        {items.map((it) => (
-          <div key={it.label} className="stat">
-            <span className="v">{it.value}</span>
-            <span className="l">{it.label}</span>
-          </div>
-        ))}
+      <div className="queue-summary">
+        <div className="queue-hero">
+          <div className="v">{hero.value}</div>
+          <div className="l">{hero.label}</div>
+        </div>
+        <div className="queue-divider" />
+        <div className="queue-secondary">
+          {secondary.map((s) => (
+            <div key={s.label} className={`queue-stat tone-${s.tone}`}>
+              <div className="v">{s.value}</div>
+              <div className="l">{s.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
 function BreakdownCard({ title, rows }) {
-  const max = Math.max(1, ...rows.map((r) => r.count))
+  const total = rows.reduce((sum, r) => sum + r.count, 0)
   return (
     <div className="card" style={{ padding: 18 }}>
       <span className="section-label">{title}</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-        {rows.map((r) => (
-          <div key={r.label} className="row gap-10">
-            <span style={{ fontSize: 12, width: 110, flex: 'none', color: 'var(--muted)' }}>{r.label}</span>
-            <div style={{ flex: 1, height: 8, background: 'var(--fill)', borderRadius: 4, overflow: 'hidden' }}>
+      {total === 0 ? (
+        <p className="lead" style={{ fontSize: 12.5, marginTop: 14 }}>No data yet.</p>
+      ) : (
+        <>
+          <div className="comp-bar">
+            {rows.map((r, i) => (
               <div
-                style={{
-                  width: `${(r.count / max) * 100}%`,
-                  height: '100%',
-                  background: 'var(--acc)',
-                  borderRadius: 4,
-                }}
+                key={r.label}
+                className="comp-seg"
+                style={{ width: `${(r.count / total) * 100}%`, background: `var(--cat-${i + 1})` }}
               />
-            </div>
-            <span style={{ fontSize: 12, fontWeight: 700, width: 20, textAlign: 'right' }}>{r.count}</span>
+            ))}
           </div>
-        ))}
-      </div>
+          <div className="comp-legend">
+            {rows.map((r, i) => (
+              <div key={r.label} className="comp-item">
+                <span className="comp-dot" style={{ background: `var(--cat-${i + 1})` }} />
+                <span className="name">{r.label}</span> <span className="n">{r.count}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -304,11 +316,11 @@ export default function AdminDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <CountsCard
                 title="Verification Status"
-                items={[
-                  { label: 'total', value: experts.length },
-                  { label: 'verified', value: experts.filter((e) => e.is_verified).length },
-                  { label: 'unverified', value: experts.filter((e) => !e.is_verified).length },
-                  { label: 'deactivated', value: experts.filter((e) => !e.is_active).length },
+                hero={{ label: 'UNVERIFIED', value: experts.filter((e) => !e.is_verified).length }}
+                secondary={[
+                  { label: 'Verified', value: experts.filter((e) => e.is_verified).length, tone: 'good' },
+                  { label: 'Deactivated', value: experts.filter((e) => !e.is_active).length, tone: 'danger' },
+                  { label: 'Total', value: experts.length, tone: 'neutral' },
                 ]}
               />
               <BreakdownCard title="By Availability" rows={countBy(experts, (e) => e.availability_status, AVAILABILITY_STATUSES)} />
@@ -408,11 +420,11 @@ export default function AdminDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <CountsCard
                 title="Verification Status"
-                items={[
-                  { label: 'total', value: orgs.length },
-                  { label: 'verified', value: orgs.filter((o) => o.is_verified).length },
-                  { label: 'unverified', value: orgs.filter((o) => !o.is_verified).length },
-                  { label: 'deactivated', value: orgs.filter((o) => !o.is_active).length },
+                hero={{ label: 'UNVERIFIED', value: orgs.filter((o) => !o.is_verified).length }}
+                secondary={[
+                  { label: 'Verified', value: orgs.filter((o) => o.is_verified).length, tone: 'good' },
+                  { label: 'Deactivated', value: orgs.filter((o) => !o.is_active).length, tone: 'danger' },
+                  { label: 'Total', value: orgs.length, tone: 'neutral' },
                 ]}
               />
               <BreakdownCard title="By Company Size" rows={countBy(orgs, (o) => o.employee_count_range, EMPLOYEE_COUNT_BUCKETS)} />
@@ -500,11 +512,11 @@ export default function AdminDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <CountsCard
                 title="Approval Status"
-                items={[
-                  { label: 'requested', value: verifications.length },
-                  { label: 'approved', value: verifications.filter((v) => v.status === 'approved').length },
-                  { label: 'rejected', value: verifications.filter((v) => v.status === 'rejected').length },
-                  { label: 'pending', value: pendingCount },
+                hero={{ label: 'PENDING REVIEW', value: pendingCount }}
+                secondary={[
+                  { label: 'Approved', value: verifications.filter((v) => v.status === 'approved').length, tone: 'good' },
+                  { label: 'Rejected', value: verifications.filter((v) => v.status === 'rejected').length, tone: 'danger' },
+                  { label: 'Requested', value: verifications.length, tone: 'neutral' },
                 ]}
               />
               <BreakdownCard title="By Type" rows={countBy(verifications, (v) => v.verification_type, VERIFICATION_TYPES)} />

@@ -14,6 +14,11 @@
   --good-light: #eaf1e9;
   --danger: #dc2626;
   --danger-light: #fdecec;
+  --cat-1: #1f3a5f;
+  --cat-2: #3f6b74;
+  --cat-3: #7a5980;
+  --cat-4: #8a6d1d;
+  --cat-5: #a8543c;
   --radius: 10px;
   --radius-lg: 14px;
   --shadow: 0 1px 3px rgba(20, 22, 30, 0.06), 0 1px 2px rgba(20, 22, 30, 0.08);
@@ -823,6 +828,101 @@ button, input, select, textarea {
   border-radius: 50%;
   flex: none;
 }
+
+/* ---------- Queue summary card (admin stat cards) ---------- */
+.queue-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.queue-hero { min-width: 0; }
+
+.queue-hero .v {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--acc);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-hero .l {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.queue-divider {
+  height: 1px;
+  background: var(--line);
+}
+
+.queue-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  min-width: 0;
+}
+
+.queue-stat { min-width: 0; }
+
+.queue-stat .v {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.queue-stat .l {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 5px;
+  white-space: nowrap;
+}
+
+.queue-stat.tone-good .v { color: var(--good); }
+.queue-stat.tone-danger .v { color: var(--danger); }
+
+/* ---------- Composition bar (admin breakdown cards) ---------- */
+.comp-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--fill);
+  margin-top: 16px;
+}
+
+.comp-seg { height: 100%; }
+
+.comp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.comp-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.comp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.comp-item .name { color: var(--muted); }
+.comp-item .n { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .page {
   flex: 1;
