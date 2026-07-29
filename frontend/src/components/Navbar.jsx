@@ -3,12 +3,20 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import NotificationBell from './NotificationBell'
 
+function initials(str) {
+  const words = (str || '').replace(/[^a-zA-Z\s]/g, ' ').trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '?'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0][0] + words[1][0]).toUpperCase()
+}
+
 export default function Navbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const isLanding = location.pathname === '/'
   const [scrolled, setScrolled] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
 
   // Only the landing page has a hero tall/colorful enough for the navbar to
   // float transparently over it; every other page keeps the normal solid,
@@ -45,14 +53,30 @@ export default function Navbar() {
             {user?.role === 'organization' && <NavLink to="/organization">Dashboard</NavLink>}
             {user?.role === 'admin' && <NavLink to="/admin">Admin</NavLink>}
             {!user && <Link to="/login">Sign in</Link>}
-            {user && <span className="tag nav-email">{user.email}</span>}
           </nav>
           <div className="nav-actions">
             <NotificationBell />
             {user ? (
-              <button className="btn" onClick={handleLogout}>
-                Sign out
-              </button>
+              <div className="account-wrap">
+                <button className="account-trigger" onClick={() => setAccountOpen((v) => !v)} aria-label="Account menu">
+                  <span className="avatar avatar-sm">{initials(user.email)}</span>
+                  <span className="chev">▾</span>
+                </button>
+                {accountOpen && (
+                  <div className="account-dropdown card">
+                    <div className="account-head">
+                      <span className="avatar avatar-sm">{initials(user.email)}</span>
+                      <div className="id-text">
+                        <span className="email">{user.email}</span>
+                        <span className={`badge role-${user.role}`}>{user.role}</span>
+                      </div>
+                    </div>
+                    <button className="account-row" onClick={handleLogout}>
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <Link to="/sign-up" className="btn btn-acc">
                 Get started
