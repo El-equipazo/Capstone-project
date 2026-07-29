@@ -545,6 +545,11 @@ admin_notes                  TEXT
 rejection_reason             TEXT
 reviewed_at                  TIMESTAMP
 expires_at                   DATE
+ai_recommendation            TEXT -- 'approve' | 'reject' | 'needs_more_info'; advisory, admin decides regardless
+ai_confidence                TEXT -- 'low' | 'medium' | 'high'
+ai_reasoning                 TEXT
+ai_red_flags                 TEXT[]
+ai_reviewed_at                TIMESTAMP -- set when an admin has triggered an AI review; NULL until then
 created_at                    TIMESTAMP DEFAULT NOW()
 ```
 

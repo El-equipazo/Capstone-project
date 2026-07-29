@@ -22,18 +22,7 @@ from pydantic import BaseModel
 
 from server.config import settings
 from . import expert_model, match_scoring, organization_model
-
-# The SDK is only needed when the endpoint is actually used — import lazily so
-# the server runs fine for teammates who haven't installed it / set a key.
-_client = None
-
-
-class AIConfigurationError(Exception):
-    """GEMINI_API_KEY missing — controller maps this to 503."""
-
-
-class AIUnavailableError(Exception):
-    """Gemini call failed after retries — controller maps this to 502."""
+from .ai_client import AIConfigurationError, AIUnavailableError, get_client
 
 
 # ── Structured output schema (Gemini fills this shape) ────────────────────────
@@ -80,19 +69,6 @@ Rules:
 - key_strengths is 2–4 short phrases.
 - Order recommendations from best fit to worst.
 """
-
-
-def _get_client():
-    """Create the Gemini client once, on first use. Raises if unconfigured."""
-    global _client
-    if not settings.gemini_api_key:
-        raise AIConfigurationError(
-            "AI matching requires GEMINI_API_KEY on the server"
-        )
-    if _client is None:
-        from google import genai
-        _client = genai.Client(api_key=settings.gemini_api_key)
-    return _client
 
 
 def _default(value):
@@ -225,7 +201,7 @@ async def score_single(org_profile_id: int, expert_profile_id: int) -> Optional[
     match_score in match_scoring.py is required.
     """
     try:
-        client = _get_client()
+        client = get_client()
         org = await organization_model.get(org_profile_id)
         infrastructure = await organization_model.find_infrastructure(org_profile_id)
         expert = await expert_model.get(expert_profile_id)
@@ -267,7 +243,7 @@ async def recommend(org_profile_id: int,
     if not candidates:
         return []
 
-    client = _get_client()
+    client = get_client()
     from google.genai import errors as genai_errors, types
 
     prompt = _build_user_prompt(org, infrastructure, need_description,

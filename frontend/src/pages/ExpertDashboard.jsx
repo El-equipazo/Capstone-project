@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi } from '../api/client'
+import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi, uploadsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
+import TagInput from '../components/organization/TagInput'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
 
@@ -82,6 +83,12 @@ export default function ExpertDashboard() {
   const [credForm, setCredForm] = useState(BLANK_CRED)
   const [addingCred, setAddingCred] = useState(false)
   const [credError, setCredError] = useState('')
+  const [verifyFormFor, setVerifyFormFor] = useState(null)
+  const [verifyDocUrls, setVerifyDocUrls] = useState([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [verifications, setVerifications] = useState([])
+  const [submittingVerification, setSubmittingVerification] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_dismissed_${user?.user_id}`) || '[]')) }
     catch { return new Set() }
@@ -108,7 +115,29 @@ export default function ExpertDashboard() {
       setConnections(conns)
       setEngagements(engs)
     })
+    verificationsApi.list().then(setVerifications).catch(() => {})
   }, [expertId])
+
+  // Most recent professional_credential verification for one credential, if any —
+  // list_for_user() already orders by created_at DESC, so [0] is the latest
+  // (a credential can be resubmitted after a rejection).
+  function latestVerificationFor(credentialId) {
+    return verifications.find(
+      (v) => v.verification_type === 'professional_credential' && v.related_credential_id === credentialId
+    )
+  }
+
+  // Single source of truth for a credential's verification state — the
+  // `verification_status` field some code used to set client-side on the
+  // credential object was never actually populated from the backend on
+  // page load (list_credentials()/_full_profile() only return `is_verified`,
+  // a plain boolean), so it was always undefined on a fresh load and the
+  // "Request verification" button showed even for already-approved
+  // credentials. Deriving it from the real verification_records fetch fixes
+  // that for approved/pending/rejected alike.
+  function credentialStatus(credentialId) {
+    return latestVerificationFor(credentialId)?.status ?? null
+  }
 
   if (!user) return null
 
@@ -244,7 +273,7 @@ export default function ExpertDashboard() {
       })
       setProfile((prev) => ({
         ...prev,
-        credentials: [...(prev.credentials || []), { ...result, verification_status: null }],
+        credentials: [...(prev.credentials || []), result],
       }))
       setCredForm(BLANK_CRED)
     } catch (err) {
@@ -267,21 +296,35 @@ export default function ExpertDashboard() {
     }
   }
 
-  async function handleRequestCredentialVerification(credentialId) {
+  async function handleRequestCredentialVerification(credentialId, documentUrls) {
     setCredError('')
+    setSubmittingVerification(true)
     try {
       await verificationsApi.submit({
         verification_type: 'professional_credential',
         related_credential_id: credentialId,
+        submitted_document_urls: documentUrls.length ? documentUrls : undefined,
       })
-      setProfile((prev) => ({
-        ...prev,
-        credentials: (prev.credentials || []).map((c) =>
-          c.credential_id === credentialId ? { ...c, verification_status: 'pending' } : c
-        ),
-      }))
+      setVerifications(await verificationsApi.list())
+      setVerifyFormFor(null)
+      setVerifyDocUrls([])
     } catch (err) {
       setCredError(err.body?.error?.message ?? 'Could not submit verification request.')
+    } finally {
+      setSubmittingVerification(false)
+    }
+  }
+
+  async function handleUploadDocument(file) {
+    setUploadError('')
+    setUploadingDoc(true)
+    try {
+      const { url } = await uploadsApi.upload(file)
+      setVerifyDocUrls((prev) => [...prev, url])
+    } catch (err) {
+      setUploadError(err.body?.error?.message ?? 'Could not upload file. Please try again.')
+    } finally {
+      setUploadingDoc(false)
     }
   }
 
@@ -1008,8 +1051,11 @@ export default function ExpertDashboard() {
                   {(profile.credentials || []).length === 0 && (
                     <p className="lead" style={{ fontSize: 12.5 }}>No credentials added yet.</p>
                   )}
-                  {(profile.credentials || []).map((c) => (
-                    <div key={c.credential_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                  {(profile.credentials || []).map((c) => {
+                    const status = credentialStatus(c.credential_id)
+                    return (
+                    <div key={c.credential_id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{c.credential_name}</div>
                         <div className="lead" style={{ fontSize: 12, marginTop: 2 }}>
@@ -1017,21 +1063,28 @@ export default function ExpertDashboard() {
                         </div>
                       </div>
                       <div className="row gap-8">
-                        {c.verification_status === 'approved' && (
+                        {status === 'approved' && (
                           <span className="tag" style={{ color: 'var(--acc)' }}>Verified</span>
                         )}
-                        {c.verification_status === 'pending' && (
+                        {status === 'pending' && (
                           <span className="tag">Pending review</span>
                         )}
-                        {c.verification_status === 'rejected' && (
+                        {status === 'rejected' && (
                           <span className="tag" style={{ color: 'var(--err, #e53)' }}>Rejected</span>
                         )}
-                        {(!c.verification_status || c.verification_status === 'rejected') && (
+                        {status !== 'approved' && status !== 'pending' && (
                           <button
                             className="btn btn-sm"
-                            onClick={() => handleRequestCredentialVerification(c.credential_id)}
+                            onClick={() => {
+                              if (verifyFormFor === c.credential_id) {
+                                setVerifyFormFor(null)
+                              } else {
+                                setVerifyFormFor(c.credential_id)
+                                setVerifyDocUrls([])
+                              }
+                            }}
                           >
-                            Request verification
+                            {verifyFormFor === c.credential_id ? 'Cancel' : 'Request verification'}
                           </button>
                         )}
                         <button
@@ -1043,7 +1096,66 @@ export default function ExpertDashboard() {
                         </button>
                       </div>
                     </div>
-                  ))}
+
+                    {(() => {
+                      const latest = latestVerificationFor(c.credential_id)
+                      if (!latest) return null
+                      if (latest.status === 'approved' && latest.admin_notes) {
+                        return (
+                          <p className="lead" style={{ fontSize: 12, marginTop: 4, color: 'var(--acc)' }}>
+                            Approved: {latest.admin_notes}
+                          </p>
+                        )
+                      }
+                      if (latest.status === 'rejected' && latest.rejection_reason) {
+                        return (
+                          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--err, #e53)' }}>
+                            Rejected: {latest.rejection_reason}
+                          </p>
+                        )
+                      }
+                      return null
+                    })()}
+
+                    {verifyFormFor === c.credential_id && (
+                      <div style={{ marginTop: 10, padding: 14, background: 'var(--bg)', borderRadius: 8 }}>
+                        <TagInput
+                          label="Supporting documents (optional)"
+                          values={verifyDocUrls}
+                          onChange={setVerifyDocUrls}
+                          placeholder="https://... (link to a certificate image or PDF)"
+                        />
+                        <div style={{ marginTop: 8 }}>
+                          <label className="btn btn-sm" style={{ cursor: 'pointer', display: 'inline-block' }}>
+                            {uploadingDoc ? 'Uploading…' : 'Upload from your computer'}
+                            <input
+                              type="file"
+                              accept="application/pdf,image/png,image/jpeg,image/webp"
+                              style={{ display: 'none' }}
+                              disabled={uploadingDoc}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) handleUploadDocument(file)
+                                e.target.value = ''
+                              }}
+                            />
+                          </label>
+                          {uploadError && (
+                            <p style={{ fontSize: 12, color: 'var(--err, #e53)', marginTop: 6 }}>{uploadError}</p>
+                          )}
+                        </div>
+                        <button
+                          className="btn btn-acc btn-sm"
+                          style={{ marginTop: 10 }}
+                          disabled={submittingVerification}
+                          onClick={() => handleRequestCredentialVerification(c.credential_id, verifyDocUrls)}
+                        >
+                          {submittingVerification ? 'Submitting…' : 'Submit request'}
+                        </button>
+                      </div>
+                    )}
+                    </div>
+                  )})}
                 </div>
 
                 <form onSubmit={handleAddCredential} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>

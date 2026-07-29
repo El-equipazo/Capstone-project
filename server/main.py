@@ -18,9 +18,10 @@ from server.models.errors import (
     TransitionError,
     ValidationError,
 )
+from server.storage import UPLOAD_DIR
 from server.controllers import (
     admin, auth, connections, engagements, experts, notifications,
-    organizations, threads, verifications,
+    organizations, threads, uploads, verifications,
 )
 
 
@@ -44,6 +45,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve uploaded files back out (StaticFiles requires the directory to exist
+# at mount time — save_upload() also creates it lazily on first write).
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # --- Controller HTTPExceptions → contract error envelope (§1.1) ---
@@ -135,6 +141,7 @@ app.include_router(engagements.router, prefix="/api/v1")
 app.include_router(threads.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(verifications.router, prefix="/api/v1")
+app.include_router(uploads.router, prefix="/api/v1")
 
 # --- SPA static file serving (must come after all API routers) ---
 # In production the Vite build lands at frontend/dist. API routes above always
