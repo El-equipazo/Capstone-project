@@ -225,9 +225,12 @@ async def list(
         )
 
     if "specialization" in filters:
+        # Multi-select (matches ANY of the given specializations) -- a caller
+        # asking for either PQC migration or HSM architecture experience is a
+        # normal request, not something a single-value filter can express.
         where_parts.append(
             f"EXISTS (SELECT 1 FROM expert_specializations es "
-            f"WHERE es.expert_id = ep.expert_profile_id AND es.specialization = {p(filters['specialization'])})"
+            f"WHERE es.expert_id = ep.expert_profile_id AND es.specialization = ANY({p(filters['specialization'])}::text[]))"
         )
 
     if "proficiency_min" in filters:
@@ -259,9 +262,10 @@ async def list(
         )
 
     if "engagement_type" in filters:
+        # Multi-select, same reasoning as specialization above.
         where_parts.append(
             f"EXISTS (SELECT 1 FROM expert_engagement_types eet "
-            f"WHERE eet.expert_id = ep.expert_profile_id AND eet.engagement_type = {p(filters['engagement_type'])})"
+            f"WHERE eet.expert_id = ep.expert_profile_id AND eet.engagement_type = ANY({p(filters['engagement_type'])}::text[]))"
         )
 
     if "availability" in filters:
