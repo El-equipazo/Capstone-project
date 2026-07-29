@@ -65,13 +65,27 @@ async def create(
     return dict(row)
 
 
+async def find_open_between(org_id: int, expert_id: int):
+    """Return the first non-terminal engagement between this org and expert, or None."""
+    db = await pool.get_pool()
+    return await db.fetchrow(
+        """
+        SELECT engagement_id, status FROM engagements
+        WHERE org_id = $1 AND expert_id = $2
+          AND status NOT IN ('completed', 'cancelled')
+        LIMIT 1
+        """,
+        org_id, expert_id,
+    )
+
+
 def _check_list_filters(status: str = None, engagement_type: str = None) -> None:
     check_enum(status, ENGAGEMENT_STATUS, "status", allow_none=True)
     check_enum(engagement_type, ENGAGEMENT_TYPE, "engagement_type", allow_none=True)
 
 
-async def list_for_expert(expert_id: int, *, status: str = None, engagement_type: str = None) -> list:
-    """Return engagements for an expert, with org_name joined in."""
+async def list_for_expert(expert_id: int, *, status: str = None,
+                          engagement_type: str = None) -> list:
     _check_list_filters(status, engagement_type)
     params = [expert_id]
     where = "e.expert_id = $1"
@@ -89,9 +103,11 @@ async def list_for_expert(expert_id: int, *, status: str = None, engagement_type
                e.agreed_budget, e.payment_structure,
                e.start_date, e.estimated_end_date, e.actual_end_date,
                e.created_at, e.updated_at,
-               op.org_name
+               op.org_name,
+               op.user_id AS org_user_id, ep.user_id AS expert_user_id
         FROM engagements e
         JOIN organization_profiles op ON op.org_profile_id = e.org_id
+        JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
         WHERE {where}
         ORDER BY e.created_at DESC
         """,
@@ -100,7 +116,8 @@ async def list_for_expert(expert_id: int, *, status: str = None, engagement_type
     return [dict(r) for r in rows]
 
 
-async def list_for_org(org_id: int, *, status: str = None, engagement_type: str = None) -> list:
+async def list_for_org(org_id: int, *, status: str = None,
+                       engagement_type: str = None) -> list:
     _check_list_filters(status, engagement_type)
     params = [org_id]
     where = "e.org_id = $1"
@@ -119,9 +136,11 @@ async def list_for_org(org_id: int, *, status: str = None, engagement_type: str 
                e.start_date, e.estimated_end_date, e.actual_end_date,
                e.created_at, e.updated_at,
                ep.first_name AS expert_first_name, ep.last_name AS expert_last_name,
-               ep.headline AS expert_headline
+               ep.headline AS expert_headline,
+               op.user_id AS org_user_id, ep.user_id AS expert_user_id
         FROM engagements e
         JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
+        JOIN organization_profiles op ON op.org_profile_id = e.org_id
         WHERE {where}
         ORDER BY e.created_at DESC
         """,

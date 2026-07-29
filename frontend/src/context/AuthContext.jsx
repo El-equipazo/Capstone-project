@@ -1,10 +1,18 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { authApi } from '../api/client'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(() => authApi.getSession())
+
+  // apiFetch dispatches this event when it clears a stale token on 401,
+  // so React state stays in sync without a circular import.
+  useEffect(() => {
+    const handler = () => setSession(null)
+    window.addEventListener('auth:session-expired', handler)
+    return () => window.removeEventListener('auth:session-expired', handler)
+  }, [])
 
   const login = useCallback(async (credentials) => {
     const result = await authApi.login(credentials)

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { connectionsApi, expertsApi } from '../api/client'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { connectionsApi, expertsApi, threadsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
+import { useChat_context } from '../context/ChatContext'
 import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 
 export default function ExpertProfile() {
@@ -16,6 +17,30 @@ export default function ExpertProfile() {
   const [initialMessage, setInitialMessage] = useState('')
 
   const { user } = useAuth()
+  const { openChat } = useChat_context()
+  const [searchParams] = useSearchParams()
+  const [askError, setAskError] = useState('')
+  const [askLoading, setAskLoading] = useState(false)
+
+  async function handleAskQuestion() {
+    setAskError('')
+    setAskLoading(true)
+    try {
+      const thread = await threadsApi.getOrCreate(Number(expertId))
+      openChat(thread.thread_id, `${expert.first_name} ${expert.last_name}`)
+    } catch {
+      setAskError('Could not open conversation. Please try again.')
+    } finally {
+      setAskLoading(false)
+    }
+  }
+
+  // Notification deep-link: /experts/:id?open_thread=X opens the chat immediately.
+  useEffect(() => {
+    const threadId = searchParams.get('open_thread')
+    if (!threadId || !expert) return
+    openChat(parseInt(threadId, 10), `${expert.first_name} ${expert.last_name}`)
+  }, [searchParams, expert, openChat])
 
   useEffect(() => {
     setExpert(null)
@@ -211,6 +236,18 @@ export default function ExpertProfile() {
         <div className="xp-connect-card">
           <div className="xp-connect-left">
             <span className="section-label xp-section-label">Request engagement</span>
+            {canRequestAssessment && (
+              <div style={{ marginBottom: 12 }}>
+                <button
+                  className="btn btn-sm"
+                  onClick={handleAskQuestion}
+                  disabled={askLoading}
+                >
+                  {askLoading ? 'Opening…' : 'Ask a question'}
+                </button>
+                {askError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginTop: 4 }}>{askError}</p>}
+              </div>
+            )}
             {canRequestAssessment ? (
               requestSent ? (
                 <p className="xp-connect-text">Request sent — {expert.first_name} has been notified.</p>

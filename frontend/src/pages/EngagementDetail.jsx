@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { engagementsApi } from '../api/client'
+import { engagementsApi, threadsApi } from '../api/client'
 import { useRequireAuth } from '../hooks/useRequireAuth'
-import { useEngagementChat } from '../hooks/useEngagementChat'
+import { useChat_context } from '../context/ChatContext'
 import { labelize, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 
 const MILESTONE_LABEL = {
@@ -69,8 +69,7 @@ export default function EngagementDetail() {
   const [editingType, setEditingType] = useState(false)
   const [typeValue, setTypeValue] = useState('')
 
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
+  const { openChat } = useChat_context()
 
   useEffect(() => {
     if (!user) return
@@ -79,12 +78,6 @@ export default function EngagementDetail() {
       .catch(() => { setError('Engagement not found or access denied.'); setLoading(false) })
   }, [user, engagementId])
 
-  // Only open the chat/socket once the participant-gated fetch above has
-  // actually succeeded -- don't connect for an engagement the caller turns
-  // out not to have access to.
-  const { messages, loading: messagesLoading, error: messagesError, sendMessage } = useEngagementChat(
-    engagement ? engagementId : null
-  )
 
   if (!user) return null
   if (loading) return <div className="page"><div className="container"><p className="lead">Loading…</p></div></div>
@@ -101,8 +94,6 @@ export default function EngagementDetail() {
   const isTerminal = ['completed', 'cancelled'].includes(engagement.status)
   const backPath = role === 'expert' ? '/dashboard' : '/organization'
   const statusActions = getStatusActions(engagement.status, role)
-  const isMine = (m) => m.sender_id === user.user_id
-
   async function handleTimelineDecision(decision) {
     setActionLoading(true)
     setError('')
@@ -208,17 +199,7 @@ export default function EngagementDetail() {
     }
   }
 
-  async function handleSend(e) {
-    e.preventDefault()
-    if (!draft.trim()) return
-    setSending(true)
-    try {
-      await sendMessage(draft.trim())
-      setDraft('')
-    } finally {
-      setSending(false)
-    }
-  }
+
 
   return (
     <div className="page">
@@ -231,7 +212,11 @@ export default function EngagementDetail() {
         <span className="section-label" style={{ color: 'var(--acc)' }}>engagement</span>
         <div className="row gap-10 wrap" style={{ margin: '8px 0 4px', alignItems: 'center' }}>
           <h1 className="h2">{engagement.title || labelize(engagement.engagement_type)}</h1>
-          <span className={engagementBadgeClass(engagement.status)}>{labelize(engagement.status)}</span>
+          <span className={engagementBadgeClass(engagement.status)}>
+            {engagement.status === 'proposal_sent' && role === 'organization'
+              ? 'Proposal Received'
+              : labelize(engagement.status)}
+          </span>
         </div>
 
         {/* Counterparty info */}
@@ -416,10 +401,18 @@ export default function EngagementDetail() {
               ))}
             </div>
             <p className="lead" style={{ fontSize: 11.5, marginTop: 10 }}>
-              Status: <strong>{labelize(engagement.status)}</strong>
-              {engagement.status === 'scoping' && ' — define milestones and send the proposal when ready'}
-              {engagement.status === 'proposal_sent' && ' — waiting for the organization to accept'}
-              {engagement.status === 'proposal_accepted' && ' — both parties have agreed; start when ready'}
+              Status:{' '}
+              <strong>
+                {engagement.status === 'proposal_sent' && role === 'organization'
+                  ? 'Proposal Received'
+                  : labelize(engagement.status)}
+              </strong>
+              {engagement.status === 'scoping' && role === 'expert' && ' — define milestones and send the proposal when ready'}
+              {engagement.status === 'scoping' && role === 'organization' && ' — the expert is preparing the proposal'}
+              {engagement.status === 'proposal_sent' && role === 'expert' && ' — waiting for the organization to review and accept'}
+              {engagement.status === 'proposal_sent' && role === 'organization' && ' — review the milestones and accept, or request changes'}
+              {engagement.status === 'proposal_accepted' && role === 'expert' && ' — both parties have agreed; start when ready'}
+              {engagement.status === 'proposal_accepted' && role === 'organization' && ' — both parties have agreed; the expert will start when ready'}
               {engagement.status === 'active' && ' — work is underway'}
               {engagement.status === 'on_hold' && ' — engagement is paused'}
             </p>
@@ -618,35 +611,20 @@ export default function EngagementDetail() {
         </div>
 
         {/* Messages */}
-        <div className="card" style={{ padding: 22 }}>
-          <span className="section-label" style={{ display: 'block', marginBottom: 14 }}>Messages</span>
-          <div className="chat-panel">
-            <div className="chat-messages">
-              {messagesLoading && <p className="lead">Loading messages…</p>}
-              {messagesError && <div className="alert alert-error">{messagesError}</div>}
-              {!messagesLoading && messages.length === 0 && (
-                <p className="lead" style={{ fontSize: 12.5 }}>
-                  No messages yet — say hello.
-                </p>
-              )}
-              {messages.map((m) => (
-                <div key={m.message_id} className={`chat-bubble ${isMine(m) ? 'mine' : 'theirs'}`}>
-                  {m.content}
-                </div>
-              ))}
-            </div>
-            <form className="chat-composer" onSubmit={handleSend}>
-              <input
-                className="field-input"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Write a message…"
-              />
-              <button className="btn btn-acc btn-sm" type="submit" disabled={sending || !draft.trim()}>
-                Send
-              </button>
-            </form>
-          </div>
+        <div className="card" style={{ padding: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="section-label">Messages</span>
+          <button
+            className="btn btn-sm"
+            onClick={async () => {
+              try {
+                const thread = await threadsApi.getOrCreateForEngagement(engagementId)
+                const title = engagement.title || engagement.org_name || engagement.expert_first_name
+                openChat(thread.thread_id, title)
+              } catch { /* non-fatal */ }
+            }}
+          >
+            Open Chat
+          </button>
         </div>
 
       </div>
