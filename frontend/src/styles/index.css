@@ -1290,6 +1290,66 @@ button, input, select, textarea {
   flex: none;
 }
 
+/* ---------- How it works: connected step flow ---------- */
+.flow {
+  position: relative;
+  padding-left: 4px;
+}
+
+.flow-line {
+  position: absolute;
+  left: 23px;
+  top: 22px;
+  bottom: 22px;
+  width: 1px;
+  background: var(--line);
+}
+
+.flow-step {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  padding-bottom: 44px;
+}
+
+.flow-step:last-child {
+  padding-bottom: 0;
+}
+
+.flow-step .n {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1.6px solid var(--ink);
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex: none;
+  position: relative;
+  z-index: 1;
+}
+
+.flow-step .content {
+  padding-top: 6px;
+}
+
+.flow-step .t {
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 6px;
+  letter-spacing: -0.005em;
+}
+
+.flow-step .d {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 480px;
+}
+
 .stat {
   display: flex;
   flex-direction: column;
