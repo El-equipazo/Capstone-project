@@ -327,6 +327,18 @@ export default function EngagementDetail() {
               ? 'Proposal Received'
               : labelize(engagement.status)}
           </span>
+          <button
+            className="btn btn-sm"
+            onClick={async () => {
+              try {
+                const thread = await threadsApi.getOrCreateForEngagement(engagementId)
+                const title = engagement.title || engagement.org_name || engagement.expert_first_name
+                openChat(thread.thread_id, title)
+              } catch { /* non-fatal */ }
+            }}
+          >
+            Open Chat
+          </button>
         </div>
 
         {/* Counterparty info */}
@@ -890,23 +902,6 @@ export default function EngagementDetail() {
             </div>
             )
           })}
-        </div>
-
-        {/* Messages */}
-        <div className="card" style={{ padding: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="section-label">Messages</span>
-          <button
-            className="btn btn-sm"
-            onClick={async () => {
-              try {
-                const thread = await threadsApi.getOrCreateForEngagement(engagementId)
-                const title = engagement.title || engagement.org_name || engagement.expert_first_name
-                openChat(thread.thread_id, title)
-              } catch { /* non-fatal */ }
-            }}
-          >
-            Open Chat
-          </button>
         </div>
 
       </div>
