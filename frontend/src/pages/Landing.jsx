@@ -99,9 +99,6 @@ export default function Landing() {
               ))}
             </div>
             <div className="verify-connector" />
-            <div className="verify-foot">
-              <span className="dot" /> This is the actual review pipeline — not marketing copy.
-            </div>
           </div>
 
           {/* Target sectors */}
