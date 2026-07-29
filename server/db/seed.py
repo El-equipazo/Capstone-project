@@ -454,6 +454,11 @@ async def seed():
                 rejection_reason         TEXT,
                 reviewed_at              TIMESTAMP,
                 expires_at               DATE,
+                ai_recommendation        TEXT,
+                ai_confidence            TEXT,
+                ai_reasoning             TEXT,
+                ai_red_flags             TEXT[],
+                ai_reviewed_at           TIMESTAMP,
                 created_at               TIMESTAMP DEFAULT NOW()
             )
         """)

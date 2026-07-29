@@ -12,6 +12,16 @@
   --risk-light: #fbeeea;
   --good: #3f7145;
   --good-light: #eaf1e9;
+  --danger: #dc2626;
+  --danger-light: #fdecec;
+  --pending: #8a6d1d;
+  --pending-light: #fbf6e8;
+  --pending-border: #e3d29c;
+  --cat-1: #1f3a5f;
+  --cat-2: #3f6b74;
+  --cat-3: #7a5980;
+  --cat-4: #8a6d1d;
+  --cat-5: #a8543c;
   --radius: 10px;
   --radius-lg: 14px;
   --shadow: 0 1px 3px rgba(20, 22, 30, 0.06), 0 1px 2px rgba(20, 22, 30, 0.08);
@@ -274,9 +284,52 @@ button, input, select, textarea {
 }
 
 .badge.pending {
-  background: #fbf6e8;
-  color: #8a6d1d;
-  border-color: #e3d29c;
+  background: var(--pending-light);
+  color: var(--pending);
+  border-color: var(--pending-border);
+}
+
+.badge.approved {
+  background: var(--good-light);
+  color: var(--good);
+  border-color: #b9d0bb;
+}
+
+.badge.rejected,
+.badge.ai-reject {
+  background: var(--danger-light);
+  color: var(--danger);
+  border-color: #f3c6c6;
+}
+
+.badge.ai-approve {
+  background: var(--good-light);
+  color: var(--good);
+  border-color: #b9d0bb;
+}
+
+.badge.ai-needs_more_info {
+  background: var(--pending-light);
+  color: var(--pending);
+  border-color: var(--pending-border);
+}
+
+.badge.role-expert {
+  background: var(--good-light);
+  color: var(--good);
+  border-color: #b9d0bb;
+}
+
+.badge.role-organization {
+  background: var(--acc-light);
+  color: var(--acc);
+  border-color: #c3d3e6;
+}
+
+.badge.role-admin {
+  background: #f1eafb;
+  color: #6b3fa0;
+  border-color: #d9c7f0;
 }
 
 .tag {
@@ -722,6 +775,295 @@ button, input, select, textarea {
   flex: none;
 }
 
+.avatar.avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+/* ---------- Admin data tables ---------- */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table thead th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--fill2);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-table thead th:first-child { border-top-left-radius: var(--radius); }
+.admin-table thead th:last-child { border-top-right-radius: var(--radius); }
+
+.admin-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:hover > td {
+  background: var(--fill2);
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr.expanded-detail:hover > td {
+  background: transparent;
+}
+
+.admin-table thead th.center,
+.admin-table tbody td.center {
+  text-align: center;
+}
+
+.admin-table tbody tr.attn td {
+  background: rgba(138, 109, 29, 0.05);
+}
+
+.admin-table tbody tr.attn.danger td {
+  background: rgba(220, 38, 38, 0.045);
+}
+
+.identity-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-ring {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  flex: none;
+}
+
+.avatar-ring.good { box-shadow: 0 0 0 2px var(--good); }
+.avatar-ring.pending { box-shadow: 0 0 0 2px var(--pending-border); }
+.avatar-ring.danger { box-shadow: 0 0 0 2px var(--danger); }
+.avatar-ring .avatar { width: 100%; height: 100%; font-size: 11px; }
+
+.id-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.id-text .primary {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.id-text .secondary {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.submission-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.actions-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.submitted-date {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex: none;
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: stroke 0.15s ease;
+}
+
+.icon-btn:active {
+  transform: translateY(1px);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-btn.approve {
+  background: var(--good-light);
+  border-color: color-mix(in srgb, var(--good) 35%, transparent);
+}
+
+.icon-btn.approve svg {
+  stroke: var(--good);
+}
+
+.icon-btn.approve:hover:not(:disabled) {
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.icon-btn.approve:hover:not(:disabled) svg {
+  stroke: #fff;
+}
+
+.icon-btn.reject {
+  background: var(--danger-light);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.icon-btn.reject svg {
+  stroke: var(--danger);
+}
+
+.icon-btn.reject:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.icon-btn.reject:hover:not(:disabled) svg {
+  stroke: #fff;
+}
+
+/* ---------- Queue summary card (admin stat cards) ---------- */
+.queue-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.queue-hero { min-width: 0; }
+
+.queue-hero .v {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--acc);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-hero .l {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.queue-divider {
+  height: 1px;
+  background: var(--line);
+}
+
+.queue-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  min-width: 0;
+}
+
+.queue-stat { min-width: 0; }
+
+.queue-stat .v {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.queue-stat .l {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 5px;
+  white-space: nowrap;
+}
+
+.queue-stat.tone-good .v { color: var(--good); }
+.queue-stat.tone-danger .v { color: var(--danger); }
+
+/* ---------- Composition bar (admin breakdown cards) ---------- */
+.comp-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--fill);
+  margin-top: 16px;
+}
+
+.comp-seg { height: 100%; }
+
+.comp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.comp-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.comp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.comp-item .name { color: var(--muted); }
+.comp-item .n { font-weight: 700; font-variant-numeric: tabular-nums; }
+
 .page {
   flex: 1;
   width: 100%;
@@ -825,6 +1167,187 @@ button, input, select, textarea {
 
 .pill-btn:hover {
   transform: translateY(-1px);
+}
+
+/* ---------- Landing page: verification band ---------- */
+.verify-band {
+  background: var(--ink);
+  border-radius: var(--radius-lg);
+  padding: 30px 32px;
+  margin-bottom: 56px;
+  color: #fff;
+}
+
+.verify-head {
+  margin-bottom: 24px;
+}
+
+.verify-head .section-label {
+  color: #9fb0c8;
+}
+
+.verify-head h3 {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 6px 0 0;
+  letter-spacing: -0.01em;
+}
+
+.verify-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.verify-step {
+  display: flex;
+  gap: 14px;
+}
+
+.verify-step .n {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex: none;
+  color: #fff;
+}
+
+.verify-step .t {
+  font-weight: 600;
+  font-size: 13.5px;
+  margin-bottom: 4px;
+}
+
+.verify-step .d {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.verify-connector {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.14);
+  margin: 22px 0;
+}
+
+.verify-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.verify-foot .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 0 3px rgba(63, 113, 69, 0.25);
+  flex: none;
+}
+
+/* ---------- Landing page: sector marks ---------- */
+.sector-mark {
+  width: 16px;
+  height: 16px;
+  margin-bottom: 12px;
+  background: var(--acc);
+  transform: rotate(45deg);
+  border-radius: 3px;
+}
+
+/* ---------- Landing page: closing CTA band ---------- */
+.close-band {
+  border-radius: var(--radius-lg);
+  padding: 40px 32px;
+  background: var(--acc-light);
+  border: 1px solid #c3d3e6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.close-band h3 {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 6px 0 0;
+  max-width: 420px;
+}
+
+.close-actions {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+
+/* ---------- How it works: connected step flow ---------- */
+.flow {
+  position: relative;
+  padding-left: 4px;
+}
+
+.flow-line {
+  position: absolute;
+  left: 23px;
+  top: 22px;
+  bottom: 22px;
+  width: 1px;
+  background: var(--line);
+}
+
+.flow-step {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  padding-bottom: 44px;
+}
+
+.flow-step:last-child {
+  padding-bottom: 0;
+}
+
+.flow-step .n {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1.6px solid var(--ink);
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex: none;
+  position: relative;
+  z-index: 1;
+}
+
+.flow-step .content {
+  padding-top: 6px;
+}
+
+.flow-step .t {
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 6px;
+  letter-spacing: -0.005em;
+}
+
+.flow-step .d {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 480px;
 }
 
 .stat {

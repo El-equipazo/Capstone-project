@@ -455,6 +455,13 @@ export const adminApi = {
     })
   },
 
+  async reviewVerificationWithAI(verificationId) {
+    return await apiFetch(`/admin/verifications/${verificationId}/ai-review`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
   async setExpertVerified(expertProfileId, isVerified) {
     return await apiFetch(`/admin/experts/${expertProfileId}/verify`, {
       method: 'PATCH',
@@ -484,6 +491,29 @@ export const matchingApi = {
       body: { need_description, limit },
       headers: authHeader(),
     })
+  },
+}
+
+// ---------------- Uploads -----------------------------------------------------
+// multipart/form-data, so this can't go through apiFetch (which always
+// JSON-encodes the body) — a raw fetch with FormData, no Content-Type
+// override (the browser sets the multipart boundary itself).
+
+export const uploadsApi = {
+  async upload(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch(`${BASE}/uploads`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: formData,
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      const err = data?.error ?? {}
+      throw new ApiError(res.status, err.code ?? 'ERROR', err.message ?? res.statusText)
+    }
+    return data
   },
 }
 
