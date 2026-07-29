@@ -1169,6 +1169,127 @@ button, input, select, textarea {
   transform: translateY(-1px);
 }
 
+/* ---------- Landing page: verification band ---------- */
+.verify-band {
+  background: var(--ink);
+  border-radius: var(--radius-lg);
+  padding: 30px 32px;
+  margin-bottom: 56px;
+  color: #fff;
+}
+
+.verify-head {
+  margin-bottom: 24px;
+}
+
+.verify-head .section-label {
+  color: #9fb0c8;
+}
+
+.verify-head h3 {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 6px 0 0;
+  letter-spacing: -0.01em;
+}
+
+.verify-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.verify-step {
+  display: flex;
+  gap: 14px;
+}
+
+.verify-step .n {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex: none;
+  color: #fff;
+}
+
+.verify-step .t {
+  font-weight: 600;
+  font-size: 13.5px;
+  margin-bottom: 4px;
+}
+
+.verify-step .d {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.verify-connector {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.14);
+  margin: 22px 0;
+}
+
+.verify-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.verify-foot .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 0 3px rgba(63, 113, 69, 0.25);
+  flex: none;
+}
+
+/* ---------- Landing page: sector marks ---------- */
+.sector-mark {
+  width: 16px;
+  height: 16px;
+  margin-bottom: 12px;
+  background: var(--acc);
+  transform: rotate(45deg);
+  border-radius: 3px;
+}
+
+/* ---------- Landing page: closing CTA band ---------- */
+.close-band {
+  border-radius: var(--radius-lg);
+  padding: 40px 32px;
+  background: var(--acc-light);
+  border: 1px solid #c3d3e6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.close-band h3 {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 6px 0 0;
+  max-width: 420px;
+}
+
+.close-actions {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+
 .stat {
   display: flex;
   flex-direction: column;

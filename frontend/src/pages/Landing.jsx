@@ -1,23 +1,20 @@
 import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
-import { expertsApi } from '../api/client'
-import ExpertCard from '../components/ExpertCard'
 import LatticeHeroArt from '../components/LatticeHeroArt'
 
 const SECTORS = [
-  { icon: '🏦', label: 'Banks', sub: 'Retail, commercial & community banks' },
-  { icon: '💳', label: 'Payment processors', sub: 'Card networks, payment rails, fintech infrastructure' },
-  { icon: '📈', label: 'Investment firms', sub: 'Asset managers, hedge funds, broker-dealers' },
-  { icon: '🛡️', label: 'Insurers', sub: 'Carriers holding decades of policyholder data' },
+  { label: 'Banks', sub: 'Retail, commercial & community banks' },
+  { label: 'Payment processors', sub: 'Card networks, payment rails, fintech infrastructure' },
+  { label: 'Investment firms', sub: 'Asset managers, hedge funds, broker-dealers' },
+  { label: 'Insurers', sub: 'Carriers holding decades of policyholder data' },
+]
+
+const VERIFY_STEPS = [
+  { n: 1, title: 'Credentials submitted', body: 'Institution, certification, or license — with supporting documents, not a self-reported checkbox.' },
+  { n: 2, title: 'AI-assisted review', body: 'Every document is screened for inconsistencies and red flags before a human ever looks at it.' },
+  { n: 3, title: 'Verified, not assumed', body: 'An admin makes the final call. Only then does the verified badge appear on a public profile.' },
 ]
 
 export default function Landing() {
-  const [featured, setFeatured] = useState([])
-
-  useEffect(() => {
-    expertsApi.list().then((res) => setFeatured(res.data.slice(0, 3)))
-  }, [])
-
   return (
     <>
       <section className="hero-sky">
@@ -84,24 +81,26 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Trust band */}
-          <div
-            className="card"
-            style={{ background: 'var(--ink)', borderColor: 'var(--ink)', padding: '20px 24px', marginBottom: 56 }}
-          >
-            <span className="section-label" style={{ color: '#c8d6e4' }}>
-              how experts are vetted
-            </span>
-            <div className="row gap-10 wrap" style={{ marginTop: 12 }}>
-              <span className="chip" style={{ background: 'transparent', borderColor: '#565049', color: '#e6e3dc' }}>
-                ✓ Credentials verified
-              </span>
-              <span className="chip" style={{ background: 'transparent', borderColor: '#565049', color: '#e6e3dc' }}>
-                ✓ Certifications checked
-              </span>
-              <span className="chip" style={{ background: 'transparent', borderColor: '#565049', color: '#e6e3dc' }}>
-                ✓ Sector-compliance proven
-              </span>
+          {/* Verification band */}
+          <div className="verify-band">
+            <div className="verify-head">
+              <span className="section-label">how vetting works</span>
+              <h3>Every expert on Lattice is verified before you ever see their profile.</h3>
+            </div>
+            <div className="verify-steps">
+              {VERIFY_STEPS.map((step) => (
+                <div className="verify-step" key={step.n}>
+                  <span className="n">{step.n}</span>
+                  <div>
+                    <div className="t">{step.title}</div>
+                    <div className="d">{step.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="verify-connector" />
+            <div className="verify-foot">
+              <span className="dot" /> This is the actual review pipeline — not marketing copy.
             </div>
           </div>
 
@@ -118,7 +117,7 @@ export default function Landing() {
             >
               {SECTORS.map((s) => (
                 <div key={s.label} className="card" style={{ padding: 18 }}>
-                  <div style={{ fontSize: 22, marginBottom: 8 }}>{s.icon}</div>
+                  <div className="sector-mark" />
                   <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{s.label}</div>
                   <div className="lead" style={{ fontSize: 12 }}>
                     {s.sub}
@@ -128,18 +127,21 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Featured experts */}
-          <div>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
-              <span className="section-label">featured experts</span>
-              <Link to="/experts" className="tag">
-                see full directory →
-              </Link>
+          {/* Closing CTA */}
+          <div className="close-band">
+            <div>
+              <span className="section-label" style={{ color: 'var(--acc)' }}>
+                ready when you are
+              </span>
+              <h3>Find your quantum security partner — or your next engagement.</h3>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-              {featured.map((expert) => (
-                <ExpertCard key={expert.expert_profile_id} expert={expert} />
-              ))}
+            <div className="close-actions">
+              <Link to="/sign-up?role=expert" className="btn">
+                Create your profile
+              </Link>
+              <Link to="/experts" className="btn btn-acc">
+                Browse verified experts →
+              </Link>
             </div>
           </div>
         </div>
