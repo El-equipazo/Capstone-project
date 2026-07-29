@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import NotificationBell from './NotificationBell'
@@ -17,6 +17,18 @@ export default function Navbar() {
   const isLanding = location.pathname === '/'
   const [scrolled, setScrolled] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const accountRef = useRef(null)
+
+  useEffect(() => {
+    if (!accountOpen) return
+    function onClickOutside(e) {
+      if (accountRef.current && !accountRef.current.contains(e.target)) {
+        setAccountOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [accountOpen])
 
   // Only the landing page has a hero tall/colorful enough for the navbar to
   // float transparently over it; every other page keeps the normal solid,
@@ -57,7 +69,7 @@ export default function Navbar() {
           <div className="nav-actions">
             <NotificationBell />
             {user ? (
-              <div className="account-wrap">
+              <div className="account-wrap" ref={accountRef}>
                 <button className="account-trigger" onClick={() => setAccountOpen((v) => !v)} aria-label="Account menu">
                   <span className="avatar avatar-sm">{initials(user.email)}</span>
                   <span className="chev">▾</span>
