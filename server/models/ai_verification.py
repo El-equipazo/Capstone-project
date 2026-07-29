@@ -19,9 +19,13 @@ explicit admin action — failures are raised, not swallowed, so the admin
 gets a clear error instead of silent nothing.
 """
 
+import asyncio
+import ipaddress
 import json
 import mimetypes
+import socket
 from typing import List, Literal, Optional
+from urllib.parse import urljoin, urlparse
 
 from pydantic import BaseModel
 
@@ -31,6 +35,49 @@ from .ai_client import AIConfigurationError, AIUnavailableError, get_client
 _FETCH_TIMEOUT_SECONDS = 10
 _MAX_DOCUMENT_BYTES = 10 * 1024 * 1024  # 10MB
 _ALLOWED_SCHEMES = {"http", "https"}
+_MAX_REDIRECTS = 5
+
+
+def _is_blocked_ip(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return True  # unparseable -- fail closed
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _resolve_and_validate_host(hostname: str) -> bool:
+    """
+    SSRF guard: resolve every address a hostname points to and reject if any
+    of them land in a loopback/link-local/private/reserved range (RFC 1918,
+    169.254.0.0/16, etc). submitted_document_urls is untrusted expert input
+    (server/controllers/verifications.py accepts it with no host validation),
+    fetched server-side the moment an admin clicks "Ask AI to Review" -- a
+    completely ordinary admin action -- so a stored SSRF here would let any
+    expert reach internal-only hosts (e.g. the cloud metadata endpoint) via
+    the backend itself.
+
+    This does not defend against DNS-rebinding (a second, different lookup
+    at connect time) -- closing that fully would mean pinning the validated
+    IP for the actual connection, which is more than this project's threat
+    model calls for. Blocking naive private-range targets and following
+    redirects only after re-validating each hop (below) covers the realistic
+    attack surface here.
+    """
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False
+    if not infos:
+        return False
+    return all(not _is_blocked_ip(info[4][0]) for info in infos)
 
 
 class CredentialAssessment(BaseModel):
@@ -83,25 +130,40 @@ def _guess_mime_type(url: str, content_type: Optional[str]) -> str:
 async def _fetch_document(url: str) -> Optional[tuple[bytes, str]]:
     """Fetch one submitted document, best-effort. Returns (bytes, mime_type)
     or None if it can't be retrieved — a missing/broken document link
-    shouldn't abort the whole review, just narrows what Gemini can assess."""
-    from urllib.parse import urlparse
+    shouldn't abort the whole review, just narrows what Gemini can assess.
+
+    Redirects are followed manually (not via httpx's follow_redirects) so
+    every hop gets the same SSRF host validation -- an allowed external URL
+    that 302s to an internal address would otherwise sail straight past the
+    initial check.
+    """
     import httpx
 
-    scheme = urlparse(url).scheme.lower()
-    if scheme not in _ALLOWED_SCHEMES:
-        return None
-
     try:
-        async with httpx.AsyncClient(timeout=_FETCH_TIMEOUT_SECONDS, follow_redirects=True) as client:
-            async with client.stream("GET", url) as response:
-                if response.status_code != 200:
+        async with httpx.AsyncClient(timeout=_FETCH_TIMEOUT_SECONDS, follow_redirects=False) as client:
+            for _ in range(_MAX_REDIRECTS + 1):
+                parsed = urlparse(url)
+                if parsed.scheme.lower() not in _ALLOWED_SCHEMES or not parsed.hostname:
                     return None
-                chunks = bytearray()
-                async for chunk in response.aiter_bytes():
-                    chunks.extend(chunk)
-                    if len(chunks) > _MAX_DOCUMENT_BYTES:
+                if not await asyncio.to_thread(_resolve_and_validate_host, parsed.hostname):
+                    return None
+
+                async with client.stream("GET", url) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("location")
+                        if not location:
+                            return None
+                        url = urljoin(url, location)
+                        continue
+                    if response.status_code != 200:
                         return None
-                return bytes(chunks), _guess_mime_type(url, response.headers.get("content-type"))
+                    chunks = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        chunks.extend(chunk)
+                        if len(chunks) > _MAX_DOCUMENT_BYTES:
+                            return None
+                    return bytes(chunks), _guess_mime_type(url, response.headers.get("content-type"))
+            return None  # too many redirects
     except (httpx.HTTPError, Exception):
         return None
 
