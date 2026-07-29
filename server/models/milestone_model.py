@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from server.db import connection_pool as pool
-from .errors import NotFoundError
+from .errors import NotFoundError, TransitionError
 
 _COLS = """
     milestone_id, engagement_id, proposed_by_user_id, proposed_by_role,
     title, description, order_index, due_date, deliverable_description,
     status, confirmed_by_expert_id, confirmed_at, completed_at,
-    requires_client_approval, client_approved_at, created_at, updated_at
+    requires_client_approval, client_approved_at,
+    pending_action, pending_due_date, pending_deliverable_description,
+    pending_requested_by_user_id, pending_requested_at,
+    created_at, updated_at
 """
 
 _UPDATABLE = {
@@ -103,6 +106,110 @@ async def confirm(milestone_id: int) -> dict:
     )
     if row is None:
         raise NotFoundError("milestone not found")
+    return dict(row)
+
+
+# -- ORG-PROPOSED CHANGES ------------------------------------------------------
+# A milestone has at most one outstanding org-proposed change at a time
+# (pending_action: NULL | 'change' | 'cancel'), which the expert must
+# accept/decline before it takes effect. Upsert semantics throughout --
+# re-proposing before the expert responds simply overwrites the prior one.
+
+async def propose_change(milestone_id: int, user_id: int, *,
+                         due_date=None, deliverable_description: str = None) -> dict:
+    row = await pool.fetchrow(
+        f"""
+        UPDATE engagement_milestones
+        SET pending_action = 'change',
+            pending_due_date = $2,
+            pending_deliverable_description = $3,
+            pending_requested_by_user_id = $4,
+            pending_requested_at = NOW(),
+            updated_at = NOW()
+        WHERE milestone_id = $1
+        RETURNING {_COLS}
+        """,
+        milestone_id, due_date, deliverable_description, user_id,
+    )
+    if row is None:
+        raise NotFoundError("milestone not found")
+    return dict(row)
+
+
+async def propose_cancel(milestone_id: int, user_id: int) -> dict:
+    row = await pool.fetchrow(
+        f"""
+        UPDATE engagement_milestones
+        SET pending_action = 'cancel',
+            pending_due_date = NULL,
+            pending_deliverable_description = NULL,
+            pending_requested_by_user_id = $2,
+            pending_requested_at = NOW(),
+            updated_at = NOW()
+        WHERE milestone_id = $1
+        RETURNING {_COLS}
+        """,
+        milestone_id, user_id,
+    )
+    if row is None:
+        raise NotFoundError("milestone not found")
+    return dict(row)
+
+
+async def accept_pending(milestone_id: int) -> dict:
+    m = await get(milestone_id)
+    if m["pending_action"] is None:
+        raise TransitionError("No pending change to accept")
+
+    if m["pending_action"] == "change":
+        row = await pool.fetchrow(
+            f"""
+            UPDATE engagement_milestones
+            SET due_date = COALESCE($2, due_date),
+                deliverable_description = COALESCE($3, deliverable_description),
+                pending_action = NULL, pending_due_date = NULL,
+                pending_deliverable_description = NULL,
+                pending_requested_by_user_id = NULL, pending_requested_at = NULL,
+                updated_at = NOW()
+            WHERE milestone_id = $1
+            RETURNING {_COLS}
+            """,
+            milestone_id, m["pending_due_date"], m["pending_deliverable_description"],
+        )
+    else:  # 'cancel'
+        row = await pool.fetchrow(
+            f"""
+            UPDATE engagement_milestones
+            SET status = 'skipped',
+                pending_action = NULL, pending_due_date = NULL,
+                pending_deliverable_description = NULL,
+                pending_requested_by_user_id = NULL, pending_requested_at = NULL,
+                updated_at = NOW()
+            WHERE milestone_id = $1
+            RETURNING {_COLS}
+            """,
+            milestone_id,
+        )
+    return dict(row)
+
+
+async def decline_pending(milestone_id: int) -> dict:
+    m = await get(milestone_id)
+    if m["pending_action"] is None:
+        raise TransitionError("No pending change to decline")
+
+    row = await pool.fetchrow(
+        f"""
+        UPDATE engagement_milestones
+        SET pending_action = NULL, pending_due_date = NULL,
+            pending_deliverable_description = NULL,
+            pending_requested_by_user_id = NULL, pending_requested_at = NULL,
+            updated_at = NOW()
+        WHERE milestone_id = $1
+        RETURNING {_COLS}
+        """,
+        milestone_id,
+    )
     return dict(row)
 
 

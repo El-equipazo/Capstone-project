@@ -80,6 +80,24 @@ MIGRATIONS: list[tuple[str, str]] = [
         ALTER TABLE messages ALTER COLUMN thread_id SET NOT NULL;
         """,
     ),
+    (
+        "005_milestone_pending_change",
+        """
+        ALTER TABLE engagement_milestones
+            ADD COLUMN IF NOT EXISTS pending_action TEXT,
+            ADD COLUMN IF NOT EXISTS pending_due_date DATE,
+            ADD COLUMN IF NOT EXISTS pending_deliverable_description TEXT,
+            ADD COLUMN IF NOT EXISTS pending_requested_by_user_id INTEGER REFERENCES users(user_id),
+            ADD COLUMN IF NOT EXISTS pending_requested_at TIMESTAMP;
+        """,
+    ),
+    (
+        "006_engagements_proposal_expires_at",
+        """
+        ALTER TABLE engagements
+            ADD COLUMN IF NOT EXISTS proposal_expires_at TIMESTAMP;
+        """,
+    ),
 ]
 
 

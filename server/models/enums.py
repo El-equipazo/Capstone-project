@@ -67,11 +67,19 @@ MESSAGE_TYPE = {"text", "file", "milestone_update", "system_event"}
 # Clients may only POST these two; the rest are server-emitted.
 CLIENT_MESSAGE_TYPE = {"text", "file"}
 
-# Scoped to what's actually emitted today (message_received on new messages,
-# connection_accepted/declined on PATCH /connections/:id) -- not the
-# contract's full aspirational list, since milestones/reviews/verification
-# notifications belong to features that don't exist yet.
-NOTIFICATION_TYPE = {"message_received", "connection_accepted", "connection_declined"}
+# Scoped to what's actually emitted today -- not the contract's full
+# aspirational list, since reviews/verification notifications belong to
+# features that don't exist yet.
+NOTIFICATION_TYPE = {
+    "message_received",
+    "connection_request_received", "connection_accepted", "connection_declined",
+    "milestone_change_proposed", "milestone_change_confirmed", "milestone_change_declined",
+}
+
+# A milestone can have at most one outstanding org-proposed change at a time
+# (a reschedule/deliverable edit, or a cancellation request) awaiting the
+# expert's response -- see engagement_milestones.pending_action.
+MILESTONE_PENDING_ACTION = {"change", "cancel"}
 
 REVIEWER_ROLE = {"organization", "expert"}
 
