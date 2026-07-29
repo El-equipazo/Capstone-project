@@ -47,36 +47,50 @@ MIGRATIONS: list[tuple[str, str]] = [
     (
         "004_consolidate_messages_to_threads",
         """
-        -- Create a thread for every engagement pair that has messages, merging
-        -- with any existing pre-connection thread for the same pair.
-        INSERT INTO chat_threads (org_user_id, expert_user_id)
-        SELECT DISTINCT op.user_id, ep.user_id
-        FROM messages m
-        JOIN engagements e ON e.engagement_id = m.engagement_id
-        JOIN organization_profiles op ON op.org_profile_id = e.org_id
-        JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
-        WHERE m.engagement_id IS NOT NULL
-        ON CONFLICT (org_user_id, expert_user_id) DO NOTHING;
+        -- Guarded on engagement_id actually existing -- a fresh install seeded
+        -- via server/db/seed.py never has it (messages is created thread_id-only
+        -- from the start), and without this guard the migration also isn't
+        -- safe to re-run against an already-migrated database, since the
+        -- second run would find the column already dropped.
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'messages' AND column_name = 'engagement_id'
+            ) THEN
+                -- Create a thread for every engagement pair that has messages,
+                -- merging with any existing pre-connection thread for the pair.
+                INSERT INTO chat_threads (org_user_id, expert_user_id)
+                SELECT DISTINCT op.user_id, ep.user_id
+                FROM messages m
+                JOIN engagements e ON e.engagement_id = m.engagement_id
+                JOIN organization_profiles op ON op.org_profile_id = e.org_id
+                JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
+                WHERE m.engagement_id IS NOT NULL
+                ON CONFLICT (org_user_id, expert_user_id) DO NOTHING;
 
-        -- Also ensure a thread exists for every engagement (even without messages).
-        INSERT INTO chat_threads (org_user_id, expert_user_id)
-        SELECT DISTINCT op.user_id, ep.user_id
-        FROM engagements e
-        JOIN organization_profiles op ON op.org_profile_id = e.org_id
-        JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
-        ON CONFLICT (org_user_id, expert_user_id) DO NOTHING;
+                -- Also ensure a thread exists for every engagement (even without messages).
+                INSERT INTO chat_threads (org_user_id, expert_user_id)
+                SELECT DISTINCT op.user_id, ep.user_id
+                FROM engagements e
+                JOIN organization_profiles op ON op.org_profile_id = e.org_id
+                JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
+                ON CONFLICT (org_user_id, expert_user_id) DO NOTHING;
 
-        -- Point existing engagement messages at their thread.
-        UPDATE messages m
-        SET thread_id = ct.thread_id
-        FROM engagements e
-        JOIN organization_profiles op ON op.org_profile_id = e.org_id
-        JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
-        JOIN chat_threads ct ON ct.org_user_id = op.user_id AND ct.expert_user_id = ep.user_id
-        WHERE m.engagement_id = e.engagement_id AND m.thread_id IS NULL;
+                -- Point existing engagement messages at their thread.
+                UPDATE messages m
+                SET thread_id = ct.thread_id
+                FROM engagements e
+                JOIN organization_profiles op ON op.org_profile_id = e.org_id
+                JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
+                JOIN chat_threads ct ON ct.org_user_id = op.user_id AND ct.expert_user_id = ep.user_id
+                WHERE m.engagement_id = e.engagement_id AND m.thread_id IS NULL;
 
-        -- Drop engagement_id and enforce thread_id NOT NULL.
-        ALTER TABLE messages DROP COLUMN IF EXISTS engagement_id;
+                ALTER TABLE messages DROP COLUMN engagement_id;
+            END IF;
+        END $$;
+
+        -- Safe unconditionally: already true on a fresh seed, or just backfilled above.
         ALTER TABLE messages ALTER COLUMN thread_id SET NOT NULL;
         """,
     ),
