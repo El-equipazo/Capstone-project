@@ -904,6 +904,71 @@ button, input, select, textarea {
   flex: none;
 }
 
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: stroke 0.15s ease;
+}
+
+.icon-btn:active {
+  transform: translateY(1px);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-btn.approve {
+  background: var(--good-light);
+  border-color: color-mix(in srgb, var(--good) 35%, transparent);
+}
+
+.icon-btn.approve svg {
+  stroke: var(--good);
+}
+
+.icon-btn.approve:hover:not(:disabled) {
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.icon-btn.approve:hover:not(:disabled) svg {
+  stroke: #fff;
+}
+
+.icon-btn.reject {
+  background: var(--danger-light);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.icon-btn.reject svg {
+  stroke: var(--danger);
+}
+
+.icon-btn.reject:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.icon-btn.reject:hover:not(:disabled) svg {
+  stroke: #fff;
+}
+
 /* ---------- Queue summary card (admin stat cards) ---------- */
 .queue-summary {
   display: flex;
