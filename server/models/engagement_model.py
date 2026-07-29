@@ -3,11 +3,11 @@ engagement_model — data access for the engagements table.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from server.db import connection_pool as pool
 from .enums import ENGAGEMENT_STATUS, ENGAGEMENT_TYPE, PAYMENT_STRUCTURE
-from .errors import ConflictError, NotFoundError, TransitionError
+from .errors import ConflictError, NotFoundError, TransitionError, ValidationError
 from .validators import check_enum
 
 _TERMINAL = {"completed", "cancelled"}
@@ -229,6 +229,17 @@ async def is_participant(engagement_id: int, user_id: int) -> tuple[bool, str | 
 async def update(engagement_id: int, caller_role: str, updates: dict) -> dict:
     existing = await get(engagement_id)
     set_parts: dict = {}
+
+    # A same-day (or past) deadline parses to midnight, which expire_stale_
+    # proposals() would sweep back to 'scoping' the very next time anything
+    # reads this engagement -- reject it up front instead of silently
+    # accepting a proposal that's already expired.
+    proposal_expires_at = updates.get("proposal_expires_at")
+    if proposal_expires_at is not None and proposal_expires_at <= datetime.now():
+        raise ValidationError(
+            "proposal_expires_at must be in the future",
+            field="proposal_expires_at", issue="must_be_future",
+        )
 
     new_status = updates.get("status")
     if new_status is not None:

@@ -548,6 +548,7 @@ export default function EngagementDetail() {
                     className="field-input"
                     type="date"
                     required
+                    min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
                     value={proposalForm.proposal_expires_at}
                     onChange={(e) => setProposalForm((p) => ({ ...p, proposal_expires_at: e.target.value }))}
                   />

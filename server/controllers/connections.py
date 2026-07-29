@@ -213,13 +213,22 @@ async def respond_to_connection(
         )
     updated = await connection_model.respond(connection_id, body.status)
 
-    # Only notify here on decline -- there's no /connections/:id page to link
-    # to, and nothing meaningful for the org to jump to. The "accepted"
-    # notification fires from POST /engagements instead, once a real
-    # engagement_id exists to link to (accepting and creating the engagement
-    # are two separate calls from the frontend's accept-with-timeline flow).
-    if body.status == "declined":
-        org = await organization_model.get(updated["org_id"])
+    # Notify immediately regardless of outcome -- don't make the org's only
+    # signal of acceptance depend on the frontend's follow-up POST
+    # /engagements call succeeding (accepting and creating the engagement are
+    # two separate requests from the accept-with-timeline flow; if the second
+    # one fails, the org should still know the request was accepted). The
+    # generic /organization link is always valid; create_engagement fires a
+    # second, more specific notification once a real engagement_id exists.
+    org = await organization_model.get(updated["org_id"])
+    if body.status == "accepted":
+        await notification_model.create(
+            org["user_id"], "connection_accepted",
+            f"{expert['first_name']} {expert['last_name']} accepted your connection request",
+            related_entity_type="connection_request", related_entity_id=connection_id,
+            action_url="/organization",
+        )
+    else:
         await notification_model.create(
             org["user_id"], "connection_declined",
             f"{expert['first_name']} {expert['last_name']} declined your connection request",

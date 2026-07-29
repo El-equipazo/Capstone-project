@@ -136,14 +136,17 @@ async def create_engagement(
         estimated_end_date=body.estimated_end_date,
     )
 
-    # The "connection accepted" notification lives here rather than in
-    # PATCH /connections/:id -- this is the first point a real engagement_id
-    # exists for the notification's action_url to link to.
+    # A second, more specific notification -- PATCH /connections/:id already
+    # sent an immediate "accepted" notification with a generic /organization
+    # link (accepting and creating the engagement are two separate requests
+    # from the accept-with-timeline flow, so that one can't wait on this one
+    # to succeed). This one exists to hand the org a direct link now that a
+    # real engagement_id exists.
     notify_org = await organization_model.get(connection["org_id"])
     notify_expert = await expert_model.get(connection["expert_id"])
     await notification_model.create(
         notify_org["user_id"], "connection_accepted",
-        f"{notify_expert['first_name']} {notify_expert['last_name']} accepted your connection request",
+        f"Your engagement with {notify_expert['first_name']} {notify_expert['last_name']} is ready",
         related_entity_type="engagement", related_entity_id=row["engagement_id"],
         action_url=f"/engagements/{row['engagement_id']}",
     )

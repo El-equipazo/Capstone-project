@@ -5,25 +5,14 @@ import { useAuth } from '../context/AuthContext'
 
 function ConversationPane({ active, onSent }) {
   const { user } = useAuth()
-  const { messages, loading, error, sendMessage } = useChat(active?.id)
+  // firstUnreadId (the "New" divider target) is computed inside useChat,
+  // synchronously alongside the fetch response for this exact `id` -- doing
+  // it there avoids a stale-closure race that a separate effect here would
+  // hit when switching directly between two already-loaded conversations.
+  const { messages, loading, error, sendMessage, firstUnreadId } = useChat(active?.id, user?.user_id)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef(null)
-
-  // The "New" divider marks the first message that was unread at the moment
-  // this conversation was opened -- computed once from the initial fetch
-  // response (before useChat's markRead() call flips the server-side flag),
-  // and reset whenever the active conversation changes.
-  const [firstUnreadId, setFirstUnreadId] = useState(null)
-  const computedForId = useRef(null)
-
-  useEffect(() => {
-    if (computedForId.current === active?.id) return
-    if (messages.length === 0) return
-    computedForId.current = active?.id
-    const firstUnread = messages.find((m) => !m.is_read && m.sender_id !== user?.user_id)
-    setFirstUnreadId(firstUnread ? firstUnread.message_id : null)
-  }, [messages, active?.id, user?.user_id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

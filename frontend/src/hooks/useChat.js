@@ -18,10 +18,16 @@ function buildUrls(id) {
   }
 }
 
-export function useChat(id) {
+export function useChat(id, currentUserId) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // The first message that was unread at the moment this conversation was
+  // opened -- computed once, synchronously alongside the fetch response that
+  // actually belongs to `id`, so there's no window where a separate effect
+  // could read a stale (previous-conversation) `messages` array while `id`
+  // has already moved on to the next conversation.
+  const [firstUnreadId, setFirstUnreadId] = useState(null)
   const seenIds = useRef(new Set())
   const socketRef = useRef(null)
   const reconnectAttempt = useRef(0)
@@ -39,6 +45,7 @@ export function useChat(id) {
     let cancelled = false
     seenIds.current = new Set()
     setMessages([])
+    setFirstUnreadId(null)
     setLoading(true)
     setError('')
     const urls = buildUrls(id)
@@ -49,6 +56,8 @@ export function useChat(id) {
         const ordered = [...page.data].reverse()
         ordered.forEach((m) => seenIds.current.add(m.message_id))
         setMessages(ordered)
+        const firstUnread = ordered.find((m) => !m.is_read && m.sender_id !== currentUserId)
+        setFirstUnreadId(firstUnread ? firstUnread.message_id : null)
         setLoading(false)
         urls.markRead().then(() => {
           window.dispatchEvent(new Event('notifications:refresh'))
@@ -60,7 +69,7 @@ export function useChat(id) {
         setLoading(false)
       })
     return () => { cancelled = true }
-  }, [id])
+  }, [id, currentUserId])
 
   useEffect(() => {
     if (!id) return
@@ -103,5 +112,5 @@ export function useChat(id) {
     [id, upsert]
   )
 
-  return { messages, loading, error, sendMessage }
+  return { messages, loading, error, sendMessage, firstUnreadId }
 }
