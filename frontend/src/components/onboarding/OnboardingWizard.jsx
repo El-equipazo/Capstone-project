@@ -1,8 +1,11 @@
 import { Fragment, useState } from 'react'
+import { labelize, BUDGET_RANGE_LABEL } from '../../utils/format'
 
 // expert_profiles has no equivalent to this on the org side yet — schema.md's
 // organization_profiles.employee_count_range enum.
 const EMPLOYEE_COUNT_OPTIONS = ['<50', '50-250', '250-1k', '1k-10k', '>10k']
+const BUDGET_RANGE_OPTIONS = ['under_10k', '10k_50k', '50k_250k', '250k_plus', 'undisclosed']
+const URGENCY_OPTIONS = ['just_exploring', 'planning_ahead', 'urgent', 'critical']
 
 const STEP_LABELS = ['Personal details', 'Company profile', 'Invite team']
 
@@ -17,6 +20,9 @@ export default function OnboardingWizard({ onComplete }) {
     org_name: '',
     employee_count_range: EMPLOYEE_COUNT_OPTIONS[0],
     sub_sector: '',
+    org_description: '',
+    budget_range: '',
+    urgency_level: '',
   })
   const [emails, setEmails] = useState([''])
 
@@ -44,6 +50,7 @@ export default function OnboardingWizard({ onComplete }) {
   }
 
   const step1Valid = form.contact_name.trim() !== '' && form.contact_title.trim() !== ''
+  const step2Valid = form.org_name.trim() !== '' && form.budget_range !== '' && form.urgency_level !== ''
 
   return (
     <div className="card" style={{ padding: 28, maxWidth: 560, margin: '0 auto' }}>
@@ -108,6 +115,7 @@ export default function OnboardingWizard({ onComplete }) {
             <label className="field-label">Company name</label>
             <input
               className="field-input"
+              required
               value={form.org_name}
               onChange={(e) => updateField('org_name', e.target.value)}
               placeholder="Acme Bank"
@@ -136,6 +144,50 @@ export default function OnboardingWizard({ onComplete }) {
                 onChange={(e) => updateField('sub_sector', e.target.value)}
                 placeholder="e.g. Retail banking, Payments"
               />
+            </div>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Company description</label>
+            <textarea
+              className="field-input"
+              rows={3}
+              value={form.org_description}
+              onChange={(e) => updateField('org_description', e.target.value)}
+              placeholder="Optional — what does your organization do?"
+            />
+          </div>
+          <div className="row gap-10">
+            <div className="field-group" style={{ flex: 1 }}>
+              <label className="field-label">Budget range</label>
+              <select
+                className="field-input"
+                required
+                value={form.budget_range}
+                onChange={(e) => updateField('budget_range', e.target.value)}
+              >
+                <option value="" disabled>— Select —</option>
+                {BUDGET_RANGE_OPTIONS.map((o) => (
+                  <option key={o} value={o}>
+                    {BUDGET_RANGE_LABEL[o]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field-group" style={{ flex: 1 }}>
+              <label className="field-label">Urgency</label>
+              <select
+                className="field-input"
+                required
+                value={form.urgency_level}
+                onChange={(e) => updateField('urgency_level', e.target.value)}
+              >
+                <option value="" disabled>— Select —</option>
+                {URGENCY_OPTIONS.map((o) => (
+                  <option key={o} value={o}>
+                    {labelize(o)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -189,8 +241,8 @@ export default function OnboardingWizard({ onComplete }) {
           )}
         </div>
         <div className="row gap-10">
-          {step > 1 && (
-            <button type="button" className="btn btn-sm" onClick={step === 3 ? finish : () => setStep((s) => s + 1)}>
+          {step === 3 && (
+            <button type="button" className="btn btn-sm" onClick={finish}>
               Skip
             </button>
           )}
@@ -198,7 +250,7 @@ export default function OnboardingWizard({ onComplete }) {
             <button
               type="button"
               className="btn btn-acc"
-              disabled={step === 1 && !step1Valid}
+              disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
               onClick={() => setStep((s) => s + 1)}
             >
               Next →

@@ -8,7 +8,7 @@ from datetime import date
 from server.db import connection_pool as pool
 from .enums import ENGAGEMENT_STATUS, ENGAGEMENT_TYPE, PAYMENT_STRUCTURE
 from .errors import ConflictError, NotFoundError, TransitionError
-from .validators import check_enum
+from .validators import check_enum, check_not_past
 
 _TERMINAL = {"completed", "cancelled"}
 _MUTABLE_FIELDS = {
@@ -41,6 +41,8 @@ async def create(
 ) -> dict:
     check_enum(engagement_type, ENGAGEMENT_TYPE, "engagement_type")
     check_enum(payment_structure, PAYMENT_STRUCTURE, "payment_structure", allow_none=True)
+    check_not_past(start_date, "start_date")
+    check_not_past(estimated_end_date, "estimated_end_date")
 
     try:
         row = await pool.fetchrow(
@@ -229,6 +231,10 @@ async def is_participant(engagement_id: int, user_id: int) -> tuple[bool, str | 
 async def update(engagement_id: int, caller_role: str, updates: dict) -> dict:
     existing = await get(engagement_id)
     set_parts: dict = {}
+
+    check_not_past(updates.get("start_date"), "start_date")
+    check_not_past(updates.get("estimated_end_date"), "estimated_end_date")
+    check_not_past(updates.get("proposal_expires_at"), "proposal_expires_at")
 
     new_status = updates.get("status")
     if new_status is not None:

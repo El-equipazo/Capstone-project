@@ -123,6 +123,20 @@ MIGRATIONS: list[tuple[str, str]] = [
             ADD COLUMN IF NOT EXISTS proposal_expires_at TIMESTAMP;
         """,
     ),
+    (
+        "007_engagement_notes_table",
+        """
+        CREATE TABLE IF NOT EXISTS engagement_notes (
+            note_id        SERIAL PRIMARY KEY,
+            engagement_id  INTEGER NOT NULL REFERENCES engagements(engagement_id) ON DELETE CASCADE,
+            expert_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            content        TEXT,
+            created_at     TIMESTAMP DEFAULT NOW(),
+            updated_at     TIMESTAMP DEFAULT NOW(),
+            UNIQUE (engagement_id, expert_user_id)
+        );
+        """,
+    ),
 ]
 
 

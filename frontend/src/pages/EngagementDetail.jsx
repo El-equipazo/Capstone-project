@@ -4,6 +4,7 @@ import { engagementsApi, threadsApi } from '../api/client'
 import { useRequireAuth } from '../hooks/useRequireAuth'
 import { useChat_context } from '../context/ChatContext'
 import { labelize, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
+import OrgProfileModal from '../components/OrgProfileModal'
 
 const MILESTONE_LABEL = {
   proposed:    'Proposed',
@@ -44,6 +45,9 @@ function getStatusActions(engStatus, role) {
 }
 
 const BLANK_FORM = { title: '', description: '', due_date: '', deliverable_description: '' }
+
+// Milestone due dates can't be set before today (server enforces this too).
+const todayStr = new Date().toISOString().slice(0, 10)
 
 export default function EngagementDetail() {
   const { id } = useParams()
@@ -87,6 +91,8 @@ export default function EngagementDetail() {
 
   // Org's "see full description" toggle on the proposal review card.
   const [descExpanded, setDescExpanded] = useState(false)
+
+  const [showOrgModal, setShowOrgModal] = useState(false)
 
   const { openChat } = useChat_context()
 
@@ -350,7 +356,22 @@ export default function EngagementDetail() {
             {engagement.org_sector && (
               <span className="lead" style={{ fontSize: 12, marginLeft: 2 }}>· {engagement.org_sector}</span>
             )}
+            <button
+              type="button"
+              className="tag"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowOrgModal(true)}
+            >
+              Profile
+            </button>
           </div>
+        )}
+        {showOrgModal && (
+          <OrgProfileModal
+            orgId={engagement.org_id}
+            engagementId={engagementId}
+            onClose={() => setShowOrgModal(false)}
+          />
         )}
 
         <div className="lead" style={{ fontSize: 12.5, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -548,6 +569,7 @@ export default function EngagementDetail() {
                     className="field-input"
                     type="date"
                     required
+                    min={todayStr}
                     value={proposalForm.proposal_expires_at}
                     onChange={(e) => setProposalForm((p) => ({ ...p, proposal_expires_at: e.target.value }))}
                   />
@@ -645,7 +667,7 @@ export default function EngagementDetail() {
               <div className="row gap-10">
                 <div className="field-group" style={{ flex: 1 }}>
                   <label className="field-label">Due date</label>
-                  <input className="field-input" type="date" value={addForm.due_date} onChange={(e) => setAddForm((p) => ({ ...p, due_date: e.target.value }))} />
+                  <input className="field-input" type="date" min={todayStr} value={addForm.due_date} onChange={(e) => setAddForm((p) => ({ ...p, due_date: e.target.value }))} />
                 </div>
                 <div className="field-group" style={{ flex: 2 }}>
                   <label className="field-label">Deliverable</label>
@@ -705,6 +727,7 @@ export default function EngagementDetail() {
                     <input
                       className="field-input"
                       type="date"
+                      min={todayStr}
                       style={{ flex: 1 }}
                       value={editForm.due_date ?? (m.due_date || '')}
                       onChange={(e) => setEditForm((p) => ({ ...p, due_date: e.target.value }))}
@@ -835,6 +858,7 @@ export default function EngagementDetail() {
                         <input
                           className="field-input"
                           type="date"
+                          min={todayStr}
                           style={{ flex: 1 }}
                           value={proposeForm.due_date ?? ''}
                           onChange={(e) => setProposeForm((p) => ({ ...p, due_date: e.target.value }))}

@@ -8,8 +8,8 @@ from pydantic import BaseModel
 
 from server.dependencies import get_current_user, require_role
 from server.models import (
-    connection_model, engagement_model, expert_model, milestone_model,
-    notification_model, organization_model,
+    connection_model, engagement_model, engagement_note_model, expert_model,
+    milestone_model, notification_model, organization_model,
 )
 
 router = APIRouter(tags=["engagements"])
@@ -62,6 +62,10 @@ class MilestonePatch(BaseModel):
 class MilestoneProposeChange(BaseModel):
     due_date: Optional[date] = None
     deliverable_description: Optional[str] = None
+
+
+class EngagementNoteUpdate(BaseModel):
+    content: Optional[str] = None
 
 
 def _paginate(data: list) -> dict:
@@ -234,7 +238,7 @@ async def create_milestone(
             status_code=422,
             detail={"error": {"code": "INVALID_STATE", "message": "Cannot add milestones to a completed or cancelled engagement"}},
         )
-    return await milestone_model.create(
+    created = await milestone_model.create(
         engagement_id=engagement_id,
         proposed_by_user_id=current_user["user_id"],
         proposed_by_role=role,
@@ -245,6 +249,15 @@ async def create_milestone(
         deliverable_description=body.deliverable_description,
         requires_client_approval=body.requires_client_approval,
     )
+    if role == "expert":
+        org = await organization_model.get(eng["org_id"])
+        await notification_model.create(
+            org["user_id"], "milestone_proposed",
+            f"The expert proposed a new milestone \"{created['title']}\"",
+            related_entity_type="milestone", related_entity_id=created["milestone_id"],
+            action_url=f"/engagements/{engagement_id}?highlight_milestone={created['milestone_id']}",
+        )
+    return created
 
 
 # ---------------------------------------------------------------------------
@@ -477,11 +490,15 @@ async def accept_milestone_change(
     updated = await milestone_model.accept_pending(milestone_id)
 
     org = await organization_model.get(eng["org_id"])
-    title = (
-        f"Milestone \"{m['title']}\" was cancelled"
-        if pending_action == "cancel"
-        else f"Date/deliverable change confirmed for milestone \"{m['title']}\""
-    )
+    if pending_action == "cancel":
+        title = f"Milestone \"{m['title']}\" was cancelled"
+    else:
+        changed = []
+        if m["pending_due_date"] is not None:
+            changed.append("Date")
+        if m["pending_deliverable_description"] is not None:
+            changed.append("Deliverable")
+        title = f"{' and '.join(changed)} change confirmed for milestone \"{m['title']}\""
     await notification_model.create(
         org["user_id"], "milestone_change_confirmed", title,
         related_entity_type="milestone", related_entity_id=milestone_id,
@@ -553,3 +570,36 @@ async def delete_milestone(
             detail={"error": {"code": "NOT_FOUND", "message": "Milestone not found in this engagement"}},
         )
     await milestone_model.delete(milestone_id)
+
+
+# ---------------------------------------------------------------------------
+# GET/PUT /engagements/:engagementId/notes -- private, expert-only scratchpad.
+# The organization side of the engagement never sees these.
+# ---------------------------------------------------------------------------
+
+@router.get("/engagements/{engagement_id}/notes")
+async def get_engagement_notes(engagement_id: int, current_user=Depends(get_current_user)):
+    role, _ = await _require_participant(engagement_id, current_user)
+    if role != "expert":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "Only the expert can view these notes"}},
+        )
+    note = await engagement_note_model.get(engagement_id, current_user["user_id"])
+    return {"content": note["content"] if note else None}
+
+
+@router.put("/engagements/{engagement_id}/notes")
+async def update_engagement_notes(
+    engagement_id: int,
+    body: EngagementNoteUpdate,
+    current_user=Depends(get_current_user),
+):
+    role, _ = await _require_participant(engagement_id, current_user)
+    if role != "expert":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "Only the expert can edit these notes"}},
+        )
+    note = await engagement_note_model.upsert(engagement_id, current_user["user_id"], body.content)
+    return {"content": note["content"]}

@@ -381,6 +381,16 @@ pending_requested_by_user_id      INTEGER REFERENCES users(user_id)
 pending_requested_at              TIMESTAMP
 created_at                TIMESTAMP DEFAULT NOW()
 updated_at                TIMESTAMP DEFAULT NOW()
+
+engagement_notes
+─────────────────────────────────────────────────────
+note_id           SERIAL PRIMARY KEY
+engagement_id     INTEGER NOT NULL REFERENCES engagements(engagement_id) ON DELETE CASCADE
+expert_user_id    INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE
+content           TEXT -- private scratchpad; the organization side never reads these
+created_at        TIMESTAMP DEFAULT NOW()
+updated_at        TIMESTAMP DEFAULT NOW()
+UNIQUE (engagement_id, expert_user_id)
 ```
 
 ### Diagram
