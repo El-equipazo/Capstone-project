@@ -14,6 +14,7 @@ _TERMINAL = {"completed", "cancelled"}
 _MUTABLE_FIELDS = {
     "title", "description", "engagement_type", "payment_structure", "agreed_budget",
     "start_date", "estimated_end_date", "cancellation_reason", "proposal_feedback",
+    "proposal_expires_at",
 }
 _VALID_TRANSITIONS: dict[tuple[str, str], set[str]] = {
     ("scoping", "proposal_sent"):           {"expert"},
@@ -76,6 +77,24 @@ async def find_open_between(org_id: int, expert_id: int):
         LIMIT 1
         """,
         org_id, expert_id,
+    )
+
+
+async def expire_stale_proposals() -> None:
+    """
+    Bounce a proposal back to 'scoping' once its response deadline lapses.
+    Idempotent; called opportunistically at the top of the relevant endpoints
+    in lieu of a scheduler -- mirrors connection_model.expire_stale() exactly
+    (no scheduler/cron exists anywhere in this codebase).
+    """
+    await pool.query(
+        """
+        UPDATE engagements
+        SET status = 'scoping', proposal_expires_at = NULL,
+            proposal_feedback = 'Proposal deadline passed without a response.'
+        WHERE status = 'proposal_sent' AND proposal_expires_at IS NOT NULL
+          AND proposal_expires_at < NOW()
+        """
     )
 
 

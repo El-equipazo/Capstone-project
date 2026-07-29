@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { notificationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
@@ -18,6 +18,18 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
   const [itemsLoading, setItemsLoading] = useState(false)
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onOutsideClick(event) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [open])
 
   useEffect(() => {
     if (!user) {
@@ -71,7 +83,7 @@ export default function NotificationBell() {
   if (!user) return null
 
   return (
-    <div className="notif-bell-wrap">
+    <div className="notif-bell-wrap" ref={wrapRef}>
       <button className="notif-bell" onClick={toggle} aria-label="Notifications">
         🔔{count > 0 && <span className="notif-badge">{count > 9 ? '9+' : count}</span>}
       </button>

@@ -236,6 +236,13 @@ async def delete_specialization(
 ):
     row = await expert_model.get(expert_id)
     _assert_owner_or_admin(current_user, row)
+    existing = await expert_model.list_specializations(expert_id)
+    if len(existing) <= 1:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "INVALID_STATE",
+                              "message": "A profile must have at least one specialization"}},
+        )
     await expert_model.delete_specialization(expert_id, specialization_id)
     return Response(status_code=204)
 

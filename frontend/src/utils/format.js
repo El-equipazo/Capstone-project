@@ -19,6 +19,14 @@ export function formatCurrencyRange(min, max) {
   return fmt(min ?? max)
 }
 
+// null/undefined means "not set"; 0 also isn't worth displaying ("0+ yrs exp"
+// reads as broken, not as a real data point) -- both render as nothing at the
+// call site instead of a value. Returns the raw number (not a fixed string)
+// since callers phrase it differently ("X+ yrs exp" vs "X yrs experience").
+export function formatYearsOfExperience(years) {
+  return years ? years : null
+}
+
 // organization_profiles.budget_range enum — labelize() would render '10k_50k'
 // as "10k 50k" (just a space, no indication it's a range), so this gets its
 // own explicit label map instead.

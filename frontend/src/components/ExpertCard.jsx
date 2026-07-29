@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatRate, labelize, AVAILABILITY_LABEL } from '../utils/format'
+import { formatRate, formatYearsOfExperience, labelize, AVAILABILITY_LABEL } from '../utils/format'
 
 export default function ExpertCard({ expert }) {
   const initials = `${expert.first_name[0]}${expert.last_name[0]}`
@@ -22,7 +22,9 @@ export default function ExpertCard({ expert }) {
             <h3 className="ec-name">
               {expert.first_name} {expert.last_name}
             </h3>
-            <span className="ec-exp-pill">{expert.years_of_experience}+ yrs exp</span>
+            {formatYearsOfExperience(expert.years_of_experience) != null && (
+              <span className="ec-exp-pill">{formatYearsOfExperience(expert.years_of_experience)}+ yrs exp</span>
+            )}
           </div>
           <p className="ec-role">{expert.headline}</p>
           <div className="ec-rating-row">

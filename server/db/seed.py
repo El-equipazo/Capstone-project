@@ -305,6 +305,7 @@ async def seed():
                 actual_end_date          DATE,
                 cancellation_reason      TEXT,
                 proposal_feedback        TEXT,
+                proposal_expires_at      TIMESTAMP,
                 created_at               TIMESTAMP DEFAULT NOW(),
                 updated_at               TIMESTAMP DEFAULT NOW()
             )
@@ -329,6 +330,11 @@ async def seed():
                 completed_at               TIMESTAMP,
                 requires_client_approval   BOOLEAN DEFAULT false,
                 client_approved_at         TIMESTAMP,
+                pending_action                     TEXT CHECK (pending_action IN ('change', 'cancel')),
+                pending_due_date                   DATE,
+                pending_deliverable_description    TEXT,
+                pending_requested_by_user_id       INTEGER REFERENCES users(user_id),
+                pending_requested_at               TIMESTAMP,
                 created_at                 TIMESTAMP DEFAULT NOW(),
                 updated_at                 TIMESTAMP DEFAULT NOW()
             )

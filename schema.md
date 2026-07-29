@@ -348,6 +348,9 @@ start_date              DATE
 estimated_end_date      DATE
 actual_end_date         DATE
 cancellation_reason     TEXT
+proposal_feedback       TEXT -- org's "request changes" note when bouncing proposal_sent back to scoping
+proposal_expires_at     TIMESTAMP -- deadline for the org to respond to a sent proposal, set by the expert;
+                        -- lazily swept back to 'scoping' if it lapses (mirrors connection_requests.expires_at)
 created_at              TIMESTAMP DEFAULT NOW()
 updated_at              TIMESTAMP DEFAULT NOW()
 
@@ -370,6 +373,12 @@ confirmed_at              TIMESTAMP
 completed_at              TIMESTAMP
 requires_client_approval  BOOLEAN DEFAULT false
 client_approved_at        TIMESTAMP
+pending_action                    TEXT -- NULL | 'change' | 'cancel' -- an org-proposed change
+                                  -- awaiting the expert's accept/decline; at most one at a time
+pending_due_date                  DATE -- proposed new due_date, when pending_action = 'change'
+pending_deliverable_description   TEXT -- proposed new deliverable_description, when pending_action = 'change'
+pending_requested_by_user_id      INTEGER REFERENCES users(user_id)
+pending_requested_at              TIMESTAMP
 created_at                TIMESTAMP DEFAULT NOW()
 updated_at                TIMESTAMP DEFAULT NOW()
 ```

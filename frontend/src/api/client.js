@@ -315,6 +315,35 @@ export const engagementsApi = {
       headers: authHeader(),
     })
   },
+
+  async proposeMilestoneChange(engagementId, milestoneId, data) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/propose-change`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async proposeMilestoneCancel(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/propose-cancel`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async acceptMilestoneChange(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/accept-change`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async declineMilestoneChange(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/decline-change`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
 }
 
 // ---------------- Notifications -------------------------------------------

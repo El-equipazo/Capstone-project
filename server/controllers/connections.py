@@ -133,6 +133,15 @@ async def create_connection(
         ai_fit_score=(ai_result or {}).get("fit_score"),
         ai_reasoning=(ai_result or {}).get("reasoning"),
     )
+
+    expert = await expert_model.get(body.expert_id)
+    await notification_model.create(
+        expert["user_id"], "connection_request_received",
+        f"{org['org_name']} sent you a connection request",
+        related_entity_type="connection_request", related_entity_id=row["connection_id"],
+        action_url="/dashboard",
+    )
+
     return dict(row)
 
 
@@ -204,18 +213,18 @@ async def respond_to_connection(
         )
     updated = await connection_model.respond(connection_id, body.status)
 
-    # Notify the org side of the response. §8: "Notifications are
-    # server-generated only (connection received/responded, ...)".
-    org = await organization_model.get(updated["org_id"])
-    accepted = body.status == "accepted"
-    await notification_model.create(
-        org["user_id"],
-        "connection_accepted" if accepted else "connection_declined",
-        f"{expert['first_name']} {expert['last_name']} "
-        f"{'accepted' if accepted else 'declined'} your connection request",
-        related_entity_type="connection_request", related_entity_id=connection_id,
-        action_url=f"/connections/{connection_id}",
-    )
+    # Only notify here on decline -- there's no /connections/:id page to link
+    # to, and nothing meaningful for the org to jump to. The "accepted"
+    # notification fires from POST /engagements instead, once a real
+    # engagement_id exists to link to (accepting and creating the engagement
+    # are two separate calls from the frontend's accept-with-timeline flow).
+    if body.status == "declined":
+        org = await organization_model.get(updated["org_id"])
+        await notification_model.create(
+            org["user_id"], "connection_declined",
+            f"{expert['first_name']} {expert['last_name']} declined your connection request",
+            related_entity_type="connection_request", related_entity_id=connection_id,
+        )
 
     return dict(updated)
 

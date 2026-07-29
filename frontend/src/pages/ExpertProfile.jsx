@@ -4,7 +4,7 @@ import { connectionsApi, expertsApi, threadsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
 import { useChat_context } from '../context/ChatContext'
-import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
+import { formatRate, formatCurrencyRange, formatWorkPeriod, formatYearsOfExperience, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 
 export default function ExpertProfile() {
   const { expertId } = useParams()
@@ -122,7 +122,9 @@ export default function ExpertProfile() {
               <span className="xp-status-dot" style={{ opacity: unavailable ? 0.3 : 1 }} />
               {AVAILABILITY_LABEL[expert.availability_status]}
             </div>
-            <div className="xp-substat">{expert.years_of_experience} yrs experience</div>
+            {formatYearsOfExperience(expert.years_of_experience) != null && (
+              <div className="xp-substat">{formatYearsOfExperience(expert.years_of_experience)} yrs experience</div>
+            )}
           </div>
         </div>
 
