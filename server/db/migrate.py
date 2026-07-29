@@ -89,6 +89,17 @@ MIGRATIONS: list[tuple[str, str]] = [
             ADD COLUMN IF NOT EXISTS pending_deliverable_description TEXT,
             ADD COLUMN IF NOT EXISTS pending_requested_by_user_id INTEGER REFERENCES users(user_id),
             ADD COLUMN IF NOT EXISTS pending_requested_at TIMESTAMP;
+
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'engagement_milestones_pending_action_check'
+            ) THEN
+                ALTER TABLE engagement_milestones
+                    ADD CONSTRAINT engagement_milestones_pending_action_check
+                    CHECK (pending_action IN ('change', 'cancel'));
+            END IF;
+        END $$;
         """,
     ),
     (

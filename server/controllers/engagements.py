@@ -375,6 +375,12 @@ async def propose_milestone_change(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": {"code": "FORBIDDEN", "message": "Only organizations can propose milestone changes"}},
         )
+    eng = await engagement_model.get(engagement_id)
+    if eng["status"] in ("completed", "cancelled"):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "INVALID_STATE", "message": "Cannot propose milestone changes on a completed or cancelled engagement"}},
+        )
     m = await milestone_model.get(milestone_id)
     _milestone_or_404(m, engagement_id)
     if m["status"] not in ("confirmed", "in_progress"):
@@ -395,7 +401,6 @@ async def propose_milestone_change(
         due_date=body.due_date, deliverable_description=body.deliverable_description,
     )
 
-    eng = await engagement_model.get(engagement_id)
     org = await organization_model.get(eng["org_id"])
     expert = await expert_model.get(eng["expert_id"])
     await notification_model.create(
@@ -419,6 +424,12 @@ async def propose_milestone_cancel(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": {"code": "FORBIDDEN", "message": "Only organizations can request milestone cancellation"}},
         )
+    eng = await engagement_model.get(engagement_id)
+    if eng["status"] in ("completed", "cancelled"):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "INVALID_STATE", "message": "Cannot request milestone cancellation on a completed or cancelled engagement"}},
+        )
     m = await milestone_model.get(milestone_id)
     _milestone_or_404(m, engagement_id)
     if m["status"] not in ("confirmed", "in_progress"):
@@ -430,7 +441,6 @@ async def propose_milestone_cancel(
 
     updated = await milestone_model.propose_cancel(milestone_id, current_user["user_id"])
 
-    eng = await engagement_model.get(engagement_id)
     org = await organization_model.get(eng["org_id"])
     expert = await expert_model.get(eng["expert_id"])
     await notification_model.create(
@@ -454,13 +464,18 @@ async def accept_milestone_change(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": {"code": "FORBIDDEN", "message": "Only experts can accept milestone changes"}},
         )
+    eng = await engagement_model.get(engagement_id)
+    if eng["status"] in ("completed", "cancelled"):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "INVALID_STATE", "message": "Cannot accept milestone changes on a completed or cancelled engagement"}},
+        )
     m = await milestone_model.get(milestone_id)
     _milestone_or_404(m, engagement_id)
     pending_action = m["pending_action"]  # read before accept_pending clears it
 
     updated = await milestone_model.accept_pending(milestone_id)
 
-    eng = await engagement_model.get(engagement_id)
     org = await organization_model.get(eng["org_id"])
     title = (
         f"Milestone \"{m['title']}\" was cancelled"
@@ -487,12 +502,17 @@ async def decline_milestone_change(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": {"code": "FORBIDDEN", "message": "Only experts can decline milestone changes"}},
         )
+    eng = await engagement_model.get(engagement_id)
+    if eng["status"] in ("completed", "cancelled"):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "INVALID_STATE", "message": "Cannot decline milestone changes on a completed or cancelled engagement"}},
+        )
     m = await milestone_model.get(milestone_id)
     _milestone_or_404(m, engagement_id)
 
     updated = await milestone_model.decline_pending(milestone_id)
 
-    eng = await engagement_model.get(engagement_id)
     org = await organization_model.get(eng["org_id"])
     expert = await expert_model.get(eng["expert_id"])
     await notification_model.create(
