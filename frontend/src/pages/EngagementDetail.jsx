@@ -26,15 +26,30 @@ function engagementBadgeClass(s) {
   return 'tag'
 }
 
-function getStatusActions(engStatus, role) {
+// Skipped milestones don't count against completion -- they were
+// deliberately dropped, not left undone. Zero milestones (engagement never
+// used the feature) is vacuously "all done."
+function allMilestonesDone(milestones) {
+  return milestones.every((m) => m.status === 'completed' || m.status === 'skipped')
+}
+
+function getStatusActions(engStatus, role, milestones) {
   const actions = []
   // 'scoping' -> 'proposal_sent' has its own dedicated form (description +
   // response deadline) below, not a bare status-change button.
   // proposal_sent for org is handled by the dedicated timeline review UI below
   if (engStatus === 'proposal_accepted')
     actions.push({ label: 'Start Engagement', newStatus: 'active', primary: true })
-  if (engStatus === 'active' && role === 'expert')
-    actions.push({ label: 'Mark Complete', newStatus: 'completed', confirm: true })
+  if (engStatus === 'active' && role === 'expert') {
+    const canComplete = allMilestonesDone(milestones)
+    actions.push({
+      label: 'Mark Complete',
+      newStatus: 'completed',
+      confirm: true,
+      disabled: !canComplete,
+      disabledReason: canComplete ? null : 'Complete (or skip) all milestones before completing the engagement.',
+    })
+  }
   if (engStatus === 'active')
     actions.push({ label: 'Put on Hold', newStatus: 'on_hold' })
   if (engStatus === 'on_hold')
@@ -134,7 +149,7 @@ export default function EngagementDetail() {
   const milestones = engagement.milestones || []
   const isTerminal = ['completed', 'cancelled'].includes(engagement.status)
   const backPath = role === 'expert' ? '/dashboard' : '/organization'
-  const statusActions = getStatusActions(engagement.status, role)
+  const statusActions = getStatusActions(engagement.status, role, milestones)
   async function handleTimelineDecision(decision) {
     setActionLoading(true)
     setError('')
@@ -610,12 +625,18 @@ export default function EngagementDetail() {
                   className={`btn${action.primary ? ' btn-acc' : action.danger ? '' : ''}`}
                   style={action.danger ? { color: 'var(--danger, #c0392b)' } : {}}
                   onClick={() => handleStatusAction(action)}
-                  disabled={actionLoading}
+                  disabled={actionLoading || action.disabled}
+                  title={action.disabled ? action.disabledReason : undefined}
                 >
                   {action.label}
                 </button>
               ))}
             </div>
+            {statusActions.some((a) => a.disabled && a.disabledReason) && (
+              <p className="lead" style={{ fontSize: 11.5, marginTop: 8 }}>
+                {statusActions.find((a) => a.disabled && a.disabledReason).disabledReason}
+              </p>
+            )}
             <p className="lead" style={{ fontSize: 11.5, marginTop: 10 }}>
               Status:{' '}
               <strong>

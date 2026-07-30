@@ -273,6 +273,24 @@ async def update(engagement_id: int, caller_role: str, updates: dict) -> dict:
             if caller_role not in _VALID_TRANSITIONS[key]:
                 allowed = "/".join(sorted(_VALID_TRANSITIONS[key]))
                 raise TransitionError(f"only {allowed} can make this transition")
+        if new_status == "completed":
+            # Skipped milestones don't count against completion -- they were
+            # deliberately dropped, not left undone. An engagement with no
+            # milestones at all (e.g. hourly/retainer, never used the feature)
+            # is vacuously "all done" and can still be completed.
+            incomplete = await pool.fetchval(
+                """
+                SELECT EXISTS(
+                    SELECT 1 FROM engagement_milestones
+                    WHERE engagement_id = $1 AND status NOT IN ('completed', 'skipped')
+                )
+                """,
+                engagement_id,
+            )
+            if incomplete:
+                raise TransitionError(
+                    "All milestones must be completed (or skipped) before completing the engagement"
+                )
         set_parts["status"] = new_status
         if new_status == "completed":
             set_parts["actual_end_date"] = date.today()
