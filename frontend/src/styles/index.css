@@ -8,15 +8,30 @@
   --bg: #f3f4f6;
   --acc: #1f3a5f;
   --acc-light: #eaf0f7;
+  --acc-border: #c3d3e6;
   --risk: #a8543c;
   --risk-light: #fbeeea;
+  --risk-border: #e3c3b8;
   --good: #3f7145;
   --good-light: #eaf1e9;
+  --good-border: #b9d0bb;
   --danger: #dc2626;
   --danger-light: #fdecec;
+  --danger-border: #f3c6c6;
   --pending: #8a6d1d;
   --pending-light: #fbf6e8;
   --pending-border: #e3d29c;
+  --admin: #6b3fa0;
+  --admin-light: #f1eafb;
+  --admin-border: #d9c7f0;
+  --solid: #1a1a1a;
+  --solid-fg: #ffffff;
+  --xp-bg: #f2f0ec;
+  --xp-card-bg: #e4e1dc;
+  --xp-photo-start: #dad7d2;
+  --xp-photo-end: #a9a5a0;
+  --xp-photo-fg: #6b6862;
+  --xp-dot: rgba(26, 26, 26, 0.55);
   --cat-1: #1f3a5f;
   --cat-2: #3f6b74;
   --cat-3: #7a5980;
@@ -26,6 +41,94 @@
   --radius-lg: 14px;
   --shadow: 0 1px 3px rgba(20, 22, 30, 0.06), 0 1px 2px rgba(20, 22, 30, 0.08);
   --shadow-lg: 0 10px 30px rgba(20, 22, 30, 0.08);
+}
+
+:root[data-theme="dark"] {
+  --ink: #e8e9ec;
+  --muted: #9aa0aa;
+  --line: #33363e;
+  --fill: #23262d;
+  --fill2: #1c1f25;
+  --paper: #1a1c22;
+  --bg: #111318;
+  --acc: #7fa8d9;
+  --acc-light: #1c2a3d;
+  --acc-border: #2c3f57;
+  --risk: #d98a72;
+  --risk-light: #3a241d;
+  --risk-border: #5c3a2d;
+  --good: #7cbf83;
+  --good-light: #1e2f20;
+  --good-border: #2f4a32;
+  --danger: #f27272;
+  --danger-light: #3a1e1e;
+  --danger-border: #5c3232;
+  --pending: #e0b84d;
+  --pending-light: #3a2f14;
+  --pending-border: #5c4b1f;
+  --admin: #c49bea;
+  --admin-light: #2c1f3d;
+  --admin-border: #4a3567;
+  --solid: #e8e9ec;
+  --solid-fg: #111318;
+  --xp-bg: #1c1a17;
+  --xp-card-bg: #262320;
+  --xp-photo-start: #3a3733;
+  --xp-photo-end: #26241f;
+  --xp-photo-fg: #b8b3a8;
+  --xp-dot: rgba(255, 255, 255, 0.28);
+  --cat-1: #7fa8d9;
+  --cat-2: #7fb3b9;
+  --cat-3: #c09bcc;
+  --cat-4: #e0b84d;
+  --cat-5: #d98a72;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #e8e9ec;
+    --muted: #9aa0aa;
+    --line: #33363e;
+    --fill: #23262d;
+    --fill2: #1c1f25;
+    --paper: #1a1c22;
+    --bg: #111318;
+    --acc: #7fa8d9;
+    --acc-light: #1c2a3d;
+    --acc-border: #2c3f57;
+    --risk: #d98a72;
+    --risk-light: #3a241d;
+    --risk-border: #5c3a2d;
+    --good: #7cbf83;
+    --good-light: #1e2f20;
+    --good-border: #2f4a32;
+    --danger: #f27272;
+    --danger-light: #3a1e1e;
+    --danger-border: #5c3232;
+    --pending: #e0b84d;
+    --pending-light: #3a2f14;
+    --pending-border: #5c4b1f;
+    --admin: #c49bea;
+    --admin-light: #2c1f3d;
+    --admin-border: #4a3567;
+    --solid: #e8e9ec;
+    --solid-fg: #111318;
+    --xp-bg: #1c1a17;
+    --xp-card-bg: #262320;
+    --xp-photo-start: #3a3733;
+    --xp-photo-end: #26241f;
+    --xp-photo-fg: #b8b3a8;
+    --xp-dot: rgba(255, 255, 255, 0.28);
+    --cat-1: #7fa8d9;
+    --cat-2: #7fb3b9;
+    --cat-3: #c09bcc;
+    --cat-4: #e0b84d;
+    --cat-5: #d98a72;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+  }
 }
 
 * {
@@ -61,6 +164,7 @@ h1, h2, h3, h4, p {
 
 button, input, select, textarea {
   font-family: inherit;
+  color: inherit;
 }
 
 .container {
@@ -219,15 +323,46 @@ button, input, select, textarea {
 }
 
 .btn-solid {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: #fff;
+  background: var(--solid);
+  border-color: var(--solid);
+  color: var(--solid-fg);
 }
 
 .btn-acc {
   background: var(--acc);
   border-color: var(--acc);
   color: #fff;
+}
+
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:disabled {
+  cursor: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHRleHQgeD0iMSIgeT0iMTkiIGZvbnQtc2l6ZT0iMTgiPvCfmqs8L3RleHQ+PC9zdmc+') 12 12, not-allowed;
+}
+
+/* ---------- Theme toggle ---------- */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  opacity: 0.8;
 }
 
 .btn-sm {
@@ -274,7 +409,7 @@ button, input, select, textarea {
   gap: 4px;
   background: var(--good-light);
   color: var(--good);
-  border: 1px solid #b9d0bb;
+  border: 1px solid var(--good-border);
   border-radius: 5px;
   padding: 3px 8px;
   font-size: 10.5px;
@@ -292,20 +427,20 @@ button, input, select, textarea {
 .badge.approved {
   background: var(--good-light);
   color: var(--good);
-  border-color: #b9d0bb;
+  border-color: var(--good-border);
 }
 
 .badge.rejected,
 .badge.ai-reject {
   background: var(--danger-light);
   color: var(--danger);
-  border-color: #f3c6c6;
+  border-color: var(--danger-border);
 }
 
 .badge.ai-approve {
   background: var(--good-light);
   color: var(--good);
-  border-color: #b9d0bb;
+  border-color: var(--good-border);
 }
 
 .badge.ai-needs_more_info {
@@ -317,19 +452,19 @@ button, input, select, textarea {
 .badge.role-expert {
   background: var(--good-light);
   color: var(--good);
-  border-color: #b9d0bb;
+  border-color: var(--good-border);
 }
 
 .badge.role-organization {
   background: var(--acc-light);
   color: var(--acc);
-  border-color: #c3d3e6;
+  border-color: var(--acc-border);
 }
 
 .badge.role-admin {
-  background: #f1eafb;
-  color: #6b3fa0;
-  border-color: #d9c7f0;
+  background: var(--admin-light);
+  color: var(--admin);
+  border-color: var(--admin-border);
 }
 
 .tag {
@@ -654,6 +789,19 @@ button, input, select, textarea {
   font-size: 14px;
   color: var(--ink);
   background: var(--paper);
+}
+
+/* Native date-picker calendar glyph renders black regardless of theme
+   (WebKit/Blink) -- invert it to white in dark mode so it's visible
+   against the now-dark field background. */
+:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
 }
 
 .field-input:focus {
@@ -1268,7 +1416,7 @@ button, input, select, textarea {
   border-radius: var(--radius-lg);
   padding: 40px 32px;
   background: var(--acc-light);
-  border: 1px solid #c3d3e6;
+  border: 1px solid var(--acc-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1377,13 +1525,13 @@ button, input, select, textarea {
 .alert-error {
   background: var(--risk-light);
   color: var(--risk);
-  border: 1px solid #e3c3b8;
+  border: 1px solid var(--risk-border);
 }
 
 .alert-success {
   background: var(--good-light);
   color: var(--good);
-  border: 1px solid #b9d0bb;
+  border: 1px solid var(--good-border);
 }
 
 .skeleton-bar {
@@ -1400,7 +1548,7 @@ button, input, select, textarea {
 
 /* ---------- Expert profile (editorial, monochrome) ---------- */
 .xp-page {
-  background: #f2f0ec;
+  background: var(--xp-bg);
 }
 
 .xp-container {
@@ -1428,12 +1576,12 @@ button, input, select, textarea {
   width: 128px;
   height: 164px;
   border-radius: 6px;
-  background: linear-gradient(160deg, #dad7d2 0%, #a9a5a0 100%);
+  background: linear-gradient(160deg, var(--xp-photo-start) 0%, var(--xp-photo-end) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  color: #6b6862;
+  color: var(--xp-photo-fg);
 }
 
 .xp-photo svg {
@@ -1581,7 +1729,7 @@ button, input, select, textarea {
 }
 
 .xp-connect-card {
-  background: #e4e1dc;
+  background: var(--xp-card-bg);
   border-radius: 10px;
   padding: 28px;
   display: flex;
@@ -1624,7 +1772,7 @@ button, input, select, textarea {
   width: 110px;
   height: 110px;
   flex: none;
-  background-image: radial-gradient(circle, rgba(26, 26, 26, 0.55) 1.4px, transparent 1.6px);
+  background-image: radial-gradient(circle, var(--xp-dot) 1.4px, transparent 1.6px);
   background-size: 10px 10px;
   border-radius: 4px;
 }

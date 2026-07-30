@@ -92,7 +92,7 @@ export default function OrgProfileModal({ orgId, engagementId, onClose }) {
               </div>
             </div>
 
-            <div className="field-group" style={{ marginTop: 8, borderTop: '1px solid var(--brd)', paddingTop: 16 }}>
+            <div className="field-group" style={{ marginTop: 8, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
                 <label className="field-label">My Notes</label>
                 {notesStatus === 'saving' && <span className="lead" style={{ fontSize: 11 }}>Saving…</span>}

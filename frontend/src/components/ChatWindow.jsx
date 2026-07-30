@@ -50,7 +50,7 @@ function ConversationPane({ active, onSent }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--brd)', fontWeight: 600, fontSize: 13 }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', fontWeight: 600, fontSize: 13 }}>
         {active.title}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: 14 }}>
@@ -77,7 +77,7 @@ function ConversationPane({ active, onSent }) {
               key={m.message_id}
               style={{
                 alignSelf: m.sender_id === user?.user_id ? 'flex-end' : 'flex-start',
-                background: m.sender_id === user?.user_id ? 'var(--acc)' : 'var(--srf)',
+                background: m.sender_id === user?.user_id ? 'var(--acc)' : 'var(--fill)',
                 color: m.sender_id === user?.user_id ? '#fff' : 'inherit',
                 borderRadius: 8, padding: '6px 10px',
                 maxWidth: '75%', fontSize: 13,
@@ -90,7 +90,7 @@ function ConversationPane({ active, onSent }) {
         })}
         <div ref={bottomRef} />
       </div>
-      <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--brd)' }}>
+      <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
         <input
           className="field-input"
           value={draft}
@@ -203,7 +203,7 @@ export default function ChatWindow() {
       style={{
         position: 'fixed', bottom: 0, right: 24,
         width: 700, height: 480,
-        background: 'var(--bg)', border: '1px solid var(--brd)',
+        background: 'var(--bg)', border: '1px solid var(--line)',
         borderBottom: 'none', borderRadius: '8px 8px 0 0',
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 -4px 24px rgba(0,0,0,0.12)',
@@ -211,15 +211,15 @@ export default function ChatWindow() {
       }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--brd)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--line)' }}>
         <span className="section-label">Messages</span>
-        <button onClick={minimize} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.5 }}>—</button>
+        <button onClick={minimize} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.5, color: 'var(--ink)' }}>—</button>
       </div>
 
       {/* Body */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* Sidebar */}
-        <div style={{ width: 200, borderRight: '1px solid var(--brd)', overflowY: 'auto', flexShrink: 0 }}>
+        <div style={{ width: 200, borderRight: '1px solid var(--line)', overflowY: 'auto', flexShrink: 0 }}>
           {conversations.length === 0 && (
             <p className="lead" style={{ fontSize: 12, padding: 14, opacity: 0.6 }}>No conversations.</p>
           )}
@@ -232,7 +232,8 @@ export default function ChatWindow() {
                 padding: '10px 14px', border: 'none',
                 borderBottom: '1px solid rgba(128,128,128,0.3)',
                 borderLeft: c.unread_count > 0 ? '3px solid var(--acc)' : '3px solid transparent',
-                background: active?.id === c.id ? 'var(--srf)' : 'transparent',
+                background: active?.id === c.id ? 'var(--fill)' : 'transparent',
+                color: 'var(--ink)',
                 cursor: 'pointer',
               }}
             >
@@ -241,7 +242,7 @@ export default function ChatWindow() {
                   {c.title}
                 </span>
               </div>
-              <span style={{ fontSize: 11, opacity: 0.5 }}>Chat</span>
+              <span style={{ fontSize: 11, opacity: 0.5, color: 'var(--muted)' }}>Chat</span>
             </button>
           ))}
         </div>

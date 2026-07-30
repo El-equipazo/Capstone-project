@@ -84,6 +84,15 @@ export const authApi = {
     return getStoredSession()
   },
 
+  // Deactivates the account server-side (DELETE /auth/me -> user_model.deactivate,
+  // sets is_active = false) and clears the local session -- every authenticated
+  // route already 401s an inactive user via get_current_user, so this is a real
+  // account shutdown, not just a client-side sign-out.
+  async deleteAccount() {
+    await apiFetch('/auth/me', { method: 'DELETE', headers: authHeader() })
+    localStorage.removeItem(SESSION_KEY)
+  },
+
   // GET /auth/me already resolves either an organization_profile or an
   // expert_profile server-side depending on the user's role, so this stays
   // generic rather than branching on role itself.

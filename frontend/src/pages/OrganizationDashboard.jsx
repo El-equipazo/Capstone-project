@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import RecommendationCard from '../components/matching/RecommendationCard'
 import TagInput from '../components/organization/TagInput'
+import DeleteAccount from '../components/DeleteAccount'
 import { labelize, BUDGET_RANGE_LABEL, toNumberOrNull } from '../utils/format'
 
 const MATCH_ERROR_MESSAGES = {
@@ -18,7 +19,10 @@ const BUDGET_RANGE_OPTIONS = ['under_10k', '10k_50k', '50k_250k', '250k_plus', '
 const URGENCY_OPTIONS = ['just_exploring', 'planning_ahead', 'urgent', 'critical']
 const STORAGE_TYPE_OPTIONS = ['on_premise', 'cloud', 'hybrid', 'legacy_mainframe', 'mixed']
 
-const COMPLIANCE_SUGGESTIONS = ['PCI-DSS', 'GLBA', 'SOX', 'HIPAA', 'GDPR', 'CCPA', 'FFIEC', 'NYDFS']
+const COMPLIANCE_SUGGESTIONS = [
+  'BSA', 'AML', 'KYC', 'OFAC', 'FCPA', 'CFPB', 'TILA', 'FCRA', 'ECOA',
+  'GLBA', 'PCI DSS', 'DORA', 'GDPR', 'SOX', 'CECL', 'FINRA', 'CFTC', 'FFIEC',
+]
 const ENCRYPTION_SUGGESTIONS = [
   'AES', 'AES-256', 'AES-128', 'AES-192', 'ChaCha20',
   'RSA', 'RSA-2048', 'RSA-4096',
@@ -61,7 +65,7 @@ function profileToForm(profile) {
 }
 
 export default function OrganizationDashboard() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
@@ -71,6 +75,7 @@ export default function OrganizationDashboard() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedNotice, setSavedNotice] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [connections, setConnections] = useState([])
   const [engagements, setEngagements] = useState([])
   const [expertsById, setExpertsById] = useState({})
@@ -483,6 +488,7 @@ export default function OrganizationDashboard() {
         )}
 
         {tab === 'profile' && (
+          <>
           <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 640 }}>
             <span className="section-label">Profile</span>
 
@@ -588,6 +594,33 @@ export default function OrganizationDashboard() {
               {saving ? 'Saving…' : 'Save changes'}
             </button>
           </form>
+
+          <div className="card" style={{ padding: 22, maxWidth: 640, marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <span className="section-label">Danger zone</span>
+            <p className="lead" style={{ fontSize: 12.5 }}>
+              Deleting your account deactivates it immediately and signs you out. This cannot be undone.
+            </p>
+            <button
+              type="button"
+              className="btn btn-danger"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => setShowDeleteModal(true)}
+            >
+              Delete account
+            </button>
+          </div>
+
+          {showDeleteModal && (
+            <DeleteAccount
+              orgName={profile.org_name}
+              onClose={() => setShowDeleteModal(false)}
+              onDeleted={() => {
+                logout()
+                navigate('/')
+              }}
+            />
+          )}
+          </>
         )}
 
         {tab === 'infrastructure' && (
