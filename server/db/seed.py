@@ -44,6 +44,7 @@ async def seed():
             "messages",
             "chat_threads",
             "secure_document_shares",
+            "engagement_notes",
             "engagement_milestones",
             "engagements",
             "match_scoring_factors",
@@ -337,6 +338,20 @@ async def seed():
                 pending_requested_at               TIMESTAMP,
                 created_at                 TIMESTAMP DEFAULT NOW(),
                 updated_at                 TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # engagement_notes -- private per-engagement scratchpad for the expert
+        # only; the organization side never reads these.
+        await conn.execute("""
+            CREATE TABLE engagement_notes (
+                note_id        SERIAL PRIMARY KEY,
+                engagement_id  INTEGER NOT NULL REFERENCES engagements(engagement_id) ON DELETE CASCADE,
+                expert_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                content        TEXT,
+                created_at     TIMESTAMP DEFAULT NOW(),
+                updated_at     TIMESTAMP DEFAULT NOW(),
+                UNIQUE (engagement_id, expert_user_id)
             )
         """)
 

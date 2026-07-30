@@ -121,7 +121,25 @@ export default function ChatWindow() {
     prevUnread.current = totalUnread
   }, [totalUnread, isOpen, isMinimized])
 
+  const windowRef = useRef(null)
+
+  useEffect(() => {
+    if (!isOpen || isMinimized) return
+    function onOutsideClick(event) {
+      if (windowRef.current && !windowRef.current.contains(event.target)) {
+        minimize()
+      }
+    }
+    document.addEventListener('mousedown', onOutsideClick)
+    return () => document.removeEventListener('mousedown', onOutsideClick)
+  }, [isOpen, isMinimized, minimize])
+
   if (!user) return null
+
+  const activeConv = conversations.find((c) => c.id === active?.id)
+  const previewText = activeConv?.last_message_preview
+    ? activeConv.last_message_preview.split(' ').slice(0, 4).join(' ')
+    : null
 
   // Show full window when open and not minimized; otherwise always render the
   // minimized bar — this gives every logged-in user (including experts) a
@@ -154,9 +172,20 @@ export default function ChatWindow() {
             animation: highlighted ? 'chat-pulse 0.6s ease-in-out 3' : 'none',
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
-            Messages
-          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              Messages{active?.title ? ` — ${active.title}` : ''}
+            </div>
+            {previewText && (
+              <div style={{
+                fontSize: 11, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden',
+                maskImage: 'linear-gradient(to right, black 75%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to right, black 75%, transparent 100%)',
+              }}>
+                {previewText}
+              </div>
+            )}
+          </div>
           {totalUnread > 0 && (
             <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', background: 'var(--acc)', color: '#fff', borderRadius: 99 }}>
               {totalUnread}
@@ -170,6 +199,7 @@ export default function ChatWindow() {
 
   return (
     <div
+      ref={windowRef}
       style={{
         position: 'fixed', bottom: 0, right: 24,
         width: 700, height: 480,

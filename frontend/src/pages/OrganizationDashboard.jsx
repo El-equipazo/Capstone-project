@@ -19,7 +19,13 @@ const URGENCY_OPTIONS = ['just_exploring', 'planning_ahead', 'urgent', 'critical
 const STORAGE_TYPE_OPTIONS = ['on_premise', 'cloud', 'hybrid', 'legacy_mainframe', 'mixed']
 
 const COMPLIANCE_SUGGESTIONS = ['PCI-DSS', 'GLBA', 'SOX', 'HIPAA', 'GDPR', 'CCPA', 'FFIEC', 'NYDFS']
-const ENCRYPTION_SUGGESTIONS = ['RSA-2048', 'RSA-4096', 'AES-256', 'ECC', 'TLS 1.2', 'TLS 1.3']
+const ENCRYPTION_SUGGESTIONS = [
+  'AES', 'AES-256', 'AES-128', 'AES-192', 'ChaCha20',
+  'RSA', 'RSA-2048', 'RSA-4096',
+  'ECC', 'ECDSA', 'EdDSA', 'ECDH',
+  'ML-KEM (FIPS 203)', 'ML-DSA (FIPS 204)', 'SLH-DSA (FIPS 205)', 'FN-DSA (FIPS 206)',
+  'TLS 1.3', 'SSHv2', 'SFTP',
+]
 const CLOUD_PROVIDER_SUGGESTIONS = ['AWS', 'Azure', 'GCP']
 const DATA_CATEGORY_SUGGESTIONS = ['customer_pii', 'transaction_records', 'financial_records', 'health_records', 'employee_records']
 
@@ -156,7 +162,6 @@ export default function OrganizationDashboard() {
       // team/invite concept in organization_profiles to send it to.
       const result = await organizationsApi.createProfile(user.user_id, {
         ...wizardData,
-        org_name: wizardData.org_name.trim() || `${user.email.split('@')[0]}'s Organization`,
         sector: 'financial', // the whole platform is scoped to financial institutions
       })
       setProfile(result)

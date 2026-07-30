@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from server.db import connection_pool as pool
 from .errors import NotFoundError, TransitionError
+from .validators import check_not_past
 
 _COLS = """
     milestone_id, engagement_id, proposed_by_user_id, proposed_by_role,
@@ -30,6 +31,7 @@ async def create(
     deliverable_description: str = None,
     requires_client_approval: bool = False,
 ) -> dict:
+    check_not_past(due_date, "due_date")
     if order_index is None:
         max_idx = await pool.fetchval(
             "SELECT COALESCE(MAX(order_index), 0) FROM engagement_milestones WHERE engagement_id = $1",
@@ -70,6 +72,7 @@ async def get(milestone_id: int) -> dict:
 
 
 async def update(milestone_id: int, **kwargs) -> dict:
+    check_not_past(kwargs.get("due_date"), "due_date")
     set_parts = {k: v for k, v in kwargs.items() if k in _UPDATABLE and v is not None}
     # Explicit False for booleans must also pass through
     for k in kwargs:
@@ -117,6 +120,7 @@ async def confirm(milestone_id: int) -> dict:
 
 async def propose_change(milestone_id: int, user_id: int, *,
                          due_date=None, deliverable_description: str = None) -> dict:
+    check_not_past(due_date, "due_date")
     row = await pool.fetchrow(
         f"""
         UPDATE engagement_milestones

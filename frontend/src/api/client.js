@@ -193,6 +193,10 @@ export const organizationsApi = {
     })
   },
 
+  async getById(orgId) {
+    return await apiFetch(`/organizations/${orgId}`, { headers: authHeader() })
+  },
+
   async getInfrastructure(orgId) {
     return await apiFetch(`/organizations/${orgId}/infrastructure`, { headers: authHeader() })
   },
@@ -341,6 +345,18 @@ export const engagementsApi = {
   async declineMilestoneChange(engagementId, milestoneId) {
     return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/decline-change`, {
       method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async getNotes(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/notes`, { headers: authHeader() })
+  },
+
+  async updateNotes(engagementId, content) {
+    return await apiFetch(`/engagements/${engagementId}/notes`, {
+      method: 'PUT',
+      body: { content },
       headers: authHeader(),
     })
   },

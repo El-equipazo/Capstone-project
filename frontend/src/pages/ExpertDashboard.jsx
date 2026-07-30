@@ -10,6 +10,9 @@ import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labeli
 
 const AVAILABILITY_OPTIONS = Object.keys(AVAILABILITY_LABEL)
 
+// Engagement dates can't be set before today (server enforces this too).
+const todayStr = new Date().toISOString().slice(0, 10)
+
 const BLANK_FORM = {
   first_name: '',
   last_name: '',
@@ -74,6 +77,31 @@ export default function ExpertDashboard() {
     proficiency_level: PROFICIENCY_LEVELS[0],
     years_in_specialization: '',
   })
+
+  // Specializations picked before the profile exists yet (creation form only) --
+  // posted one-by-one to POST /experts/{id}/specializations right after the
+  // profile itself is created, since that endpoint requires an existing id.
+  const [newSpecForm, setNewSpecForm] = useState({
+    specialization: SPECIALIZATIONS[0],
+    proficiency_level: PROFICIENCY_LEVELS[0],
+    years_in_specialization: '',
+  })
+  const [pendingSpecs, setPendingSpecs] = useState([])
+
+  function addPendingSpecialization(e) {
+    e.preventDefault()
+    if (pendingSpecs.some((s) => s.specialization === newSpecForm.specialization)) {
+      setError('That specialization is already added.')
+      return
+    }
+    setError('')
+    setPendingSpecs((prev) => [...prev, newSpecForm])
+    setNewSpecForm({ specialization: SPECIALIZATIONS[0], proficiency_level: PROFICIENCY_LEVELS[0], years_in_specialization: '' })
+  }
+
+  function removePendingSpecialization(specialization) {
+    setPendingSpecs((prev) => prev.filter((s) => s.specialization !== specialization))
+  }
 
   const [verifyPrompt, setVerifyPrompt] = useState(false)
   const [verifying, setVerifying] = useState(false)
@@ -174,6 +202,14 @@ export default function ExpertDashboard() {
 
   async function handleCreate(e) {
     e.preventDefault()
+    if (!form.headline.trim() || !form.linkedin_url.trim()) {
+      setError('Headline and LinkedIn URL are required.')
+      return
+    }
+    if (pendingSpecs.length === 0) {
+      setError('Add at least one specialization.')
+      return
+    }
     setError('')
     setSaving(true)
     try {
@@ -183,8 +219,29 @@ export default function ExpertDashboard() {
         hourly_rate_min: toNumberOrNull(form.hourly_rate_min),
         hourly_rate_max: toNumberOrNull(form.hourly_rate_max),
       })
+      // The profile now exists server-side no matter what happens below --
+      // always advance past the creation form so a specialization POST
+      // failing (network blip, transient error) can't strand the user on a
+      // form that looks like nothing happened. allSettled (rather than
+      // stopping at the first rejection) also means one bad specialization
+      // doesn't take out the rest of the batch.
+      const outcomes = await Promise.allSettled(
+        pendingSpecs.map((spec) =>
+          expertsApi.addSpecialization(result.expert_profile_id, {
+            ...spec,
+            years_in_specialization: toNumberOrNull(spec.years_in_specialization),
+          })
+        )
+      )
+      const failed = outcomes
+        .map((o, i) => (o.status === 'rejected' ? pendingSpecs[i] : null))
+        .filter(Boolean)
       setProfile(result)
       setVerifyPrompt(true)
+      if (failed.length > 0) {
+        const names = failed.map((s) => labelize(s.specialization)).join(', ')
+        setError(`Profile created, but couldn't add: ${names}. Add them from your Profile tab.`)
+      }
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {
@@ -420,6 +477,7 @@ export default function ExpertDashboard() {
                 <label className="field-label">Headline</label>
                 <input
                   className="field-input"
+                  required
                   placeholder="e.g. Post-Quantum Cryptography Specialist"
                   value={form.headline}
                   onChange={(e) => updateField('headline', e.target.value)}
@@ -434,6 +492,73 @@ export default function ExpertDashboard() {
                   value={form.bio}
                   onChange={(e) => updateField('bio', e.target.value)}
                 />
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">Specializations</label>
+                <div className="row gap-8 wrap" style={{ marginBottom: pendingSpecs.length ? 10 : 0 }}>
+                  {pendingSpecs.length === 0 && (
+                    <p style={{ fontSize: 12.5, color: 'var(--danger, #c0392b)' }}>
+                      Required — add at least one specialization below.
+                    </p>
+                  )}
+                  {pendingSpecs.map((s) => (
+                    <span key={s.specialization} className="chip on">
+                      {labelize(s.specialization)} <span className="tag" style={{ marginLeft: 4 }}>{labelize(s.proficiency_level)}</span>
+                      <button
+                        type="button"
+                        onClick={() => removePendingSpecialization(s.specialization)}
+                        aria-label={`Remove ${labelize(s.specialization)}`}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', marginLeft: 4, fontSize: 13 }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="row gap-8 wrap" style={{ alignItems: 'flex-end' }}>
+                  <div className="field-group">
+                    <label className="field-label">Specialization</label>
+                    <select
+                      className="field-input"
+                      value={newSpecForm.specialization}
+                      onChange={(e) => setNewSpecForm((prev) => ({ ...prev, specialization: e.target.value }))}
+                    >
+                      {SPECIALIZATIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {labelize(s)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Proficiency</label>
+                    <select
+                      className="field-input"
+                      value={newSpecForm.proficiency_level}
+                      onChange={(e) => setNewSpecForm((prev) => ({ ...prev, proficiency_level: e.target.value }))}
+                    >
+                      {PROFICIENCY_LEVELS.map((p) => (
+                        <option key={p} value={p}>
+                          {labelize(p)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field-group" style={{ width: 90 }}>
+                    <label className="field-label">Years</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="field-input"
+                      value={newSpecForm.years_in_specialization}
+                      onChange={(e) => setNewSpecForm((prev) => ({ ...prev, years_in_specialization: e.target.value }))}
+                    />
+                  </div>
+                  <button className="btn btn-sm" type="button" onClick={addPendingSpecialization}>
+                    Add
+                  </button>
+                </div>
               </div>
 
               <div className="row gap-10">
@@ -474,6 +599,7 @@ export default function ExpertDashboard() {
                   <label className="field-label">Availability</label>
                   <select
                     className="field-input"
+                    required
                     value={form.availability_status}
                     onChange={(e) => updateField('availability_status', e.target.value)}
                   >
@@ -504,6 +630,7 @@ export default function ExpertDashboard() {
                 <label className="field-label">LinkedIn URL</label>
                 <input
                   className="field-input"
+                  required
                   placeholder="https://linkedin.com/in/…"
                   value={form.linkedin_url}
                   onChange={(e) => updateField('linkedin_url', e.target.value)}
@@ -769,6 +896,7 @@ export default function ExpertDashboard() {
                             <input
                               className="field-input"
                               type="date"
+                              min={todayStr}
                               value={timelineForm.start_date}
                               onChange={(e) => setTimelineForm((p) => ({ ...p, start_date: e.target.value }))}
                             />
@@ -778,6 +906,7 @@ export default function ExpertDashboard() {
                             <input
                               className="field-input"
                               type="date"
+                              min={todayStr}
                               value={timelineForm.estimated_end_date}
                               onChange={(e) => setTimelineForm((p) => ({ ...p, estimated_end_date: e.target.value }))}
                             />

@@ -4,6 +4,8 @@ detail so the API layer can build the standard error envelope (§1.1).
 Models call these before touching the DB.
 """
 
+from datetime import date, datetime
+
 from .errors import ValidationError
 
 
@@ -18,6 +20,29 @@ def check_enum(value, allowed, field, *, allow_none=False):
             f"{field} must be one of: {', '.join(sorted(allowed))}",
             field=field, issue="invalid_enum_value",
         )
+
+
+def check_not_past(value, field):
+    """
+    Milestone due dates / engagement dates / proposal deadlines can't be set
+    before now. `datetime` is a subclass of `date`, so it's checked first --
+    a naive datetime (e.g. a date-only proposal_expires_at) is compared
+    against the current moment, a plain date against today's date.
+    """
+    if value is None:
+        return
+    if isinstance(value, datetime):
+        if value < datetime.now():
+            raise ValidationError(
+                f"{field} cannot be before the current date",
+                field=field, issue="date_in_past",
+            )
+    elif isinstance(value, date):
+        if value < date.today():
+            raise ValidationError(
+                f"{field} cannot be before today",
+                field=field, issue="date_in_past",
+            )
 
 
 def check_rate_range(rate_min, rate_max):

@@ -24,6 +24,7 @@ export function ChatProvider({ children }) {
           : (t.org_name || 'Organization'),
         unread_count: t.unread_count ?? 0,
         last_activity: t.last_message_at || t.created_at,
+        last_message_preview: t.last_message_preview,
       })).sort((a, b) => new Date(b.last_activity) - new Date(a.last_activity))
 
       setConversations(convs)
