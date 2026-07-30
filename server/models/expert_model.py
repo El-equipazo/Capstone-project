@@ -19,6 +19,7 @@ from .validators import check_enum, check_rate_range
 
 _PROFILE_COLS = (
     "expert_profile_id, user_id, first_name, last_name, headline, bio, "
+    "profile_photo_url, "
     "years_of_experience, linkedin_url, hourly_rate_min, hourly_rate_max, "
     "availability_status, preferred_engagement_length, "
     "is_verified, verification_status, avg_rating, total_completed_engagements, "
@@ -195,7 +196,7 @@ async def update(expert_id: int, patch: dict) -> dict:
     return await _full_profile(row)
 
 
-async def list(
+async def list_experts(
     *,
     filters: dict = None,
     page: int = 1,
@@ -296,6 +297,7 @@ async def list(
     rows = await pool.fetch(
         f"""
         SELECT ep.expert_profile_id, ep.first_name, ep.last_name, ep.headline,
+               ep.profile_photo_url,
                ep.availability_status, ep.hourly_rate_min, ep.hourly_rate_max,
                ep.is_verified, ep.avg_rating, ep.total_completed_engagements,
                ep.years_of_experience

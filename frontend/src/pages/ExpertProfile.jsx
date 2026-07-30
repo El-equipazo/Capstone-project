@@ -174,7 +174,11 @@ export default function ExpertProfile() {
 
         <div className="xp-hero">
           <div className="xp-photo">
-            <PortraitPlaceholder />
+            {expert.profile_photo_url ? (
+              <img src={expert.profile_photo_url} alt="" className="xp-photo-img" />
+            ) : (
+              <PortraitPlaceholder />
+            )}
           </div>
           <div className="xp-index">
             <div className="xp-status-row">

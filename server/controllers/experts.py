@@ -87,7 +87,7 @@ async def list_experts(
             "years_experience_min": years_experience_min,
         }.items() if v is not None
     }
-    return await expert_model.list(filters=filters, page=page, limit=limit, sort=sort, order=order)
+    return await expert_model.list_experts(filters=filters, page=page, limit=limit, sort=sort, order=order)
 
 
 @router.get("/experts/{expert_id}", response_model=ExpertResponse)

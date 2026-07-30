@@ -508,6 +508,13 @@ button, input, select, textarea {
   color: #4a4a4a;
 }
 
+.ec-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .ec-verified-dot {
   position: absolute;
   right: -3px;
@@ -1530,6 +1537,13 @@ button, input, select, textarea {
 
 .xp-photo svg {
   width: 56%;
+}
+
+.xp-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
 }
 
 .xp-index {

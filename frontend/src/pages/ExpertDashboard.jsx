@@ -87,6 +87,8 @@ export default function ExpertDashboard() {
   const [verifyDocUrls, setVerifyDocUrls] = useState([])
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
   const [verifications, setVerifications] = useState([])
   const [submittingVerification, setSubmittingVerification] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
@@ -321,6 +323,22 @@ export default function ExpertDashboard() {
       setUploadError(err.body?.error?.message ?? 'Could not upload file. Please try again.')
     } finally {
       setUploadingDoc(false)
+    }
+  }
+
+  // Saves immediately on upload (no separate "Save profile" click needed) --
+  // matches how a photo/avatar control behaves in most products.
+  async function handleUploadPhoto(file) {
+    setPhotoError('')
+    setUploadingPhoto(true)
+    try {
+      const { url } = await uploadsApi.upload(file)
+      const updated = await expertsApi.updateProfile(profile.expert_profile_id, { profile_photo_url: url })
+      setProfile(updated)
+    } catch (err) {
+      setPhotoError(err.body?.error?.message ?? 'Could not upload photo. Please try again.')
+    } finally {
+      setUploadingPhoto(false)
     }
   }
 
@@ -872,6 +890,38 @@ export default function ExpertDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <span className="section-label">Profile</span>
+
+                <div className="field-group">
+                  <label className="field-label">Profile photo</label>
+                  <div className="row gap-10" style={{ alignItems: 'center' }}>
+                    <span className="avatar" style={{ width: 52, height: 52, fontSize: 16, overflow: 'hidden' }}>
+                      {profile.profile_photo_url ? (
+                        <img
+                          src={profile.profile_photo_url}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        `${profile.first_name[0]}${profile.last_name[0]}`
+                      )}
+                    </span>
+                    <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
+                      {uploadingPhoto ? 'Uploading…' : profile.profile_photo_url ? 'Change photo' : 'Upload photo'}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        style={{ display: 'none' }}
+                        disabled={uploadingPhoto}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleUploadPhoto(file)
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {photoError && <p style={{ fontSize: 12, color: 'var(--err, #e53)', marginTop: 6 }}>{photoError}</p>}
+                </div>
 
                 <div className="row gap-10">
                   <div className="field-group" style={{ flex: 1 }}>
