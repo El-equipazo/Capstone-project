@@ -55,7 +55,7 @@ function ConversationPane({ active, onSent }) {
       </div>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: 14 }}>
         {loading && <p className="lead" style={{ fontSize: 12 }}>Loading…</p>}
-        {error && <p style={{ color: 'var(--err, red)', fontSize: 12 }}>{error}</p>}
+        {error && <p style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</p>}
         {!loading && messages.length === 0 && (
           <p className="lead" style={{ fontSize: 12, opacity: 0.6 }}>No messages yet.</p>
         )}

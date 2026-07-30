@@ -9,8 +9,8 @@ const RATE_MAX_OPTIONS = ['250', '350', '500']
 
 const EMPTY_FILTERS = {
   q: '',
-  specialization: '',
-  engagement_type: '',
+  specialization: [],
+  engagement_type: [],
   availability: '',
   rate_max: '',
   rating_min: '',
@@ -33,12 +33,22 @@ export default function ExpertDirectory() {
   }, [filters])
 
   const activeFilterCount = useMemo(
-    () => Object.entries(filters).filter(([key, v]) => key !== 'q' && v).length,
+    () =>
+      Object.entries(filters)
+        .filter(([key]) => key !== 'q')
+        .reduce((sum, [, v]) => sum + (Array.isArray(v) ? v.length : v ? 1 : 0), 0),
     [filters]
   )
 
   function toggleFilter(key, value) {
     setFilters((prev) => ({ ...prev, [key]: prev[key] === value ? '' : value }))
+  }
+
+  function toggleMultiFilter(key, value) {
+    setFilters((prev) => ({
+      ...prev,
+      [key]: prev[key].includes(value) ? prev[key].filter((v) => v !== value) : [...prev[key], value],
+    }))
   }
 
   function clearAll() {
@@ -78,28 +88,36 @@ export default function ExpertDirectory() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 28 }}>
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-            <FilterGroup label="Specialization">
-              {SPECIALIZATIONS.map((s) => (
-                <span
-                  key={s}
-                  className={`chip ${filters.specialization === s ? 'on' : ''}`}
-                  onClick={() => toggleFilter('specialization', s)}
-                >
-                  {labelize(s)}
-                </span>
-              ))}
+            <FilterGroup label="Specialization" hint="select any">
+              {SPECIALIZATIONS.map((s) => {
+                const on = filters.specialization.includes(s)
+                return (
+                  <span
+                    key={s}
+                    className={`chip ${on ? 'on' : ''}`}
+                    onClick={() => toggleMultiFilter('specialization', s)}
+                  >
+                    {labelize(s)}
+                    {on && <span style={{ marginLeft: 4, fontSize: 10 }}>✕</span>}
+                  </span>
+                )
+              })}
             </FilterGroup>
 
-            <FilterGroup label="Engagement type">
-              {ENGAGEMENT_TYPES.map((s) => (
-                <span
-                  key={s}
-                  className={`chip ${filters.engagement_type === s ? 'on' : ''}`}
-                  onClick={() => toggleFilter('engagement_type', s)}
-                >
-                  {labelize(s)}
-                </span>
-              ))}
+            <FilterGroup label="Engagement type" hint="select any">
+              {ENGAGEMENT_TYPES.map((s) => {
+                const on = filters.engagement_type.includes(s)
+                return (
+                  <span
+                    key={s}
+                    className={`chip ${on ? 'on' : ''}`}
+                    onClick={() => toggleMultiFilter('engagement_type', s)}
+                  >
+                    {labelize(s)}
+                    {on && <span style={{ marginLeft: 4, fontSize: 10 }}>✕</span>}
+                  </span>
+                )
+              })}
             </FilterGroup>
 
             <FilterGroup label="Availability">
@@ -183,10 +201,13 @@ export default function ExpertDirectory() {
   )
 }
 
-function FilterGroup({ label, children }) {
+function FilterGroup({ label, hint, children }) {
   return (
     <div>
-      <span className="section-label">{label}</span>
+      <span className="section-label">
+        {label}
+        {hint && <span style={{ marginLeft: 6, fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>{hint}</span>}
+      </span>
       <div className="row gap-6 wrap" style={{ marginTop: 9 }}>
         {children}
       </div>

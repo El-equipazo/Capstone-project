@@ -115,7 +115,10 @@ export const expertsApi = {
   async list(filters = {}) {
     const params = new URLSearchParams()
     for (const [key, val] of Object.entries(filters)) {
-      if (val !== undefined && val !== null && val !== '') {
+      if (val === undefined || val === null || val === '') continue
+      if (Array.isArray(val)) {
+        val.forEach((v) => params.append(key, v))
+      } else {
         params.set(key, val)
       }
     }

@@ -19,6 +19,7 @@ from .validators import check_enum, check_rate_range
 
 _PROFILE_COLS = (
     "expert_profile_id, user_id, first_name, last_name, headline, bio, "
+    "profile_photo_url, "
     "years_of_experience, linkedin_url, hourly_rate_min, hourly_rate_max, "
     "availability_status, preferred_engagement_length, "
     "is_verified, verification_status, avg_rating, total_completed_engagements, "
@@ -195,7 +196,7 @@ async def update(expert_id: int, patch: dict) -> dict:
     return await _full_profile(row)
 
 
-async def list(
+async def list_experts(
     *,
     filters: dict = None,
     page: int = 1,
@@ -225,9 +226,12 @@ async def list(
         )
 
     if "specialization" in filters:
+        # Multi-select (matches ANY of the given specializations) -- a caller
+        # asking for either PQC migration or HSM architecture experience is a
+        # normal request, not something a single-value filter can express.
         where_parts.append(
             f"EXISTS (SELECT 1 FROM expert_specializations es "
-            f"WHERE es.expert_id = ep.expert_profile_id AND es.specialization = {p(filters['specialization'])})"
+            f"WHERE es.expert_id = ep.expert_profile_id AND es.specialization = ANY({p(filters['specialization'])}::text[]))"
         )
 
     if "proficiency_min" in filters:
@@ -259,9 +263,10 @@ async def list(
         )
 
     if "engagement_type" in filters:
+        # Multi-select, same reasoning as specialization above.
         where_parts.append(
             f"EXISTS (SELECT 1 FROM expert_engagement_types eet "
-            f"WHERE eet.expert_id = ep.expert_profile_id AND eet.engagement_type = {p(filters['engagement_type'])})"
+            f"WHERE eet.expert_id = ep.expert_profile_id AND eet.engagement_type = ANY({p(filters['engagement_type'])}::text[]))"
         )
 
     if "availability" in filters:
@@ -292,6 +297,7 @@ async def list(
     rows = await pool.fetch(
         f"""
         SELECT ep.expert_profile_id, ep.first_name, ep.last_name, ep.headline,
+               ep.profile_photo_url,
                ep.availability_status, ep.hourly_rate_min, ep.hourly_rate_max,
                ep.is_verified, ep.avg_rating, ep.total_completed_engagements,
                ep.years_of_experience
