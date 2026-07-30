@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { authApi, connectionsApi, expertsApi, threadsApi } from '../api/client'
+import { authApi, connectionsApi, expertsApi, reviewsApi, threadsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
+import RatingStars from '../components/RatingStars'
 import { useAuth } from '../context/AuthContext'
 import { useChat_context } from '../context/ChatContext'
 import { formatRate, formatCurrencyRange, formatWorkPeriod, formatYearsOfExperience, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
@@ -80,6 +81,23 @@ export default function ExpertProfile() {
       cancelled = true
     }
   }, [user, expertId])
+
+  const [reviewsData, setReviewsData] = useState({ data: [], pagination: null, aggregate: null })
+  const [reviewsLoading, setReviewsLoading] = useState(true)
+  const [reviewsPage, setReviewsPage] = useState(1)
+  const [reviewsQuery, setReviewsQuery] = useState('')
+  const [reviewsMinStars, setReviewsMinStars] = useState(null)
+  const [flaggingId, setFlaggingId] = useState(null) // review_id currently showing the report form
+  const [flagReason, setFlagReason] = useState('')
+  const [flagged, setFlagged] = useState({}) // { [review_id]: true } after a successful report
+
+  useEffect(() => {
+    setReviewsLoading(true)
+    reviewsApi.listForExpert(expertId, { page: reviewsPage, limit: 10, q: reviewsQuery, minStars: reviewsMinStars })
+      .then(setReviewsData)
+      .catch(() => setReviewsData({ data: [], pagination: null, aggregate: null }))
+      .finally(() => setReviewsLoading(false))
+  }, [expertId, reviewsPage, reviewsQuery, reviewsMinStars])
 
   async function handleAskQuestion() {
     setAskError('')
@@ -431,6 +449,119 @@ export default function ExpertProfile() {
                   ownerLinkText="Add engagement types"
                   visitorText="No engagement types listed yet."
                 />
+              )}
+            </section>
+
+            <section className="xp-section">
+              <span className="section-label xp-section-label">Reviews</span>
+
+              <div className="row gap-10" style={{ alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+                <RatingStars rating={reviewsData.aggregate?.avg_overall} count={reviewsData.aggregate?.count} label="reviews" />
+              </div>
+
+              <div className="row gap-8 wrap" style={{ marginBottom: 14 }}>
+                <input
+                  className="field-input"
+                  style={{ maxWidth: 280 }}
+                  placeholder="Search reviews…"
+                  value={reviewsQuery}
+                  onChange={(e) => { setReviewsPage(1); setReviewsQuery(e.target.value) }}
+                />
+                {[null, 5, 4, 3].map((n) => (
+                  <button
+                    key={n ?? 'all'}
+                    className={`btn btn-sm ${reviewsMinStars === n ? 'btn-acc' : 'btn-ghost'}`}
+                    onClick={() => { setReviewsPage(1); setReviewsMinStars(n) }}
+                  >
+                    {n ? `${n}★+` : 'All'}
+                  </button>
+                ))}
+              </div>
+
+              {reviewsLoading ? (
+                <p className="lead" style={{ fontSize: 12.5 }}>Loading reviews…</p>
+              ) : reviewsData.data.length === 0 ? (
+                <p className="lead" style={{ fontSize: 12.5 }}>No public reviews yet.</p>
+              ) : (
+                <>
+                  <div className="xp-row-list">
+                    {reviewsData.data.map((r) => (
+                      <div className="xp-row-item xp-row-item-stack" key={r.review_id}>
+                        <div className="xp-row-item-top">
+                          <span className="label">
+                            <RatingStars rating={r.overall_rating} /> {r.review_title}
+                          </span>
+                          <span className="meta">{new Date(r.created_at).toLocaleDateString()}</span>
+                        </div>
+                        {r.review_body && <span className="meta">{r.review_body}</span>}
+                        {r.reviewer_org_name && (
+                          <div className="row gap-8 wrap">
+                            <span className="tag" style={{ fontSize: 10.5 }}>{r.reviewer_org_name}</span>
+                          </div>
+                        )}
+
+                        {flagged[r.review_id] ? (
+                          <span className="lead" style={{ fontSize: 11 }}>Reported — thank you.</span>
+                        ) : flaggingId === r.review_id ? (
+                          <div className="row gap-8" style={{ marginTop: 4 }}>
+                            <input
+                              className="field-input"
+                              style={{ fontSize: 11.5 }}
+                              placeholder="Why are you reporting this review?"
+                              value={flagReason}
+                              onChange={(e) => setFlagReason(e.target.value)}
+                            />
+                            <button
+                              className="btn btn-sm"
+                              disabled={!flagReason.trim()}
+                              onClick={async () => {
+                                try {
+                                  await reviewsApi.flag(r.review_id, flagReason.trim())
+                                  setFlagged((p) => ({ ...p, [r.review_id]: true }))
+                                } finally {
+                                  setFlaggingId(null); setFlagReason('')
+                                }
+                              }}
+                            >
+                              Submit
+                            </button>
+                            <button className="btn btn-sm" onClick={() => { setFlaggingId(null); setFlagReason('') }}>Cancel</button>
+                          </div>
+                        ) : user ? (
+                          <button
+                            className="btn btn-sm"
+                            style={{ padding: '1px 8px', fontSize: 10.5, alignSelf: 'flex-start' }}
+                            onClick={() => { setFlaggingId(r.review_id); setFlagReason('') }}
+                          >
+                            Report
+                          </button>
+                        ) : (
+                          <Link to={`/login?next=/experts/${expertId}`} className="lead" style={{ fontSize: 10.5 }}>
+                            Sign in to report
+                          </Link>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {reviewsData.pagination && reviewsData.pagination.total_pages > 1 && (
+                    <div className="row gap-10" style={{ marginTop: 14, alignItems: 'center' }}>
+                      <button className="btn btn-sm" disabled={reviewsPage <= 1} onClick={() => setReviewsPage((p) => p - 1)}>
+                        ← Previous
+                      </button>
+                      <span className="lead" style={{ fontSize: 12 }}>
+                        Page {reviewsPage} of {reviewsData.pagination.total_pages}
+                      </span>
+                      <button
+                        className="btn btn-sm"
+                        disabled={reviewsPage >= reviewsData.pagination.total_pages}
+                        onClick={() => setReviewsPage((p) => p + 1)}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           </div>

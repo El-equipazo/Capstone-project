@@ -68,13 +68,14 @@ MESSAGE_TYPE = {"text", "file", "milestone_update", "system_event"}
 CLIENT_MESSAGE_TYPE = {"text", "file"}
 
 # Scoped to what's actually emitted today -- not the contract's full
-# aspirational list, since reviews/verification notifications belong to
-# features that don't exist yet.
+# aspirational list, since verification notifications belong to a feature
+# that doesn't emit them yet.
 NOTIFICATION_TYPE = {
     "message_received",
     "connection_request_received", "connection_accepted", "connection_declined",
     "milestone_change_proposed", "milestone_change_confirmed", "milestone_change_declined",
     "milestone_proposed",
+    "review_received",
 }
 
 # A milestone can have at most one outstanding org-proposed change at a time
