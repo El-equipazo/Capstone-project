@@ -1654,10 +1654,31 @@ button, input, select, textarea {
   color: var(--ink);
 }
 
-.xp-muted-inline {
-  font-weight: 400;
+.xp-spec-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.xp-prof-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--fill2);
   color: var(--muted);
-  font-size: 12px;
+}
+
+.xp-prof-tag.expert {
+  background: var(--acc-light);
+  color: var(--acc);
+}
+
+.xp-prof-tag.leading_researcher {
+  background: #f1eafb;
+  color: #6b3fa0;
 }
 
 .xp-row-list {
@@ -1667,12 +1688,11 @@ button, input, select, textarea {
 }
 
 .xp-row-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 12px;
+  gap: 8px 12px;
   font-size: 13.5px;
-  flex-wrap: wrap;
 }
 
 .xp-row-item .label {
@@ -1689,6 +1709,7 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .xp-placeholder {
@@ -1728,17 +1749,17 @@ button, input, select, textarea {
 }
 
 .xp-row-item-stack {
+  display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
 }
 
 .xp-row-item-top {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 4px 12px;
 }
 
 .xp-connect-card {

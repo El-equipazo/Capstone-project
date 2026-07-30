@@ -292,8 +292,9 @@ export default function ExpertProfile() {
               {expert.specializations.length > 0 ? (
                 <div className="xp-plain-list">
                   {expert.specializations.map((s) => (
-                    <span key={s.specialization_id}>
-                      {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
+                    <span key={s.specialization_id} className="xp-spec-item">
+                      {labelize(s.specialization)}
+                      <span className={`xp-prof-tag ${s.proficiency_level}`}>{labelize(s.proficiency_level)}</span>
                     </span>
                   ))}
                 </div>
