@@ -234,6 +234,10 @@ export default function ExpertDashboard() {
   }
 
   async function handleRemoveSpecialization(specializationId) {
+    if (profile.specializations.length <= 1) {
+      setError('Your profile must have at least one specialization — add another before removing this one.')
+      return
+    }
     setError('')
     try {
       await expertsApi.removeSpecialization(profile.expert_profile_id, specializationId)
@@ -1023,18 +1027,24 @@ export default function ExpertDashboard() {
               <div className="card" style={{ padding: 22 }}>
                 <span className="section-label">Specializations</span>
                 <div className="row gap-8 wrap" style={{ marginTop: 14, marginBottom: 16 }}>
-                  {profile.specializations.length === 0 && <p className="lead" style={{ fontSize: 12.5 }}>No specializations added yet.</p>}
+                  {profile.specializations.length === 0 && (
+                    <p style={{ fontSize: 12.5, color: 'var(--danger, #c0392b)' }}>
+                      Required — add at least one specialization below to complete your profile.
+                    </p>
+                  )}
                   {profile.specializations.map((s) => (
                     <span key={s.specialization_id} className="chip on">
                       {labelize(s.specialization)} <span className="tag" style={{ marginLeft: 4 }}>{labelize(s.proficiency_level)}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSpecialization(s.specialization_id)}
-                        aria-label={`Remove ${labelize(s.specialization)}`}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', marginLeft: 4, fontSize: 13 }}
-                      >
-                        ×
-                      </button>
+                      {profile.specializations.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSpecialization(s.specialization_id)}
+                          aria-label={`Remove ${labelize(s.specialization)}`}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', marginLeft: 4, fontSize: 13 }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </span>
                   ))}
                 </div>

@@ -27,6 +27,21 @@ function initials(str) {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
+// Experts can submit arbitrary external URLs as "supporting documents" (see
+// verifications.py) alongside ones we generated ourselves via /uploads. Only
+// the latter are safe to render inline as an iframe/img in this authenticated
+// admin session -- anything else stays a plain link that opens in a new tab.
+const _API_ORIGIN = new URL(import.meta.env.VITE_API_BASE_URL || '/api/v1', window.location.origin).origin
+
+function isOwnUploadUrl(url) {
+  try {
+    const target = new URL(url, window.location.origin)
+    return target.origin === _API_ORIGIN && target.pathname.startsWith('/uploads/')
+  } catch {
+    return false
+  }
+}
+
 function countBy(items, getKey, buckets) {
   const counts = Object.fromEntries(buckets.map((b) => [b, 0]))
   for (const item of items) {
@@ -673,19 +688,25 @@ export default function AdminDashboard() {
                                             Credential link ↗
                                           </a>
                                         )}
-                                        {(v.submitted_document_urls || []).map((url, i) => (
-                                          <button
-                                            key={url}
-                                            type="button"
-                                            className="tag"
-                                            style={{ cursor: 'pointer' }}
-                                            onClick={() => setPreviewUrl(previewUrl === url ? null : url)}
-                                          >
-                                            {previewUrl === url ? 'Hide document' : `View document ${i + 1}`}
-                                          </button>
-                                        ))}
+                                        {(v.submitted_document_urls || []).map((url, i) =>
+                                          isOwnUploadUrl(url) ? (
+                                            <button
+                                              key={url}
+                                              type="button"
+                                              className="tag"
+                                              style={{ cursor: 'pointer' }}
+                                              onClick={() => setPreviewUrl(previewUrl === url ? null : url)}
+                                            >
+                                              {previewUrl === url ? 'Hide document' : `View document ${i + 1}`}
+                                            </button>
+                                          ) : (
+                                            <a key={url} href={url} target="_blank" rel="noreferrer" className="tag">
+                                              Document {i + 1} (external) ↗
+                                            </a>
+                                          )
+                                        )}
                                       </div>
-                                      {(v.submitted_document_urls || []).includes(previewUrl) && (
+                                      {(v.submitted_document_urls || []).includes(previewUrl) && isOwnUploadUrl(previewUrl) && (
                                         <div style={{ marginTop: 4 }}>
                                           {previewUrl.toLowerCase().endsWith('.pdf') ? (
                                             <iframe

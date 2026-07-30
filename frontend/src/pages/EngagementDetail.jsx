@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { engagementsApi, threadsApi } from '../api/client'
 import { useRequireAuth } from '../hooks/useRequireAuth'
 import { useChat_context } from '../context/ChatContext'
@@ -27,8 +27,8 @@ function engagementBadgeClass(s) {
 
 function getStatusActions(engStatus, role) {
   const actions = []
-  if (engStatus === 'scoping' && role === 'expert')
-    actions.push({ label: 'Send Proposal', newStatus: 'proposal_sent' })
+  // 'scoping' -> 'proposal_sent' has its own dedicated form (description +
+  // response deadline) below, not a bare status-change button.
   // proposal_sent for org is handled by the dedicated timeline review UI below
   if (engStatus === 'proposal_accepted')
     actions.push({ label: 'Start Engagement', newStatus: 'active', primary: true })
@@ -49,6 +49,8 @@ export default function EngagementDetail() {
   const { id } = useParams()
   const engagementId = parseInt(id, 10)
   const user = useRequireAuth()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   const [engagement, setEngagement] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -69,6 +71,23 @@ export default function EngagementDetail() {
   const [editingType, setEditingType] = useState(false)
   const [typeValue, setTypeValue] = useState('')
 
+  // Org's "propose a change" form for a confirmed/in-progress milestone --
+  // separate from the expert's editingId/editForm above so the two flows
+  // (immediate mutation vs. deferred proposal) don't collide.
+  const [proposingId, setProposingId] = useState(null)
+  const [proposeForm, setProposeForm] = useState({})
+  const [proposeError, setProposeError] = useState('')
+  const [flashConfirmedId, setFlashConfirmedId] = useState(null) // transient green outline after an accept
+  const milestoneRefs = useRef({})
+
+  // Expert's "send proposal" form (description + response deadline).
+  const [showProposalForm, setShowProposalForm] = useState(false)
+  const [proposalForm, setProposalForm] = useState({ description: '', proposal_expires_at: '' })
+  const [proposalError, setProposalError] = useState('')
+
+  // Org's "see full description" toggle on the proposal review card.
+  const [descExpanded, setDescExpanded] = useState(false)
+
   const { openChat } = useChat_context()
 
   useEffect(() => {
@@ -77,6 +96,22 @@ export default function EngagementDetail() {
       .then((eng) => { setEngagement(eng); setLoading(false) })
       .catch(() => { setError('Engagement not found or access denied.'); setLoading(false) })
   }, [user, engagementId])
+
+  // Notification deep-link: ?highlight_milestone=X[&flash=confirmed] scrolls
+  // to and (optionally) briefly flashes a specific milestone, same pattern as
+  // ExpertDashboard.jsx's ?open_thread= deep-link handling.
+  useEffect(() => {
+    if (!engagement) return
+    const highlightId = searchParams.get('highlight_milestone')
+    if (!highlightId) return
+    const idNum = parseInt(highlightId, 10)
+    milestoneRefs.current[idNum]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (searchParams.get('flash') === 'confirmed') {
+      setFlashConfirmedId(idNum)
+      setTimeout(() => setFlashConfirmedId(null), 6000)
+    }
+    navigate(`/engagements/${engagementId}`, { replace: true })
+  }, [engagement, searchParams, engagementId, navigate])
 
 
   if (!user) return null
@@ -199,6 +234,81 @@ export default function EngagementDetail() {
     }
   }
 
+  async function handleProposeChange(milestoneId) {
+    setProposeError('')
+    try {
+      const data = {}
+      if (proposeForm.due_date) data.due_date = proposeForm.due_date
+      if (proposeForm.deliverable_description) data.deliverable_description = proposeForm.deliverable_description
+      if (!data.due_date && !data.deliverable_description) {
+        setProposeError('Change the due date or the deliverable before saving.')
+        return
+      }
+      const updated = await engagementsApi.proposeMilestoneChange(engagementId, milestoneId, data)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+      setProposingId(null)
+      setProposeForm({})
+    } catch (err) {
+      setProposeError(err.body?.error?.message ?? 'Failed to propose change.')
+    }
+  }
+
+  async function handleProposeCancel(milestoneId) {
+    if (!window.confirm('Request cancellation of this milestone? The expert will need to accept before it takes effect.')) return
+    setError('')
+    try {
+      const updated = await engagementsApi.proposeMilestoneCancel(engagementId, milestoneId)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to request cancellation.')
+    }
+  }
+
+  async function handleAcceptChange(milestoneId) {
+    setError('')
+    try {
+      const updated = await engagementsApi.acceptMilestoneChange(engagementId, milestoneId)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+      setFlashConfirmedId(milestoneId)
+      setTimeout(() => setFlashConfirmedId(null), 6000)
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to accept change.')
+    }
+  }
+
+  async function handleDeclineChange(milestoneId) {
+    setError('')
+    try {
+      const updated = await engagementsApi.declineMilestoneChange(engagementId, milestoneId)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to decline change.')
+    }
+  }
+
+  async function handleSendProposal(e) {
+    e.preventDefault()
+    if (!proposalForm.proposal_expires_at) {
+      setProposalError('Choose a deadline for the organization to respond.')
+      return
+    }
+    setActionLoading(true)
+    setProposalError('')
+    try {
+      const updated = await engagementsApi.update(engagementId, {
+        status: 'proposal_sent',
+        description: proposalForm.description,
+        proposal_expires_at: proposalForm.proposal_expires_at,
+      })
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+      setShowProposalForm(false)
+    } catch (err) {
+      setProposalError(err.body?.error?.message ?? 'Failed to send proposal.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
 
 
   return (
@@ -217,6 +327,18 @@ export default function EngagementDetail() {
               ? 'Proposal Received'
               : labelize(engagement.status)}
           </span>
+          <button
+            className="btn btn-sm"
+            onClick={async () => {
+              try {
+                const thread = await threadsApi.getOrCreateForEngagement(engagementId)
+                const title = engagement.title || engagement.org_name || engagement.expert_first_name
+                openChat(thread.thread_id, title)
+              } catch { /* non-fatal */ }
+            }}
+          >
+            Open Chat
+          </button>
         </div>
 
         {/* Counterparty info */}
@@ -323,8 +445,29 @@ export default function EngagementDetail() {
                 <span className="tag">Est. end: {engagement.estimated_end_date}</span>
               )}
             </div>
+            {engagement.proposal_expires_at && (
+              <p className="lead" style={{ fontSize: 12, marginBottom: 10 }}>
+                Respond by {new Date(engagement.proposal_expires_at).toLocaleDateString()}
+              </p>
+            )}
+
             {engagement.description && (
-              <p style={{ fontSize: 12.5, marginBottom: 14 }}>{engagement.description}</p>
+              <div style={{ marginBottom: 14 }}>
+                <p style={{ fontSize: 12.5 }}>
+                  {descExpanded || engagement.description.length <= 200
+                    ? engagement.description
+                    : `${engagement.description.slice(0, 200)}…`}
+                </p>
+                {engagement.description.length > 200 && (
+                  <button
+                    className="btn btn-sm"
+                    style={{ padding: '2px 8px', fontSize: 11, marginTop: 4 }}
+                    onClick={() => setDescExpanded((v) => !v)}
+                  >
+                    {descExpanded ? 'Show less' : 'See full description'}
+                  </button>
+                )}
+              </div>
             )}
 
             {timelineReviewMode === null && (
@@ -379,6 +522,57 @@ export default function EngagementDetail() {
                   </button>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Expert: send proposal (description + response deadline) */}
+        {role === 'expert' && engagement.status === 'scoping' && (
+          <div className="card" style={{ padding: 18, marginBottom: 20 }}>
+            <span className="section-label" style={{ display: 'block', marginBottom: 12 }}>Send Proposal</span>
+            {!showProposalForm ? (
+              <button
+                className="btn btn-acc"
+                onClick={() => {
+                  setProposalForm({ description: engagement.description || '', proposal_expires_at: '' })
+                  setProposalError('')
+                  setShowProposalForm(true)
+                }}
+              >
+                Send Proposal
+              </button>
+            ) : (
+              <form onSubmit={handleSendProposal} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {proposalError && <div className="alert alert-error">{proposalError}</div>}
+                <div className="field-group">
+                  <label className="field-label">Description</label>
+                  <textarea
+                    className="field-input"
+                    rows={4}
+                    value={proposalForm.description}
+                    onChange={(e) => setProposalForm((p) => ({ ...p, description: e.target.value }))}
+                    placeholder="Describe your approach and scope…"
+                  />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Respond by *</label>
+                  <input
+                    className="field-input"
+                    type="date"
+                    required
+                    value={proposalForm.proposal_expires_at}
+                    onChange={(e) => setProposalForm((p) => ({ ...p, proposal_expires_at: e.target.value }))}
+                  />
+                </div>
+                <div className="row gap-8">
+                  <button className="btn btn-acc" type="submit" disabled={actionLoading}>
+                    {actionLoading ? 'Sending…' : 'Send Proposal'}
+                  </button>
+                  <button className="btn" type="button" onClick={() => setShowProposalForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         )}
@@ -484,13 +678,24 @@ export default function EngagementDetail() {
             </p>
           )}
 
-          {milestones.map((m, idx) => (
+          {milestones.map((m, idx) => {
+            const isPendingChange = m.pending_action != null
+            const isFlashConfirmed = flashConfirmedId === m.milestone_id
+            const outlineStyle = isPendingChange
+              ? { outline: '2px solid var(--danger, #c0392b)', outlineOffset: 3, borderRadius: 6 }
+              : isFlashConfirmed
+                ? { outline: '2px solid var(--good, #2e9e5b)', outlineOffset: 3, borderRadius: 6 }
+                : {}
+            return (
             <div
               key={m.milestone_id}
+              ref={(el) => { milestoneRefs.current[m.milestone_id] = el }}
               style={{
                 borderBottom: idx < milestones.length - 1 ? '1px solid var(--border)' : 'none',
                 paddingBottom: idx < milestones.length - 1 ? 16 : 0,
                 marginBottom: idx < milestones.length - 1 ? 16 : 0,
+                padding: isPendingChange || isFlashConfirmed ? 10 : undefined,
+                ...outlineStyle,
               }}
             >
               {editingId === m.milestone_id ? (
@@ -542,37 +747,48 @@ export default function EngagementDetail() {
                     <div className="row gap-6">
                       {/* Expert actions */}
                       {role === 'expert' && (
-                        <>
-                          {m.status === 'confirmed' && (
-                            <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'in_progress')}>
-                              Start work
+                        isPendingChange ? (
+                          <>
+                            <button className="btn btn-sm btn-acc" onClick={() => handleAcceptChange(m.milestone_id)}>
+                              {m.pending_action === 'cancel' ? 'Accept cancellation' : 'Accept change'}
                             </button>
-                          )}
-                          {m.status === 'in_progress' && (
-                            <>
-                              <button className="btn btn-sm btn-acc" onClick={() => handleMilestoneStatus(m.milestone_id, 'completed')}>
-                                Mark complete
+                            <button className="btn btn-sm" onClick={() => handleDeclineChange(m.milestone_id)}>
+                              Decline
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {m.status === 'confirmed' && (
+                              <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'in_progress')}>
+                                Start work
                               </button>
-                              <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'blocked')}>
-                                Mark blocked
+                            )}
+                            {m.status === 'in_progress' && (
+                              <>
+                                <button className="btn btn-sm btn-acc" onClick={() => handleMilestoneStatus(m.milestone_id, 'completed')}>
+                                  Mark complete
+                                </button>
+                                <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'blocked')}>
+                                  Mark blocked
+                                </button>
+                              </>
+                            )}
+                            {['proposed', 'confirmed'].includes(m.status) && !isTerminal && (
+                              <button className="btn btn-sm" onClick={() => { setEditingId(m.milestone_id); setEditForm({}) }}>
+                                Edit
                               </button>
-                            </>
-                          )}
-                          {['proposed', 'confirmed'].includes(m.status) && !isTerminal && (
-                            <button className="btn btn-sm" onClick={() => { setEditingId(m.milestone_id); setEditForm({}) }}>
-                              Edit
-                            </button>
-                          )}
-                          {m.status === 'proposed' && ['scoping', 'proposal_sent'].includes(engagement.status) && (
-                            <button
-                              className="btn btn-sm"
-                              style={{ color: 'var(--danger, #c0392b)' }}
-                              onClick={() => handleDelete(m.milestone_id)}
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </>
+                            )}
+                            {m.status === 'proposed' && ['scoping', 'proposal_sent'].includes(engagement.status) && (
+                              <button
+                                className="btn btn-sm"
+                                style={{ color: 'var(--danger, #c0392b)' }}
+                                onClick={() => handleDelete(m.milestone_id)}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </>
+                        )
                       )}
 
                       {/* Org actions */}
@@ -583,10 +799,76 @@ export default function EngagementDetail() {
                               Confirm
                             </button>
                           )}
+                          {['confirmed', 'in_progress'].includes(m.status) && !isTerminal && !isPendingChange && (
+                            <>
+                              <button
+                                className="btn btn-sm"
+                                onClick={() => {
+                                  setProposingId(m.milestone_id)
+                                  setProposeForm({})
+                                  setProposeError('')
+                                }}
+                              >
+                                Propose change
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                style={{ color: 'var(--danger, #c0392b)' }}
+                                onClick={() => handleProposeCancel(m.milestone_id)}
+                              >
+                                Request cancellation
+                              </button>
+                            </>
+                          )}
+                          {m.pending_action === 'change' && proposingId !== m.milestone_id && (
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => {
+                                setProposingId(m.milestone_id)
+                                setProposeForm({
+                                  due_date: m.pending_due_date || '',
+                                  deliverable_description: m.pending_deliverable_description || '',
+                                })
+                                setProposeError('')
+                              }}
+                            >
+                              Update proposed change
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
                   </div>
+
+                  {proposingId === m.milestone_id && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                      {proposeError && <div className="alert alert-error">{proposeError}</div>}
+                      <div className="row gap-10">
+                        <input
+                          className="field-input"
+                          type="date"
+                          style={{ flex: 1 }}
+                          value={proposeForm.due_date ?? ''}
+                          onChange={(e) => setProposeForm((p) => ({ ...p, due_date: e.target.value }))}
+                        />
+                        <input
+                          className="field-input"
+                          style={{ flex: 2 }}
+                          value={proposeForm.deliverable_description ?? ''}
+                          onChange={(e) => setProposeForm((p) => ({ ...p, deliverable_description: e.target.value }))}
+                          placeholder="Deliverable"
+                        />
+                      </div>
+                      <div className="row gap-8">
+                        <button className="btn btn-sm btn-acc" onClick={() => handleProposeChange(m.milestone_id)}>
+                          Save proposal
+                        </button>
+                        <button className="btn btn-sm" onClick={() => { setProposingId(null); setProposeForm({}) }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {m.description && (
                     <p style={{ fontSize: 12.5, color: 'var(--fg-muted, #666)', marginTop: 4 }}>{m.description}</p>
@@ -604,27 +886,22 @@ export default function EngagementDetail() {
                       </span>
                     )}
                   </div>
+
+                  {isPendingChange && (
+                    <p style={{ fontSize: 12, marginTop: 6, fontStyle: 'italic', color: 'var(--danger, #c0392b)' }}>
+                      {m.pending_action === 'cancel'
+                        ? 'Cancellation requested — awaiting expert response.'
+                        : `Proposed: ${[
+                            m.pending_due_date && `due date → ${new Date(m.pending_due_date + 'T00:00:00').toLocaleDateString()}`,
+                            m.pending_deliverable_description && `deliverable → ${m.pending_deliverable_description}`,
+                          ].filter(Boolean).join('; ')} — awaiting expert response.`}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
-          ))}
-        </div>
-
-        {/* Messages */}
-        <div className="card" style={{ padding: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="section-label">Messages</span>
-          <button
-            className="btn btn-sm"
-            onClick={async () => {
-              try {
-                const thread = await threadsApi.getOrCreateForEngagement(engagementId)
-                const title = engagement.title || engagement.org_name || engagement.expert_first_name
-                openChat(thread.thread_id, title)
-              } catch { /* non-fatal */ }
-            }}
-          >
-            Open Chat
-          </button>
+            )
+          })}
         </div>
 
       </div>

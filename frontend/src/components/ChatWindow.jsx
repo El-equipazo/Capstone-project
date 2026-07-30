@@ -10,6 +10,21 @@ function ConversationPane({ active, onSent }) {
   const [sending, setSending] = useState(false)
   const bottomRef = useRef(null)
 
+  // The "New" divider marks the first message that was unread at the moment
+  // this conversation was opened -- computed once from the initial fetch
+  // response (before useChat's markRead() call flips the server-side flag),
+  // and reset whenever the active conversation changes.
+  const [firstUnreadId, setFirstUnreadId] = useState(null)
+  const computedForId = useRef(null)
+
+  useEffect(() => {
+    if (computedForId.current === active?.id) return
+    if (messages.length === 0) return
+    computedForId.current = active?.id
+    const firstUnread = messages.find((m) => !m.is_read && m.sender_id !== user?.user_id)
+    setFirstUnreadId(firstUnread ? firstUnread.message_id : null)
+  }, [messages, active?.id, user?.user_id])
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -44,20 +59,35 @@ function ConversationPane({ active, onSent }) {
         {!loading && messages.length === 0 && (
           <p className="lead" style={{ fontSize: 12, opacity: 0.6 }}>No messages yet.</p>
         )}
-        {messages.map((m) => (
-          <div
-            key={m.message_id}
-            style={{
-              alignSelf: m.sender_id === user?.user_id ? 'flex-end' : 'flex-start',
-              background: m.sender_id === user?.user_id ? 'var(--acc)' : 'var(--srf)',
-              color: m.sender_id === user?.user_id ? '#fff' : 'inherit',
-              borderRadius: 8, padding: '6px 10px',
-              maxWidth: '75%', fontSize: 13,
-            }}
-          >
-            {m.content}
-          </div>
-        ))}
+        {messages.flatMap((m) => {
+          const els = []
+          if (m.message_id === firstUnreadId) {
+            els.push(
+              <div
+                key={`divider-${m.message_id}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0', alignSelf: 'stretch' }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--acc)' }}>New</span>
+                <div style={{ flex: 1, borderTop: '2px solid var(--acc)' }} />
+              </div>
+            )
+          }
+          els.push(
+            <div
+              key={m.message_id}
+              style={{
+                alignSelf: m.sender_id === user?.user_id ? 'flex-end' : 'flex-start',
+                background: m.sender_id === user?.user_id ? 'var(--acc)' : 'var(--srf)',
+                color: m.sender_id === user?.user_id ? '#fff' : 'inherit',
+                borderRadius: 8, padding: '6px 10px',
+                maxWidth: '75%', fontSize: 13,
+              }}
+            >
+              {m.content}
+            </div>
+          )
+          return els
+        })}
         <div ref={bottomRef} />
       </div>
       <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--brd)' }}>

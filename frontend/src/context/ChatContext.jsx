@@ -36,6 +36,16 @@ export function ChatProvider({ children }) {
     loadConversations()
   }, [loadConversations])
 
+  // The "remember last opened chat across close/reopen" behavior is scoped to
+  // one logged-in user -- without this, a stale `active` thread from a
+  // previous account survives a login/logout cycle in the same tab and gets
+  // rendered (and fetched) against the new user, who isn't a participant.
+  useEffect(() => {
+    setActive(null)
+    setIsOpen(false)
+    setIsMinimized(false)
+  }, [user?.user_id])
+
   const openChat = useCallback((id, title) => {
     setActive({ id, title })
     setIsOpen(true)

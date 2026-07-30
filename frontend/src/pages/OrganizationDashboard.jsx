@@ -602,7 +602,7 @@ export default function OrganizationDashboard() {
               values={infraForm.data_categories}
               onChange={(v) => updateInfraField('data_categories', v)}
               suggestions={DATA_CATEGORY_SUGGESTIONS}
-              placeholder="e.g. customer_pii"
+              restrictToSuggestions
             />
 
             <div className="field-group">
@@ -626,7 +626,7 @@ export default function OrganizationDashboard() {
               values={infraForm.primary_cloud_providers}
               onChange={(v) => updateInfraField('primary_cloud_providers', v)}
               suggestions={CLOUD_PROVIDER_SUGGESTIONS}
-              placeholder="e.g. AWS"
+              restrictToSuggestions
             />
 
             <TagInput
@@ -634,7 +634,7 @@ export default function OrganizationDashboard() {
               values={infraForm.current_encryption_standards}
               onChange={(v) => updateInfraField('current_encryption_standards', v)}
               suggestions={ENCRYPTION_SUGGESTIONS}
-              placeholder="e.g. RSA-2048"
+              restrictToSuggestions
             />
 
             <div className="row gap-10">
@@ -665,7 +665,7 @@ export default function OrganizationDashboard() {
               values={infraForm.compliance_requirements}
               onChange={(v) => updateInfraField('compliance_requirements', v)}
               suggestions={COMPLIANCE_SUGGESTIONS}
-              placeholder="e.g. PCI-DSS"
+              restrictToSuggestions
             />
 
             <div className="row gap-16">

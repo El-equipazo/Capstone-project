@@ -169,14 +169,20 @@ async def respond(connection_id: int, new_status: str):
     expires_at. Sets responded_at. 'expired' is set by a scheduled job,
     never here.
 
+    Idempotent when re-called with the *same* status it already resolved to
+    (returns the existing row instead of erroring) -- the frontend's
+    accept-with-timeline flow makes this call and then POST /engagements as
+    two separate requests, so a safe retry of the whole sequence must not
+    permanently 422 on the first call once it has already succeeded once.
+
     Raises:
       ValidationError (400) if new_status isn't accepted/declined
       NotFoundError   (404) if the request doesn't exist
       GoneError       (410) if the request has expired -- whether the
                             scheduler already flipped it to 'expired' or it's
                             merely past expires_at while still 'pending'
-      TransitionError (422) for any other non-pending state (already
-                            accepted/declined)
+      TransitionError (422) for a genuine conflicting transition (e.g.
+                            declining a request that's already accepted)
     """
     if new_status not in (ConnectionStatus.ACCEPTED, ConnectionStatus.DECLINED):
         raise ValidationError(
@@ -202,7 +208,7 @@ async def respond(connection_id: int, new_status: str):
 
     # No row updated: figure out why so the API layer gets the right code.
     existing = await pool.fetchrow(
-        "SELECT status, expires_at FROM connection_requests WHERE connection_id = $1",
+        "SELECT * FROM connection_requests WHERE connection_id = $1",
         connection_id,
     )
     if existing is None:
@@ -211,6 +217,11 @@ async def respond(connection_id: int, new_status: str):
     status = existing["status"]
     expires_at = existing["expires_at"]
 
+    # Idempotent retry: already resolved to exactly the status being
+    # requested -- hand back the existing row rather than erroring.
+    if status == new_status:
+        return existing
+
     # Already swept to 'expired', OR still 'pending' but past its wall-clock
     # expiry (scheduler just hasn't run yet) -- both are 410 Gone.
     if status == ConnectionStatus.EXPIRED:
@@ -218,5 +229,6 @@ async def respond(connection_id: int, new_status: str):
     if status == ConnectionStatus.PENDING and expires_at is not None:
         raise GoneError("connection request has expired")
 
-    # Otherwise it's a genuine bad transition (already accepted/declined).
+    # Otherwise it's a genuine conflicting transition (e.g. declining a
+    # request that's already accepted).
     raise TransitionError(f"cannot respond to a request in '{status}' state")
