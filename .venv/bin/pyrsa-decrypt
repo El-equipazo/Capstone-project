@@ -1,4 +1,4 @@
-#!/Users/josetroncoso/Development/Capstone-project/.venv/bin/python3
+#!/home/dbjulioj/Development/Capstone/Capstone-project/.venv/bin/python3.12
 # -*- coding: utf-8 -*-
 import re
 import sys

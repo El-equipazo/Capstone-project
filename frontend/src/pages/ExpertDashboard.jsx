@@ -219,14 +219,29 @@ export default function ExpertDashboard() {
         hourly_rate_min: toNumberOrNull(form.hourly_rate_min),
         hourly_rate_max: toNumberOrNull(form.hourly_rate_max),
       })
-      for (const spec of pendingSpecs) {
-        await expertsApi.addSpecialization(result.expert_profile_id, {
-          ...spec,
-          years_in_specialization: toNumberOrNull(spec.years_in_specialization),
-        })
-      }
+      // The profile now exists server-side no matter what happens below --
+      // always advance past the creation form so a specialization POST
+      // failing (network blip, transient error) can't strand the user on a
+      // form that looks like nothing happened. allSettled (rather than
+      // stopping at the first rejection) also means one bad specialization
+      // doesn't take out the rest of the batch.
+      const outcomes = await Promise.allSettled(
+        pendingSpecs.map((spec) =>
+          expertsApi.addSpecialization(result.expert_profile_id, {
+            ...spec,
+            years_in_specialization: toNumberOrNull(spec.years_in_specialization),
+          })
+        )
+      )
+      const failed = outcomes
+        .map((o, i) => (o.status === 'rejected' ? pendingSpecs[i] : null))
+        .filter(Boolean)
       setProfile(result)
       setVerifyPrompt(true)
+      if (failed.length > 0) {
+        const names = failed.map((s) => labelize(s.specialization)).join(', ')
+        setError(`Profile created, but couldn't add: ${names}. Add them from your Profile tab.`)
+      }
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {
