@@ -172,260 +172,266 @@ export default function ExpertProfile() {
           <span className="section-label">№{String(expert.expert_profile_id).padStart(2, '0')}</span>
         </div>
 
-        <div className="xp-hero">
-          <div className="xp-photo">
-            {expert.profile_photo_url ? (
-              <img src={expert.profile_photo_url} alt="" className="xp-photo-img" />
-            ) : (
-              <PortraitPlaceholder />
-            )}
-          </div>
-          <div className="xp-index">
-            <div className="xp-status-row">
-              <span className="xp-status-dot" style={{ opacity: unavailable ? 0.3 : 1 }} />
-              {AVAILABILITY_LABEL[expert.availability_status]}
-            </div>
-            {expert.years_of_experience != null && (
-              <div className="xp-substat">{expert.years_of_experience} yrs experience</div>
-            )}
-          </div>
-        </div>
-
-        <h1 className="xp-name">
-          {expert.first_name} {expert.last_name}.
-        </h1>
-
-        <div className="xp-role-row">
-          <span className="xp-role">
-            {expert.headline}
-            {expert.is_verified && ' · Verified'}
-          </span>
-          {expert.linkedin_url && (
-            <a href={expert.linkedin_url} target="_blank" rel="noreferrer" className="xp-link-arrow">
-              LinkedIn ↗
-            </a>
-          )}
-        </div>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">About</span>
-          {expert.bio ? (
-            <p className="xp-about-text">{expert.bio}</p>
-          ) : (
-            <EmptyState
-              isOwner={isOwner}
-              ownerText="You haven't added a bio yet."
-              ownerLinkText="Add one from your dashboard"
-              visitorText="This expert hasn't added a bio yet."
-            />
-          )}
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Specializations</span>
-          {expert.specializations.length > 0 ? (
-            <div className="xp-plain-list">
-              {expert.specializations.map((s) => (
-                <span key={s.specialization_id}>
-                  {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
-                </span>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              isOwner={isOwner}
-              ownerText="Add at least one specialization so organizations can find you."
-              ownerLinkText="Add specializations"
-              visitorText="No specializations listed yet."
-            />
-          )}
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Credentials &amp; certifications</span>
-          {expert.credentials.length > 0 ? (
-            <ExpandableList
-              items={expert.credentials}
-              keyFn={(c) => c.credential_id}
-              renderItem={(c) => (
-                <div className="xp-row-item">
-                  <span className="label">{c.credential_name}</span>
-                  <span className="status">
-                    <span className="meta">{c.institution} · {c.year_obtained}</span>
-                    <span className={`badge ${c.is_verified ? '' : 'pending'}`}>
-                      {c.is_verified ? 'Verified' : 'Pending'}
-                    </span>
-                  </span>
-                </div>
-              )}
-            />
-          ) : (
-            <EmptyState
-              isOwner={isOwner}
-              ownerText="You haven't added any credentials yet."
-              ownerLinkText="Add credentials"
-              visitorText="No credentials listed yet."
-            />
-          )}
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Work history</span>
-          {expert.work_history.length > 0 ? (
-            <ExpandableList
-              items={expert.work_history}
-              keyFn={(w) => w.work_history_id}
-              renderItem={(w) => (
-                <div className="xp-row-item xp-row-item-stack">
-                  <div className="xp-row-item-top">
-                    <span className="label">
-                      {w.job_title} — {w.organization_name}
-                    </span>
-                    <span className="meta">{formatWorkPeriod(w.start_date, w.end_date)}</span>
-                  </div>
-                  {w.description && <span className="meta">{w.description}</span>}
-                </div>
-              )}
-            />
-          ) : (
-            <EmptyState
-              isOwner={isOwner}
-              ownerText="You haven't added your work history yet."
-              ownerLinkText="Add work history"
-              visitorText="No work history listed yet."
-            />
-          )}
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
-          {expert.sector_experience.length > 0 ? (
-            <ExpandableList
-              items={expert.sector_experience}
-              keyFn={(s) => s.sector_exp_id}
-              renderItem={(s) => (
-                <div className="xp-row-item xp-row-item-stack">
-                  <div className="xp-row-item-top">
-                    <span className="label">{labelize(s.sector)}</span>
-                    <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
-                  </div>
-                  <span className="meta">{s.compliance_standards_known.join(', ')}</span>
-                  {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
-                </div>
-              )}
-            />
-          ) : (
-            <EmptyState
-              isOwner={isOwner}
-              ownerText="You haven't added sector experience yet."
-              ownerLinkText="Add sector experience"
-              visitorText="No sector experience listed yet."
-            />
-          )}
-        </section>
-
-        <section className="xp-section">
-          <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
-          {expert.engagement_types.length > 0 ? (
-            <ExpandableList
-              items={expert.engagement_types}
-              keyFn={(t) => t.eng_type_id}
-              renderItem={(t) => (
-                <div className="xp-row-item xp-row-item-stack">
-                  <div className="xp-row-item-top">
-                    <span className="label">{labelize(t.engagement_type)}</span>
-                    <span className="meta">
-                      {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
-                    </span>
-                  </div>
-                  <span className="meta">{t.approach_description}</span>
-                  <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
-                </div>
-              )}
-            />
-          ) : (
-            <EmptyState
-              isOwner={isOwner}
-              ownerText="You haven't described your engagement types yet."
-              ownerLinkText="Add engagement types"
-              visitorText="No engagement types listed yet."
-            />
-          )}
-        </section>
-
-        <div className="xp-connect-card">
-          <div className="xp-connect-left">
-            <span className="section-label xp-section-label">Request engagement</span>
-            {canRequestAssessment && (
-              <div style={{ marginBottom: 12 }}>
-                <button
-                  className="btn btn-sm"
-                  onClick={handleAskQuestion}
-                  disabled={askLoading}
-                >
-                  {askLoading ? 'Opening…' : 'Ask a question'}
-                </button>
-                {askError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginTop: 4 }}>{askError}</p>}
+        <div className="xp-layout">
+          <aside className="xp-sidebar">
+            <div className="xp-hero">
+              <div className="xp-photo">
+                {expert.profile_photo_url ? (
+                  <img src={expert.profile_photo_url} alt="" className="xp-photo-img" />
+                ) : (
+                  <PortraitPlaceholder />
+                )}
               </div>
-            )}
-            {canRequestAssessment ? (
-              requestSent ? (
-                <p className="xp-connect-text">Request sent — {expert.first_name} has been notified.</p>
-              ) : unavailable ? (
-                <p className="xp-connect-text" style={{ opacity: 0.6 }}>This expert is currently unavailable.</p>
-              ) : (
-                <form onSubmit={handleRequestAssessment} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-                  <div className="field-group">
-                    <label className="field-label">Type of engagement</label>
-                    <select
-                      className="field-input"
-                      value={engagementType}
-                      onChange={(e) => setEngagementType(e.target.value)}
-                    >
-                      <option value="">Not sure — let the expert decide</option>
-                      {ENGAGEMENT_TYPE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="field-group">
-                    <label className="field-label">Message <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
-                    <textarea
-                      className="field-input"
-                      rows={2}
-                      value={initialMessage}
-                      onChange={(e) => setInitialMessage(e.target.value)}
-                      placeholder={`Briefly describe what you're looking for…`}
-                    />
-                  </div>
-                  {requestError && <p style={{ color: 'var(--err, red)', fontSize: 12, margin: 0 }}>{requestError}</p>}
-                  <button className="xp-tap-link" type="submit" disabled={requesting} style={{ alignSelf: 'flex-start' }}>
-                    {requesting ? 'Sending…' : 'Send request ↗'}
-                  </button>
-                </form>
-              )
-            ) : !user ? (
-              <p className="xp-connect-text">
-                <Link to={`/login?next=/experts/${expertId}`} className="xp-link-arrow">
-                  Sign in as an organization
-                </Link>{' '}
-                to request an engagement.
-              </p>
-            ) : (
-              <p className="xp-connect-text">Only organizations can request engagements.</p>
-            )}
-          </div>
-          <div className="xp-dot-pattern" />
-        </div>
+              <div className="xp-index">
+                <div className="xp-status-row">
+                  <span className="xp-status-dot" style={{ opacity: unavailable ? 0.3 : 1 }} />
+                  {AVAILABILITY_LABEL[expert.availability_status]}
+                </div>
+                {expert.years_of_experience != null && (
+                  <div className="xp-substat">{expert.years_of_experience} yrs experience</div>
+                )}
+              </div>
+            </div>
 
-        <div className="xp-stats-row">
-          <div className="xp-stat-block">
-            <span className="section-label xp-section-label">Rating</span>
-            <div className="value">{expert.avg_rating ? `${expert.avg_rating.toFixed(1)} ↗` : 'New ↗'}</div>
-          </div>
-          <div className="xp-stat-block">
-            <span className="section-label xp-section-label">Rate</span>
-            <div className="value">{formatRate(expert.hourly_rate_min, expert.hourly_rate_max)} ↗</div>
+            <h1 className="xp-name">
+              {expert.first_name} {expert.last_name}.
+            </h1>
+
+            <div className="xp-role-row">
+              <span className="xp-role">
+                {expert.headline}
+                {expert.is_verified && ' · Verified'}
+              </span>
+              {expert.linkedin_url && (
+                <a href={expert.linkedin_url} target="_blank" rel="noreferrer" className="xp-link-arrow">
+                  LinkedIn ↗
+                </a>
+              )}
+            </div>
+
+            <div className="xp-stats-row">
+              <div className="xp-stat-block">
+                <span className="section-label xp-section-label">Rating</span>
+                <div className="value">{expert.avg_rating ? `${expert.avg_rating.toFixed(1)} ↗` : 'New ↗'}</div>
+              </div>
+              <div className="xp-stat-block">
+                <span className="section-label xp-section-label">Rate</span>
+                <div className="value">{formatRate(expert.hourly_rate_min, expert.hourly_rate_max)} ↗</div>
+              </div>
+            </div>
+
+            <div className="xp-connect-card">
+              <div className="xp-connect-left">
+                <span className="section-label xp-section-label">Request engagement</span>
+                {canRequestAssessment && (
+                  <div style={{ marginBottom: 12 }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={handleAskQuestion}
+                      disabled={askLoading}
+                    >
+                      {askLoading ? 'Opening…' : 'Ask a question'}
+                    </button>
+                    {askError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginTop: 4 }}>{askError}</p>}
+                  </div>
+                )}
+                {canRequestAssessment ? (
+                  requestSent ? (
+                    <p className="xp-connect-text">Request sent — {expert.first_name} has been notified.</p>
+                  ) : unavailable ? (
+                    <p className="xp-connect-text" style={{ opacity: 0.6 }}>This expert is currently unavailable.</p>
+                  ) : (
+                    <form onSubmit={handleRequestAssessment} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                      <div className="field-group">
+                        <label className="field-label">Type of engagement</label>
+                        <select
+                          className="field-input"
+                          value={engagementType}
+                          onChange={(e) => setEngagementType(e.target.value)}
+                        >
+                          <option value="">Not sure — let the expert decide</option>
+                          {ENGAGEMENT_TYPE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="field-group">
+                        <label className="field-label">Message <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                        <textarea
+                          className="field-input"
+                          rows={2}
+                          value={initialMessage}
+                          onChange={(e) => setInitialMessage(e.target.value)}
+                          placeholder={`Briefly describe what you're looking for…`}
+                        />
+                      </div>
+                      {requestError && <p style={{ color: 'var(--err, red)', fontSize: 12, margin: 0 }}>{requestError}</p>}
+                      <button className="xp-tap-link" type="submit" disabled={requesting} style={{ alignSelf: 'flex-start' }}>
+                        {requesting ? 'Sending…' : 'Send request ↗'}
+                      </button>
+                    </form>
+                  )
+                ) : !user ? (
+                  <p className="xp-connect-text">
+                    <Link to={`/login?next=/experts/${expertId}`} className="xp-link-arrow">
+                      Sign in as an organization
+                    </Link>{' '}
+                    to request an engagement.
+                  </p>
+                ) : (
+                  <p className="xp-connect-text">Only organizations can request engagements.</p>
+                )}
+              </div>
+              <div className="xp-dot-pattern" />
+            </div>
+          </aside>
+
+          <div className="xp-main">
+            <section className="xp-section">
+              <span className="section-label xp-section-label">Specializations</span>
+              {expert.specializations.length > 0 ? (
+                <div className="xp-plain-list">
+                  {expert.specializations.map((s) => (
+                    <span key={s.specialization_id}>
+                      {labelize(s.specialization)} <span className="xp-muted-inline">({labelize(s.proficiency_level)})</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  isOwner={isOwner}
+                  ownerText="Add at least one specialization so organizations can find you."
+                  ownerLinkText="Add specializations"
+                  visitorText="No specializations listed yet."
+                />
+              )}
+            </section>
+
+            <section className="xp-section">
+              <span className="section-label xp-section-label">Credentials &amp; certifications</span>
+              {expert.credentials.length > 0 ? (
+                <ExpandableList
+                  items={expert.credentials}
+                  keyFn={(c) => c.credential_id}
+                  renderItem={(c) => (
+                    <div className="xp-row-item">
+                      <span className="label">{c.credential_name}</span>
+                      <span className="status">
+                        <span className="meta">{c.institution} · {c.year_obtained}</span>
+                        <span className={`badge ${c.is_verified ? '' : 'pending'}`}>
+                          {c.is_verified ? 'Verified' : 'Pending'}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                />
+              ) : (
+                <EmptyState
+                  isOwner={isOwner}
+                  ownerText="You haven't added any credentials yet."
+                  ownerLinkText="Add credentials"
+                  visitorText="No credentials listed yet."
+                />
+              )}
+            </section>
+
+            <section className="xp-section">
+              <span className="section-label xp-section-label">About</span>
+              {expert.bio ? (
+                <p className="xp-about-text">{expert.bio}</p>
+              ) : (
+                <EmptyState
+                  isOwner={isOwner}
+                  ownerText="You haven't added a bio yet."
+                  ownerLinkText="Add one from your dashboard"
+                  visitorText="This expert hasn't added a bio yet."
+                />
+              )}
+            </section>
+
+            <section className="xp-section">
+              <span className="section-label xp-section-label">Work history</span>
+              {expert.work_history.length > 0 ? (
+                <ExpandableList
+                  items={expert.work_history}
+                  keyFn={(w) => w.work_history_id}
+                  renderItem={(w) => (
+                    <div className="xp-row-item xp-row-item-stack">
+                      <div className="xp-row-item-top">
+                        <span className="label">
+                          {w.job_title} — {w.organization_name}
+                        </span>
+                        <span className="meta">{formatWorkPeriod(w.start_date, w.end_date)}</span>
+                      </div>
+                      {w.description && <span className="meta">{w.description}</span>}
+                    </div>
+                  )}
+                />
+              ) : (
+                <EmptyState
+                  isOwner={isOwner}
+                  ownerText="You haven't added your work history yet."
+                  ownerLinkText="Add work history"
+                  visitorText="No work history listed yet."
+                />
+              )}
+            </section>
+
+            <section className="xp-section">
+              <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
+              {expert.sector_experience.length > 0 ? (
+                <ExpandableList
+                  items={expert.sector_experience}
+                  keyFn={(s) => s.sector_exp_id}
+                  renderItem={(s) => (
+                    <div className="xp-row-item xp-row-item-stack">
+                      <div className="xp-row-item-top">
+                        <span className="label">{labelize(s.sector)}</span>
+                        <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
+                      </div>
+                      <span className="meta">{s.compliance_standards_known.join(', ')}</span>
+                      {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
+                    </div>
+                  )}
+                />
+              ) : (
+                <EmptyState
+                  isOwner={isOwner}
+                  ownerText="You haven't added sector experience yet."
+                  ownerLinkText="Add sector experience"
+                  visitorText="No sector experience listed yet."
+                />
+              )}
+            </section>
+
+            <section className="xp-section">
+              <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
+              {expert.engagement_types.length > 0 ? (
+                <ExpandableList
+                  items={expert.engagement_types}
+                  keyFn={(t) => t.eng_type_id}
+                  renderItem={(t) => (
+                    <div className="xp-row-item xp-row-item-stack">
+                      <div className="xp-row-item-top">
+                        <span className="label">{labelize(t.engagement_type)}</span>
+                        <span className="meta">
+                          {t.typical_duration_weeks_min}–{t.typical_duration_weeks_max} weeks
+                        </span>
+                      </div>
+                      <span className="meta">{t.approach_description}</span>
+                      <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
+                    </div>
+                  )}
+                />
+              ) : (
+                <EmptyState
+                  isOwner={isOwner}
+                  ownerText="You haven't described your engagement types yet."
+                  ownerLinkText="Add engagement types"
+                  visitorText="No engagement types listed yet."
+                />
+              )}
+            </section>
           </div>
         </div>
       </div>
