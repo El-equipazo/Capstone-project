@@ -7,7 +7,7 @@ from datetime import date
 
 from server.db import connection_pool as pool
 from .enums import ENGAGEMENT_STATUS, ENGAGEMENT_TYPE, PAYMENT_STRUCTURE
-from .errors import ConflictError, NotFoundError, TransitionError
+from .errors import ConflictError, NotFoundError, TransitionError, ValidationError
 from .validators import check_enum, check_not_past
 
 _TERMINAL = {"completed", "cancelled"}
@@ -16,6 +16,11 @@ _MUTABLE_FIELDS = {
     "start_date", "estimated_end_date", "cancellation_reason", "proposal_feedback",
     "proposal_expires_at",
 }
+# Once work has started, these can no longer be edited directly (see the
+# guard in update() below) -- they go through propose_terms_change /
+# accept_terms_change / decline_terms_change instead, so neither party can
+# unilaterally move dates or money out from under the other.
+_TERMS_FIELDS = {"start_date", "estimated_end_date", "agreed_budget", "payment_structure"}
 _VALID_TRANSITIONS: dict[tuple[str, str], set[str]] = {
     ("scoping", "proposal_sent"):           {"expert"},
     ("proposal_sent", "scoping"):           {"organization"},   # org requests revised timeline
@@ -255,6 +260,12 @@ async def update(engagement_id: int, caller_role: str, updates: dict) -> dict:
     existing = await get(engagement_id)
     set_parts: dict = {}
 
+    if existing["status"] in ("active", "on_hold") and _TERMS_FIELDS & updates.keys():
+        raise TransitionError(
+            "Once an engagement is active, dates/budget/payment structure changes "
+            "must go through the propose/accept flow, not a direct edit"
+        )
+
     check_not_past(updates.get("start_date"), "start_date")
     check_not_past(updates.get("estimated_end_date"), "estimated_end_date")
     check_not_past(updates.get("proposal_expires_at"), "proposal_expires_at")
@@ -317,4 +328,97 @@ async def update(engagement_id: int, caller_role: str, updates: dict) -> dict:
             existing["expert_id"],
         )
 
+    return dict(row)
+
+
+# -- TERMS NEGOTIATION ---------------------------------------------------------
+# Bidirectional equivalent of engagement_milestones' pending_action pattern:
+# once an engagement is active/on_hold, either party can propose a change to
+# dates/budget/payment structure, and the *other* party must accept or
+# decline before it takes effect. pending_requested_by_user_id records who
+# proposed it so the controller can stop that same user from also being the
+# one to accept/decline their own proposal. Upsert semantics, same as
+# milestone propose_change: re-proposing before the other side responds just
+# overwrites the prior pending values.
+
+async def propose_terms_change(engagement_id: int, user_id: int, **fields) -> dict:
+    existing = await get(engagement_id)
+    if existing["status"] not in ("active", "on_hold"):
+        raise TransitionError("Terms can only be proposed once the engagement is active or on hold")
+
+    proposed = {k: v for k, v in fields.items() if k in _TERMS_FIELDS and v is not None}
+    if not proposed:
+        raise ValidationError("Provide at least one field to propose a change for")
+    # start_date isn't check_not_past'd here -- by the time an engagement is
+    # active its start_date is already historical, and this flow is also how
+    # a party corrects the recorded start_date, not just schedules a future one.
+    check_not_past(proposed.get("estimated_end_date"), "estimated_end_date")
+    check_enum(proposed.get("payment_structure"), PAYMENT_STRUCTURE, "payment_structure", allow_none=True)
+
+    if (existing["pending_requested_by_user_id"] is not None
+            and existing["pending_requested_by_user_id"] != user_id):
+        raise TransitionError("There is already a pending terms change awaiting a response")
+
+    row = await pool.fetchrow(
+        """
+        UPDATE engagements
+        SET pending_start_date = $2,
+            pending_estimated_end_date = $3,
+            pending_agreed_budget = $4,
+            pending_payment_structure = $5,
+            pending_requested_by_user_id = $6,
+            pending_requested_at = NOW(),
+            updated_at = NOW()
+        WHERE engagement_id = $1
+        RETURNING *
+        """,
+        engagement_id,
+        proposed.get("start_date"), proposed.get("estimated_end_date"),
+        proposed.get("agreed_budget"), proposed.get("payment_structure"),
+        user_id,
+    )
+    return dict(row)
+
+
+async def accept_terms_change(engagement_id: int) -> dict:
+    existing = await get(engagement_id)
+    if existing["pending_requested_by_user_id"] is None:
+        raise TransitionError("No pending terms change to accept")
+
+    row = await pool.fetchrow(
+        """
+        UPDATE engagements
+        SET start_date = COALESCE(pending_start_date, start_date),
+            estimated_end_date = COALESCE(pending_estimated_end_date, estimated_end_date),
+            agreed_budget = COALESCE(pending_agreed_budget, agreed_budget),
+            payment_structure = COALESCE(pending_payment_structure, payment_structure),
+            pending_start_date = NULL, pending_estimated_end_date = NULL,
+            pending_agreed_budget = NULL, pending_payment_structure = NULL,
+            pending_requested_by_user_id = NULL, pending_requested_at = NULL,
+            updated_at = NOW()
+        WHERE engagement_id = $1
+        RETURNING *
+        """,
+        engagement_id,
+    )
+    return dict(row)
+
+
+async def decline_terms_change(engagement_id: int) -> dict:
+    existing = await get(engagement_id)
+    if existing["pending_requested_by_user_id"] is None:
+        raise TransitionError("No pending terms change to decline")
+
+    row = await pool.fetchrow(
+        """
+        UPDATE engagements
+        SET pending_start_date = NULL, pending_estimated_end_date = NULL,
+            pending_agreed_budget = NULL, pending_payment_structure = NULL,
+            pending_requested_by_user_id = NULL, pending_requested_at = NULL,
+            updated_at = NOW()
+        WHERE engagement_id = $1
+        RETURNING *
+        """,
+        engagement_id,
+    )
     return dict(row)

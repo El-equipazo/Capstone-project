@@ -38,6 +38,13 @@ export const BUDGET_RANGE_LABEL = {
   undisclosed: 'Undisclosed',
 }
 
+export const PAYMENT_STRUCTURE_OPTIONS = [
+  { value: 'hourly',          label: 'Hourly' },
+  { value: 'fixed_price',     label: 'Fixed Price' },
+  { value: 'milestone_based', label: 'Milestone Based' },
+  { value: 'retainer',        label: 'Retainer' },
+]
+
 export const ENGAGEMENT_TYPE_OPTIONS = [
   { value: 'risk_assessment',      label: 'Risk Assessment' },
   { value: 'cryptographic_audit',  label: 'Cryptographic Audit' },

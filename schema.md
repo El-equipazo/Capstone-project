@@ -351,6 +351,13 @@ cancellation_reason     TEXT
 proposal_feedback       TEXT -- org's "request changes" note when bouncing proposal_sent back to scoping
 proposal_expires_at     TIMESTAMP -- deadline for the org to respond to a sent proposal, set by the expert;
                         -- lazily swept back to 'scoping' if it lapses (mirrors connection_requests.expires_at)
+pending_start_date              DATE -- proposed new start_date, awaiting the other party's accept/decline
+pending_estimated_end_date      DATE -- proposed new estimated_end_date
+pending_agreed_budget           NUMERIC(12,2) -- proposed new agreed_budget
+pending_payment_structure       TEXT -- proposed new payment_structure
+pending_requested_by_user_id    INTEGER REFERENCES users(user_id) -- who proposed it (org or expert side --
+                                -- unlike engagement_milestones.pending_*, this negotiation is bidirectional)
+pending_requested_at            TIMESTAMP
 created_at              TIMESTAMP DEFAULT NOW()
 updated_at              TIMESTAMP DEFAULT NOW()
 

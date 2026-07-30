@@ -352,6 +352,28 @@ export const engagementsApi = {
     })
   },
 
+  async proposeTerms(engagementId, data) {
+    return await apiFetch(`/engagements/${engagementId}/propose-terms`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async acceptTermsChange(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/terms/accept`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async declineTermsChange(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/terms/decline`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
   async getNotes(engagementId) {
     return await apiFetch(`/engagements/${engagementId}/notes`, { headers: authHeader() })
   },

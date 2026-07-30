@@ -75,6 +75,7 @@ NOTIFICATION_TYPE = {
     "connection_request_received", "connection_accepted", "connection_declined",
     "milestone_change_proposed", "milestone_change_confirmed", "milestone_change_declined",
     "milestone_proposed",
+    "engagement_terms_proposed", "engagement_terms_accepted", "engagement_terms_declined",
 }
 
 # A milestone can have at most one outstanding org-proposed change at a time

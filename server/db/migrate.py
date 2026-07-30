@@ -137,6 +137,18 @@ MIGRATIONS: list[tuple[str, str]] = [
         );
         """,
     ),
+    (
+        "008_engagement_terms_pending_change",
+        """
+        ALTER TABLE engagements
+            ADD COLUMN IF NOT EXISTS pending_start_date DATE,
+            ADD COLUMN IF NOT EXISTS pending_estimated_end_date DATE,
+            ADD COLUMN IF NOT EXISTS pending_agreed_budget NUMERIC(12,2),
+            ADD COLUMN IF NOT EXISTS pending_payment_structure TEXT,
+            ADD COLUMN IF NOT EXISTS pending_requested_by_user_id INTEGER REFERENCES users(user_id),
+            ADD COLUMN IF NOT EXISTS pending_requested_at TIMESTAMP;
+        """,
+    ),
 ]
 
 
