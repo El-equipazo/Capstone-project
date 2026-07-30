@@ -212,11 +212,11 @@ export default function ExpertProfile() {
             <div className="xp-stats-row">
               <div className="xp-stat-block">
                 <span className="section-label xp-section-label">Rating</span>
-                <div className="value">{expert.avg_rating ? `${expert.avg_rating.toFixed(1)} ↗` : 'New ↗'}</div>
+                <div className="value">{expert.avg_rating ? expert.avg_rating.toFixed(1) : 'New'}</div>
               </div>
               <div className="xp-stat-block">
                 <span className="section-label xp-section-label">Rate</span>
-                <div className="value">{formatRate(expert.hourly_rate_min, expert.hourly_rate_max)} ↗</div>
+                <div className="value">{formatRate(expert.hourly_rate_min, expert.hourly_rate_max)}</div>
               </div>
             </div>
 
