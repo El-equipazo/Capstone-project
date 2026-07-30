@@ -105,6 +105,29 @@ def _check_list_filters(status: str = None, engagement_type: str = None) -> None
     check_enum(engagement_type, ENGAGEMENT_TYPE, "engagement_type", allow_none=True)
 
 
+async def _attach_milestones(rows: list) -> list:
+    """Batch-loads milestones for a list of engagements in one query, attached
+    as a `milestones` key -- mirrors expert_model's sub-resource batch-load
+    pattern for list endpoints, avoiding an N+1 query per engagement."""
+    if not rows:
+        return rows
+    engagement_ids = [r["engagement_id"] for r in rows]
+    milestone_rows = await pool.fetch(
+        """
+        SELECT * FROM engagement_milestones
+        WHERE engagement_id = ANY($1::int[])
+        ORDER BY order_index ASC, created_at ASC
+        """,
+        engagement_ids,
+    )
+    by_engagement: dict = {}
+    for m in milestone_rows:
+        by_engagement.setdefault(m["engagement_id"], []).append(dict(m))
+    for r in rows:
+        r["milestones"] = by_engagement.get(r["engagement_id"], [])
+    return rows
+
+
 async def list_for_expert(expert_id: int, *, status: str = None,
                           engagement_type: str = None) -> list:
     _check_list_filters(status, engagement_type)
@@ -134,7 +157,7 @@ async def list_for_expert(expert_id: int, *, status: str = None,
         """,
         *params,
     )
-    return [dict(r) for r in rows]
+    return await _attach_milestones([dict(r) for r in rows])
 
 
 async def list_for_org(org_id: int, *, status: str = None,
@@ -167,7 +190,7 @@ async def list_for_org(org_id: int, *, status: str = None,
         """,
         *params,
     )
-    return [dict(r) for r in rows]
+    return await _attach_milestones([dict(r) for r in rows])
 
 
 async def get(engagement_id: int) -> dict:

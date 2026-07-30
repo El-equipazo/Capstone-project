@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi, organizationsApi, matchingApi, connectionsApi, expertsApi, engagementsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import MilestoneMap from '../components/MilestoneMap'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import RecommendationCard from '../components/matching/RecommendationCard'
 import TagInput from '../components/organization/TagInput'
@@ -393,11 +394,7 @@ export default function OrganizationDashboard() {
                     to send a connection request.
                   </p>
                 ) : activeEngagements.map((e) => (
-                  <Link
-                    key={e.engagement_id}
-                    to={`/engagements/${e.engagement_id}`}
-                    style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-                  >
+                  <Link key={e.engagement_id} to={`/engagements/${e.engagement_id}`} className="eng-list-row">
                     <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title || labelize(e.engagement_type)}</span>
@@ -409,6 +406,7 @@ export default function OrganizationDashboard() {
                       </div>
                       <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
                     </div>
+                    <MilestoneMap milestones={e.milestones} />
                   </Link>
                 ))}
               </div>

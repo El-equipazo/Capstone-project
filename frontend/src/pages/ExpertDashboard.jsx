@@ -4,6 +4,7 @@ import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi, 
 import { useAuth } from '../context/AuthContext'
 import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
+import MilestoneMap from '../components/MilestoneMap'
 import TagInput from '../components/organization/TagInput'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
@@ -964,14 +965,12 @@ export default function ExpertDashboard() {
                   </p>
                 )}
                 {activeEngagements.map((e) => (
-                  <Link
-                    key={e.engagement_id}
-                    to={`/engagements/${e.engagement_id}`}
-                    className="row gap-8 wrap"
-                    style={{ justifyContent: 'space-between', textDecoration: 'none', color: 'inherit' }}
-                  >
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
-                    <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
+                  <Link key={e.engagement_id} to={`/engagements/${e.engagement_id}`} className="eng-list-row">
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
+                      <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
+                    </div>
+                    <MilestoneMap milestones={e.milestones} />
                   </Link>
                 ))}
               </div>

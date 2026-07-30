@@ -2052,3 +2052,154 @@ button, input, select, textarea {
   color: inherit;
   cursor: pointer;
 }
+
+/* ---------- Engagement list rows (dashboards) ---------- */
+.eng-list-row {
+  display: block;
+  padding: 14px 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.eng-list-row + .eng-list-row {
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Milestone map ---------- */
+.mm {
+  position: relative;
+  padding: 16px 4px 0;
+}
+
+.mm-track {
+  position: absolute;
+  top: 19px;
+  left: 15px;
+  right: 15px;
+  height: 2px;
+  background: var(--line);
+}
+
+.mm-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--good);
+}
+
+.mm-nodes {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+}
+
+.mm-node {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.mm-node svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mm-node.done {
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.mm-node.done svg {
+  stroke: #fff;
+}
+
+.mm-node.in_progress {
+  background: var(--acc);
+  border-color: var(--acc);
+  box-shadow: 0 0 0 4px var(--acc-light);
+}
+
+.mm-node.in_progress .mm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.mm-node.blocked {
+  background: var(--danger-light);
+  border-color: var(--danger);
+}
+
+.mm-node.blocked svg {
+  stroke: var(--danger);
+}
+
+.mm-node.skipped {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+.mm-node[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 140%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 7px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 10;
+  box-shadow: var(--shadow);
+}
+
+.mm-node[data-tip]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: 108%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--ink);
+  z-index: 10;
+}
+
+.mm-current-label {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mm-current-label strong {
+  color: var(--ink);
+}
+
+.mm-blocked-label {
+  color: var(--danger);
+}
+
+.mm-blocked-label strong {
+  color: var(--danger);
+}
+
+.mm-empty {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 8px;
+}
