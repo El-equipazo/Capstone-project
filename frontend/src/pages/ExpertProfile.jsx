@@ -1,10 +1,51 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { connectionsApi, expertsApi, threadsApi } from '../api/client'
+import { authApi, connectionsApi, expertsApi, threadsApi } from '../api/client'
 import PortraitPlaceholder from '../components/PortraitPlaceholder'
 import { useAuth } from '../context/AuthContext'
 import { useChat_context } from '../context/ChatContext'
 import { formatRate, formatCurrencyRange, formatWorkPeriod, labelize, AVAILABILITY_LABEL, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
+
+const EXPAND_THRESHOLD = 3
+
+// Blank fields (bio, specializations, ...) get a neutral placeholder for
+// visitors, but an actionable one for the profile's own owner -- checked via
+// authApi.me() below, since experts can view their own public profile page
+// (the "View public profile" link on their dashboard).
+function EmptyState({ isOwner, ownerText, ownerLinkText, visitorText }) {
+  if (isOwner) {
+    return (
+      <p className="xp-placeholder owner">
+        {ownerText} <Link to="/dashboard">{ownerLinkText} →</Link>
+      </p>
+    )
+  }
+  return <p className="xp-placeholder">{visitorText}</p>
+}
+
+// Shared collapse-behind-"show more" behavior for the longer list sections
+// (credentials, work history, sector experience, engagement types) -- a full
+// profile otherwise renders as one long, undifferentiated scroll.
+function ExpandableList({ items, keyFn, renderItem }) {
+  const [expanded, setExpanded] = useState(false)
+  const visible = expanded ? items : items.slice(0, EXPAND_THRESHOLD)
+  const hiddenCount = items.length - EXPAND_THRESHOLD
+
+  return (
+    <>
+      <div className="xp-row-list">
+        {visible.map((item) => (
+          <div key={keyFn(item)}>{renderItem(item)}</div>
+        ))}
+      </div>
+      {hiddenCount > 0 && (
+        <button className="xp-expand-btn" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? 'Show less ▲' : `Show ${hiddenCount} more ▾`}
+        </button>
+      )}
+    </>
+  )
+}
 
 export default function ExpertProfile() {
   const { expertId } = useParams()
@@ -15,12 +56,30 @@ export default function ExpertProfile() {
   const [requestError, setRequestError] = useState('')
   const [engagementType, setEngagementType] = useState('')
   const [initialMessage, setInitialMessage] = useState('')
+  const [isOwner, setIsOwner] = useState(false)
 
   const { user } = useAuth()
   const { openChat } = useChat_context()
   const [searchParams] = useSearchParams()
   const [askError, setAskError] = useState('')
   const [askLoading, setAskLoading] = useState(false)
+
+  useEffect(() => {
+    if (!user || user.role !== 'expert') {
+      setIsOwner(false)
+      return
+    }
+    let cancelled = false
+    authApi
+      .me()
+      .then(({ profile }) => {
+        if (!cancelled) setIsOwner(profile?.expert_profile_id === Number(expertId))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [user, expertId])
 
   async function handleAskQuestion() {
     setAskError('')
@@ -122,7 +181,9 @@ export default function ExpertProfile() {
               <span className="xp-status-dot" style={{ opacity: unavailable ? 0.3 : 1 }} />
               {AVAILABILITY_LABEL[expert.availability_status]}
             </div>
-            <div className="xp-substat">{expert.years_of_experience} yrs experience</div>
+            {expert.years_of_experience != null && (
+              <div className="xp-substat">{expert.years_of_experience} yrs experience</div>
+            )}
           </div>
         </div>
 
@@ -144,12 +205,21 @@ export default function ExpertProfile() {
 
         <section className="xp-section">
           <span className="section-label xp-section-label">About</span>
-          <p className="xp-about-text">{expert.bio}</p>
+          {expert.bio ? (
+            <p className="xp-about-text">{expert.bio}</p>
+          ) : (
+            <EmptyState
+              isOwner={isOwner}
+              ownerText="You haven't added a bio yet."
+              ownerLinkText="Add one from your dashboard"
+              visitorText="This expert hasn't added a bio yet."
+            />
+          )}
         </section>
 
-        {expert.specializations.length > 0 && (
-          <section className="xp-section">
-            <span className="section-label xp-section-label">Specializations</span>
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Specializations</span>
+          {expert.specializations.length > 0 ? (
             <div className="xp-plain-list">
               {expert.specializations.map((s) => (
                 <span key={s.specialization_id}>
@@ -157,31 +227,52 @@ export default function ExpertProfile() {
                 </span>
               ))}
             </div>
-          </section>
-        )}
+          ) : (
+            <EmptyState
+              isOwner={isOwner}
+              ownerText="Add at least one specialization so organizations can find you."
+              ownerLinkText="Add specializations"
+              visitorText="No specializations listed yet."
+            />
+          )}
+        </section>
 
-        {expert.credentials.length > 0 && (
-          <section className="xp-section">
-            <span className="section-label xp-section-label">Credentials &amp; certifications</span>
-            <div className="xp-row-list">
-              {expert.credentials.map((c) => (
-                <div className="xp-row-item" key={c.credential_id}>
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Credentials &amp; certifications</span>
+          {expert.credentials.length > 0 ? (
+            <ExpandableList
+              items={expert.credentials}
+              keyFn={(c) => c.credential_id}
+              renderItem={(c) => (
+                <div className="xp-row-item">
                   <span className="label">{c.credential_name}</span>
-                  <span className="meta">
-                    {c.institution} · {c.year_obtained} · {c.is_verified ? 'Verified' : 'Pending verification'}
+                  <span className="status">
+                    <span className="meta">{c.institution} · {c.year_obtained}</span>
+                    <span className={`badge ${c.is_verified ? '' : 'pending'}`}>
+                      {c.is_verified ? 'Verified' : 'Pending'}
+                    </span>
                   </span>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+              )}
+            />
+          ) : (
+            <EmptyState
+              isOwner={isOwner}
+              ownerText="You haven't added any credentials yet."
+              ownerLinkText="Add credentials"
+              visitorText="No credentials listed yet."
+            />
+          )}
+        </section>
 
-        {expert.work_history.length > 0 && (
-          <section className="xp-section">
-            <span className="section-label xp-section-label">Work history</span>
-            <div className="xp-row-list">
-              {expert.work_history.map((w) => (
-                <div className="xp-row-item xp-row-item-stack" key={w.work_history_id}>
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Work history</span>
+          {expert.work_history.length > 0 ? (
+            <ExpandableList
+              items={expert.work_history}
+              keyFn={(w) => w.work_history_id}
+              renderItem={(w) => (
+                <div className="xp-row-item xp-row-item-stack">
                   <div className="xp-row-item-top">
                     <span className="label">
                       {w.job_title} — {w.organization_name}
@@ -190,17 +281,26 @@ export default function ExpertProfile() {
                   </div>
                   {w.description && <span className="meta">{w.description}</span>}
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+              )}
+            />
+          ) : (
+            <EmptyState
+              isOwner={isOwner}
+              ownerText="You haven't added your work history yet."
+              ownerLinkText="Add work history"
+              visitorText="No work history listed yet."
+            />
+          )}
+        </section>
 
-        {expert.sector_experience.length > 0 && (
-          <section className="xp-section">
-            <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
-            <div className="xp-row-list">
-              {expert.sector_experience.map((s) => (
-                <div className="xp-row-item xp-row-item-stack" key={s.sector_exp_id}>
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Sector experience &amp; compliance</span>
+          {expert.sector_experience.length > 0 ? (
+            <ExpandableList
+              items={expert.sector_experience}
+              keyFn={(s) => s.sector_exp_id}
+              renderItem={(s) => (
+                <div className="xp-row-item xp-row-item-stack">
                   <div className="xp-row-item-top">
                     <span className="label">{labelize(s.sector)}</span>
                     <span className="meta">{s.years_experience_in_sector} yrs in sector</span>
@@ -208,17 +308,26 @@ export default function ExpertProfile() {
                   <span className="meta">{s.compliance_standards_known.join(', ')}</span>
                   {s.anonymized_client_examples && <span className="meta">{s.anonymized_client_examples}</span>}
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+              )}
+            />
+          ) : (
+            <EmptyState
+              isOwner={isOwner}
+              ownerText="You haven't added sector experience yet."
+              ownerLinkText="Add sector experience"
+              visitorText="No sector experience listed yet."
+            />
+          )}
+        </section>
 
-        {expert.engagement_types.length > 0 && (
-          <section className="xp-section">
-            <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
-            <div className="xp-row-list">
-              {expert.engagement_types.map((t) => (
-                <div className="xp-row-item xp-row-item-stack" key={t.eng_type_id}>
+        <section className="xp-section">
+          <span className="section-label xp-section-label">Engagement types &amp; estimated timelines</span>
+          {expert.engagement_types.length > 0 ? (
+            <ExpandableList
+              items={expert.engagement_types}
+              keyFn={(t) => t.eng_type_id}
+              renderItem={(t) => (
+                <div className="xp-row-item xp-row-item-stack">
                   <div className="xp-row-item-top">
                     <span className="label">{labelize(t.engagement_type)}</span>
                     <span className="meta">
@@ -228,10 +337,17 @@ export default function ExpertProfile() {
                   <span className="meta">{t.approach_description}</span>
                   <span className="meta">Typical budget: {formatCurrencyRange(t.typical_budget_min, t.typical_budget_max)}</span>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+              )}
+            />
+          ) : (
+            <EmptyState
+              isOwner={isOwner}
+              ownerText="You haven't described your engagement types yet."
+              ownerLinkText="Add engagement types"
+              visitorText="No engagement types listed yet."
+            />
+          )}
+        </section>
 
         <div className="xp-connect-card">
           <div className="xp-connect-left">

@@ -1658,6 +1658,48 @@ button, input, select, textarea {
   font-size: 12px;
 }
 
+.xp-row-item .status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.xp-placeholder {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.xp-placeholder.owner {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--acc);
+  background: var(--acc-light);
+  border: 1px dashed #b7c6da;
+  border-radius: 8px;
+  padding: 12px 14px;
+  max-width: 480px;
+}
+
+.xp-placeholder.owner a {
+  color: var(--acc);
+}
+
+.xp-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--acc);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 14px;
+}
+
 .xp-row-item-stack {
   flex-direction: column;
   align-items: stretch;
