@@ -10,7 +10,11 @@ export default function ExpertCard({ expert }) {
     <div className="card expert-card">
       <div className="ec-top">
         <span className="avatar ec-avatar">
-          {initials}
+          {expert.profile_photo_url ? (
+            <img src={expert.profile_photo_url} alt="" className="ec-avatar-img" />
+          ) : (
+            initials
+          )}
           {expert.is_verified && (
             <span className="ec-verified-dot" title="Verified">
               ✓
