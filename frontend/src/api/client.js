@@ -473,10 +473,10 @@ export const adminApi = {
     })
   },
 
-  async verifyOrganization(orgProfileId) {
+  async setOrganizationVerified(orgProfileId, isVerified) {
     return await apiFetch(`/admin/organizations/${orgProfileId}/verify`, {
       method: 'PATCH',
-      body: { is_verified: true },
+      body: { is_verified: isVerified },
       headers: authHeader(),
     })
   },

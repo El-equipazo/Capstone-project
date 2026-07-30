@@ -125,6 +125,7 @@ export default function AdminDashboard() {
   const [orgFilter, setOrgFilter] = useState('all')
   const [orgSearch, setOrgSearch] = useState('')
   const [deactivatingOrg, setDeactivatingOrg] = useState({})
+  const [verifyingOrg, setVerifyingOrg] = useState({})
 
   const [verifications, setVerifications] = useState([])
   const [verifsLoading, setVerifsLoading] = useState(true)
@@ -245,6 +246,19 @@ export default function AdminDashboard() {
       setError(err.body?.error?.message ?? 'Something went wrong.')
     } finally {
       setDeactivatingOrg((p) => ({ ...p, [o.user_id]: false }))
+    }
+  }
+
+  async function handleToggleVerifyOrg(o) {
+    setVerifyingOrg((p) => ({ ...p, [o.org_profile_id]: true }))
+    setError('')
+    try {
+      const updated = await adminApi.setOrganizationVerified(o.org_profile_id, !o.is_verified)
+      setOrgs((prev) => prev.map((x) => x.org_profile_id === updated.org_profile_id ? { ...x, ...updated } : x))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Something went wrong.')
+    } finally {
+      setVerifyingOrg((p) => ({ ...p, [o.org_profile_id]: false }))
     }
   }
 
@@ -515,14 +529,24 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                         <td className="center">
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            disabled={deactivatingOrg[o.user_id]}
-                            onClick={() => handleToggleOrg(o)}
-                            style={o.is_active ? { color: 'var(--danger)' } : undefined}
-                          >
-                            {deactivatingOrg[o.user_id] ? '…' : o.is_active ? 'Deactivate' : 'Reactivate'}
-                          </button>
+                          <div className="actions-row">
+                            <button
+                              className={`btn btn-sm ${o.is_verified ? 'btn-ghost' : 'btn-acc'}`}
+                              disabled={verifyingOrg[o.org_profile_id]}
+                              onClick={() => handleToggleVerifyOrg(o)}
+                              style={o.is_verified ? { color: 'var(--danger)' } : undefined}
+                            >
+                              {verifyingOrg[o.org_profile_id] ? '…' : o.is_verified ? 'Unverify' : 'Verify'}
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              disabled={deactivatingOrg[o.user_id]}
+                              onClick={() => handleToggleOrg(o)}
+                              style={o.is_active ? { color: 'var(--danger)' } : undefined}
+                            >
+                              {deactivatingOrg[o.user_id] ? '…' : o.is_active ? 'Deactivate' : 'Reactivate'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       )

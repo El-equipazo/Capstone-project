@@ -163,15 +163,9 @@ async def list_organization_profiles(
 
 
 @router.patch("/admin/organizations/{org_profile_id}/verify")
-async def verify_organization(
+async def set_organization_verified(
     org_profile_id: int,
     body: VerifyProfileBody,
     current_user=Depends(require_role("admin")),
 ):
-    if not body.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": {"code": "INVALID_VALUE",
-                              "message": "is_verified must be true"}},
-        )
-    return await admin_model.verify_organization(org_profile_id)
+    return await admin_model.set_organization_verified(org_profile_id, body.is_verified)
