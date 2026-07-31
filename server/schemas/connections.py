@@ -48,6 +48,7 @@ class ConnectionResponse(BaseModel):
     org_is_verified: Optional[bool] = None
     contact_name: Optional[str] = None
     contact_title: Optional[str] = None
+    org_avg_rating: Optional[float] = None
 
 
 class ScoreFactor(BaseModel):

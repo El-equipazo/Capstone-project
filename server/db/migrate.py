@@ -137,6 +137,33 @@ MIGRATIONS: list[tuple[str, str]] = [
         );
         """,
     ),
+    (
+        "008_reviews_table",
+        """
+        CREATE TABLE IF NOT EXISTS reviews (
+            review_id              SERIAL PRIMARY KEY,
+            engagement_id          INTEGER REFERENCES engagements(engagement_id) ON DELETE CASCADE,
+            reviewer_id             INTEGER REFERENCES users(user_id),
+            reviewee_id             INTEGER REFERENCES users(user_id),
+            reviewer_role           TEXT NOT NULL,
+            overall_rating          SMALLINT NOT NULL CHECK (overall_rating BETWEEN 1 AND 5),
+            review_title            TEXT,
+            review_body             TEXT,
+            is_public               BOOLEAN DEFAULT true,
+            is_flagged              BOOLEAN DEFAULT false,
+            flagged_reason          TEXT,
+            created_at              TIMESTAMP DEFAULT NOW(),
+            UNIQUE (engagement_id, reviewer_role)
+        );
+        """,
+    ),
+    (
+        "009_organization_avg_rating",
+        """
+        ALTER TABLE organization_profiles
+            ADD COLUMN IF NOT EXISTS avg_rating NUMERIC(3,2);
+        """,
+    ),
 ]
 
 

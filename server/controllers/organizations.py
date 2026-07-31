@@ -9,6 +9,8 @@ from server.schemas.organizations import (
     OrgUpdate,
 )
 
+from server.models import review_model
+
 try:
     from server.models import organization_model
 except ImportError:
@@ -96,3 +98,18 @@ async def get_infrastructure(org_id: int, current_user=Depends(get_current_user)
         )
     result = await organization_model.get_infrastructure(org_id)
     return dict(result)
+
+
+# ── Reviews ───────────────────────────────────────────────────────────────────
+
+@router.get("/organizations/{org_id}/reviews")
+async def list_own_reviews(org_id: int, current_user=Depends(get_current_user)):
+    """
+    Private -- an org's own view of every review left about them. Unlike an
+    expert's reviews (public via GET /experts/:id/reviews), org review text
+    is never shown to anyone but the org itself and admins; everyone else
+    only ever sees organization_profiles.avg_rating.
+    """
+    org_row = await organization_model.get(org_id)
+    _assert_owner_or_admin(current_user, org_row)
+    return await review_model.list_for_organization(org_id)

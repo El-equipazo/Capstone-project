@@ -59,6 +59,7 @@ class OrgResponse(BaseModel):
     urgency_level: Optional[str] = None
     default_connection_expiry_days: int
     is_verified: bool
+    avg_rating: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 

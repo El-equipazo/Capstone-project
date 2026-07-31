@@ -126,7 +126,11 @@ async def list_for_expert(expert_id: int, *, status: str = None,
                e.start_date, e.estimated_end_date, e.actual_end_date,
                e.created_at, e.updated_at,
                op.org_name,
-               op.user_id AS org_user_id, ep.user_id AS expert_user_id
+               op.user_id AS org_user_id, ep.user_id AS expert_user_id,
+               EXISTS(
+                   SELECT 1 FROM reviews r
+                   WHERE r.engagement_id = e.engagement_id AND r.reviewer_role = 'expert'
+               ) AS my_review_submitted
         FROM engagements e
         JOIN organization_profiles op ON op.org_profile_id = e.org_id
         JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
@@ -159,7 +163,11 @@ async def list_for_org(org_id: int, *, status: str = None,
                e.created_at, e.updated_at,
                ep.first_name AS expert_first_name, ep.last_name AS expert_last_name,
                ep.headline AS expert_headline,
-               op.user_id AS org_user_id, ep.user_id AS expert_user_id
+               op.user_id AS org_user_id, ep.user_id AS expert_user_id,
+               EXISTS(
+                   SELECT 1 FROM reviews r
+                   WHERE r.engagement_id = e.engagement_id AND r.reviewer_role = 'organization'
+               ) AS my_review_submitted
         FROM engagements e
         JOIN expert_profiles ep ON ep.expert_profile_id = e.expert_id
         JOIN organization_profiles op ON op.org_profile_id = e.org_id

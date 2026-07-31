@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { engagementsApi, threadsApi } from '../api/client'
+import { engagementsApi, reviewsApi, threadsApi } from '../api/client'
 import { useRequireAuth } from '../hooks/useRequireAuth'
 import { useChat_context } from '../context/ChatContext'
 import { labelize, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
 import OrgProfileModal from '../components/OrgProfileModal'
 import EngagementNotes from '../components/EngagementNotes'
+import RatingStars from '../components/RatingStars'
+import StarRatingInput from '../components/StarRatingInput'
 
 const MILESTONE_LABEL = {
   proposed:    'Proposed',
@@ -95,6 +97,17 @@ export default function EngagementDetail() {
 
   const [showOrgModal, setShowOrgModal] = useState(false)
 
+  // Review card -- only fetched once the engagement is completed, since
+  // that's the only state reviews can be left in.
+  const [engagementReviews, setEngagementReviews] = useState([])
+  const [reviewsLoaded, setReviewsLoaded] = useState(false)
+  const [showReviewForm, setShowReviewForm] = useState(false)
+  const [reviewForm, setReviewForm] = useState({
+    overall_rating: 0, review_title: '', review_body: '', is_public: true,
+  })
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewError, setReviewError] = useState('')
+
   const { openChat } = useChat_context()
 
   useEffect(() => {
@@ -103,6 +116,13 @@ export default function EngagementDetail() {
       .then((eng) => { setEngagement(eng); setLoading(false) })
       .catch(() => { setError('Engagement not found or access denied.'); setLoading(false) })
   }, [user, engagementId])
+
+  useEffect(() => {
+    if (!engagement || engagement.status !== 'completed') return
+    reviewsApi.listForEngagement(engagementId)
+      .then((rows) => { setEngagementReviews(rows); setReviewsLoaded(true) })
+      .catch(() => setReviewsLoaded(true)) // fail open -- show the write-a-review prompt rather than block the page
+  }, [engagement, engagementId])
 
   // Notification deep-link: ?highlight_milestone=X[&flash=confirmed] scrolls
   // to and (optionally) briefly flashes a specific milestone, same pattern as
@@ -136,6 +156,39 @@ export default function EngagementDetail() {
   const isTerminal = ['completed', 'cancelled'].includes(engagement.status)
   const backPath = role === 'expert' ? '/dashboard' : '/organization'
   const statusActions = getStatusActions(engagement.status, role)
+  const myReview = engagementReviews.find((r) => r.reviewer_role === role)
+  const otherReview = engagementReviews.find((r) => r.reviewer_role !== role)
+  const counterpartyLabel = role === 'organization' ? (engagement.expert_first_name || 'the expert') : (engagement.org_name || 'the organization')
+
+  async function handleSubmitReview(e) {
+    e.preventDefault()
+    if (!reviewForm.overall_rating) {
+      setReviewError('Please choose an overall rating.')
+      return
+    }
+    setReviewLoading(true)
+    setReviewError('')
+    try {
+      const data = { overall_rating: reviewForm.overall_rating, is_public: reviewForm.is_public }
+      if (reviewForm.review_title.trim()) data.review_title = reviewForm.review_title.trim()
+      if (reviewForm.review_body.trim()) data.review_body = reviewForm.review_body.trim()
+
+      const created = await reviewsApi.create(engagementId, data)
+      setEngagementReviews((prev) => [...prev, created])
+      setShowReviewForm(false)
+    } catch (err) {
+      setReviewError(
+        err.status === 409
+          ? 'You already submitted a review for this engagement.'
+          : err.status === 422
+            ? 'This engagement must be completed before it can be reviewed.'
+            : err.body?.error?.message ?? 'Failed to submit review.'
+      )
+    } finally {
+      setReviewLoading(false)
+    }
+  }
+
   async function handleTimelineDecision(decision) {
     setActionLoading(true)
     setError('')
@@ -652,6 +705,76 @@ export default function EngagementDetail() {
               {engagement.actual_end_date ? ` — ended ${engagement.actual_end_date}` : ''}.
               {engagement.cancellation_reason ? ` Reason: ${engagement.cancellation_reason}` : ''}
             </span>
+          </div>
+        )}
+
+        {/* Review */}
+        {engagement.status === 'completed' && reviewsLoaded && (
+          <div className="card" style={{ padding: 22, marginBottom: 20 }}>
+            <span className="section-label" style={{ display: 'block', marginBottom: 12 }}>Your Review</span>
+
+            {myReview ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="row gap-8" style={{ alignItems: 'center' }}>
+                  <RatingStars rating={myReview.overall_rating} />
+                  {myReview.review_title && <span style={{ fontWeight: 600, fontSize: 13 }}>{myReview.review_title}</span>}
+                  {!myReview.is_public && <span className="tag" style={{ fontSize: 10 }}>Private</span>}
+                </div>
+                {myReview.review_body && <p style={{ fontSize: 12.5 }}>{myReview.review_body}</p>}
+                <p className="lead" style={{ fontSize: 11.5 }}>Submitted — thanks for the feedback.</p>
+              </div>
+            ) : !showReviewForm ? (
+              <div>
+                <p className="lead" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                  {otherReview
+                    ? `${counterpartyLabel} has already submitted a review. Share your own perspective.`
+                    : `How did this engagement with ${counterpartyLabel} go?`}
+                </p>
+                <button className="btn btn-acc" onClick={() => { setReviewError(''); setShowReviewForm(true) }}>
+                  Write a Review
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitReview} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {reviewError && <div className="alert alert-error">{reviewError}</div>}
+                <StarRatingInput
+                  label="Overall rating" required
+                  value={reviewForm.overall_rating}
+                  onChange={(n) => setReviewForm((p) => ({ ...p, overall_rating: n }))}
+                />
+                <div className="field-group">
+                  <label className="field-label">Title <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                  <input
+                    className="field-input"
+                    value={reviewForm.review_title}
+                    onChange={(e) => setReviewForm((p) => ({ ...p, review_title: e.target.value }))}
+                  />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Comments <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                  <textarea
+                    className="field-input"
+                    rows={3}
+                    value={reviewForm.review_body}
+                    onChange={(e) => setReviewForm((p) => ({ ...p, review_body: e.target.value }))}
+                  />
+                </div>
+                <label className="row gap-8" style={{ fontSize: 12.5, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={reviewForm.is_public}
+                    onChange={(e) => setReviewForm((p) => ({ ...p, is_public: e.target.checked }))}
+                  />
+                  Show this review publicly on {role === 'organization' ? "the expert's" : "the organization's"} profile
+                </label>
+                <div className="row gap-8">
+                  <button className="btn btn-acc" type="submit" disabled={reviewLoading}>
+                    {reviewLoading ? 'Submitting…' : 'Submit Review'}
+                  </button>
+                  <button className="btn" type="button" onClick={() => setShowReviewForm(false)}>Cancel</button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { authApi, organizationsApi, matchingApi, connectionsApi, expertsApi, eng
 import { useAuth } from '../context/AuthContext'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import RecommendationCard from '../components/matching/RecommendationCard'
+import RatingStars from '../components/RatingStars'
 import TagInput from '../components/organization/TagInput'
 import DeleteAccount from '../components/DeleteAccount'
 import { labelize, BUDGET_RANGE_LABEL, toNumberOrNull } from '../utils/format'
@@ -79,6 +80,7 @@ export default function OrganizationDashboard() {
   const [connections, setConnections] = useState([])
   const [engagements, setEngagements] = useState([])
   const [expertsById, setExpertsById] = useState({})
+  const [myReviews, setMyReviews] = useState([])
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_org_dismissed_${user?.user_id}`) || '[]')) }
     catch { return new Set() }
@@ -130,6 +132,13 @@ export default function OrganizationDashboard() {
       .getInfrastructure(profile.org_profile_id)
       .then((infra) => setInfraForm(infraToForm(infra)))
       .catch(() => setInfraForm(infraToForm(null)))
+  }, [profile])
+
+  useEffect(() => {
+    if (!profile) return
+    // Private -- full review text about this org, visible only to the org
+    // itself (+ admin). Everyone else only ever sees profile.avg_rating.
+    organizationsApi.getMyReviews(profile.org_profile_id).then(setMyReviews).catch(() => {})
   }, [profile])
 
   if (!user) return null
@@ -276,7 +285,11 @@ export default function OrganizationDashboard() {
     .map((c) => ({ id: `conn-${c.connection_id}`, label: `Expert #${c.expert_id}`, status: c.status, link: `/experts/${c.expert_id}` }))
   const _pastEngagements = engagements
     .filter((e) => TERMINAL.includes(e.status))
-    .map((e) => ({ id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status, link: `/engagements/${e.engagement_id}` }))
+    .map((e) => ({
+      id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status,
+      link: `/engagements/${e.engagement_id}`,
+      needsReview: e.status === 'completed' && !e.my_review_submitted,
+    }))
   const allPastItems = [..._pastConnections, ..._pastEngagements]
 
   const DISMISSED_KEY = `qc_org_dismissed_${user?.user_id}`
@@ -439,6 +452,11 @@ export default function OrganizationDashboard() {
                           <span style={{ fontSize: 12.5 }}>{item.label}</span>
                         )}
                         <span className="tag" style={{ fontSize: 11 }}>{labelize(item.status)}</span>
+                        {item.needsReview && (
+                          <Link to={item.link} className="badge" style={{ fontSize: 11 }}>
+                            Review available
+                          </Link>
+                        )}
                       </div>
                       <button
                         className="btn btn-sm"
@@ -484,6 +502,37 @@ export default function OrganizationDashboard() {
                 </div>
               </div>
             )}
+
+            <div className="card" style={{ padding: 22 }}>
+              <div className="row gap-8" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <span className="section-label">My Reviews</span>
+                {profile.avg_rating != null && <RatingStars rating={profile.avg_rating} label="reviews" />}
+              </div>
+              {/* Private -- only this org (+ admin) ever sees this text. Everyone
+                  else, including the experts who wrote these, only ever sees
+                  the aggregate avg_rating above. */}
+              {myReviews.length === 0 ? (
+                <p className="lead" style={{ fontSize: 12.5 }}>No reviews yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {myReviews.map((r) => (
+                    <div key={r.review_id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+                      <div className="row gap-8" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div className="row gap-8" style={{ alignItems: 'center' }}>
+                          <RatingStars rating={r.overall_rating} />
+                          {r.review_title && <span style={{ fontWeight: 600, fontSize: 13 }}>{r.review_title}</span>}
+                        </div>
+                        <span className="lead" style={{ fontSize: 11 }}>{new Date(r.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <span className="lead" style={{ fontSize: 12 }}>
+                        {r.reviewer_first_name} {r.reviewer_last_name}
+                      </span>
+                      {r.review_body && <p style={{ fontSize: 12.5, marginTop: 4 }}>{r.review_body}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

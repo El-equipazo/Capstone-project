@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { organizationsApi } from '../api/client'
+import RatingStars from './RatingStars'
 import { labelize, BUDGET_RANGE_LABEL } from '../utils/format'
 
 function Field({ label, value }) {
@@ -47,7 +48,10 @@ export default function OrgProfileModal({ orgId, onClose }) {
 
         {org && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Field label="Company name" value={org.org_name} />
+            <div className="row gap-8" style={{ alignItems: 'center' }}>
+              <Field label="Company name" value={org.org_name} />
+              {org.avg_rating != null && <RatingStars rating={org.avg_rating} label="org reviews" />}
+            </div>
             <div className="row gap-10">
               <div style={{ flex: 1 }}><Field label="Industry" value={org.sub_sector} /></div>
               <div style={{ flex: 1 }}><Field label="Company size" value={org.employee_count_range ? `${org.employee_count_range} employees` : null} /></div>
