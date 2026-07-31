@@ -19,6 +19,7 @@ const AVAILABILITY_STATUSES = ['available', 'limited', 'unavailable', 'booking_f
 const EMPLOYEE_COUNT_BUCKETS = ['<50', '50-250', '250-1k', '1k-10k', '>10k']
 const VERIFICATION_TYPES = ['identity', 'professional_credential', 'organization_legitimacy', 'background_check']
 const VERIFICATION_STATUS_FILTERS = ['pending', 'approved', 'rejected', 'all']
+const REVIEW_STATUS_FILTERS = ['flagged', 'public', 'hidden', 'all']
 
 function initials(str) {
   const words = (str || '').replace(/[^a-zA-Z\s]/g, ' ').trim().split(/\s+/).filter(Boolean)
@@ -138,6 +139,13 @@ export default function AdminDashboard() {
   const [aiReviewing, setAiReviewing] = useState({})
   const [aiReviewError, setAiReviewError] = useState({})
 
+  const [reviews, setReviews] = useState([])
+  const [reviewsLoading, setReviewsLoading] = useState(true)
+  const [reviewFilter, setReviewFilter] = useState('flagged')
+  const [reviewSearch, setReviewSearch] = useState('')
+  const [expandedReview, setExpandedReview] = useState(null)
+  const [moderating, setModerating] = useState({})
+
   async function loadExperts() {
     setExpertsLoading(true)
     try {
@@ -171,12 +179,24 @@ export default function AdminDashboard() {
     }
   }
 
+  async function loadReviews() {
+    setReviewsLoading(true)
+    try {
+      setReviews(await adminApi.listReviews({}))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Something went wrong.')
+    } finally {
+      setReviewsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!user) { navigate('/login?next=/admin'); return }
     if (user.role !== 'admin') return
     loadExperts()
     loadOrgs()
     loadVerifications()
+    loadReviews()
   }, [user, navigate])
 
   const filteredExperts = useMemo(() => {
@@ -209,6 +229,19 @@ export default function AdminDashboard() {
   }, [verifications, vFilter, vSearch])
 
   const pendingCount = useMemo(() => verifications.filter((v) => v.status === 'pending').length, [verifications])
+
+  const filteredReviews = useMemo(() => {
+    const q = reviewSearch.trim().toLowerCase()
+    return reviews.filter((r) => {
+      if (reviewFilter === 'flagged' && !r.is_flagged) return false
+      if (reviewFilter === 'public' && !(r.is_public && !r.is_flagged)) return false
+      if (reviewFilter === 'hidden' && r.is_public) return false
+      if (q && !`${r.review_title ?? ''} ${r.review_body ?? ''} ${r.flagged_reason ?? ''}`.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [reviews, reviewFilter, reviewSearch])
+
+  const flaggedReviewCount = useMemo(() => reviews.filter((r) => r.is_flagged).length, [reviews])
 
   async function handleToggleVerifyExpert(e) {
     setVerifyingExpert((p) => ({ ...p, [e.expert_profile_id]: true }))
@@ -303,6 +336,19 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleModerateReview(reviewId, patch) {
+    setModerating((p) => ({ ...p, [reviewId]: true }))
+    setError('')
+    try {
+      const updated = await adminApi.updateReview(reviewId, patch)
+      setReviews((prev) => prev.map((r) => r.review_id === reviewId ? { ...r, ...updated } : r))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Something went wrong.')
+    } finally {
+      setModerating((p) => ({ ...p, [reviewId]: false }))
+    }
+  }
+
   if (!user) return null
 
   if (user.role !== 'admin') {
@@ -333,6 +379,9 @@ export default function AdminDashboard() {
           </button>
           <button className={`dash-tab ${tab === 'verifications' ? 'on' : ''}`} onClick={() => setTab('verifications')}>
             Verifications{pendingCount > 0 ? ` (${pendingCount})` : ''}
+          </button>
+          <button className={`dash-tab ${tab === 'reviews' ? 'on' : ''}`} onClick={() => setTab('reviews')}>
+            Reviews{flaggedReviewCount > 0 ? ` (${flaggedReviewCount})` : ''}
           </button>
         </div>
 
@@ -830,6 +879,166 @@ export default function AdminDashboard() {
                                       </div>
                                     </div>
                                   )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'reviews' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <CountsCard
+                title="Moderation Status"
+                hero={{ label: 'FLAGGED', value: flaggedReviewCount }}
+                secondary={[
+                  { label: 'Public', value: reviews.filter((r) => r.is_public && !r.is_flagged).length, tone: 'good' },
+                  { label: 'Hidden', value: reviews.filter((r) => !r.is_public).length, tone: 'danger' },
+                  { label: 'Total', value: reviews.length, tone: 'neutral' },
+                ]}
+              />
+              <BreakdownCard title="By Reviewer Role" rows={countBy(reviews, (r) => r.reviewer_role, ['organization', 'expert'])} />
+            </div>
+
+            <div className="row gap-8 wrap" style={{ justifyContent: 'space-between' }}>
+              <div className="row gap-8">
+                {REVIEW_STATUS_FILTERS.map((f) => (
+                  <button
+                    key={f}
+                    className={`btn btn-sm ${reviewFilter === f ? 'btn-acc' : 'btn-ghost'}`}
+                    onClick={() => setReviewFilter(f)}
+                  >
+                    {labelize(f)}
+                  </button>
+                ))}
+              </div>
+              <input
+                className="field-input"
+                style={{ maxWidth: 260 }}
+                placeholder="Search reviews…"
+                value={reviewSearch}
+                onChange={(e) => setReviewSearch(e.target.value)}
+              />
+            </div>
+
+            {reviewsLoading ? (
+              <p className="lead">Loading…</p>
+            ) : filteredReviews.length === 0 ? (
+              <p className="lead">No reviews match your filters.</p>
+            ) : (
+              <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th className="center"></th>
+                      <th>Reviewer → Reviewee</th>
+                      <th>Review</th>
+                      <th className="center">Status</th>
+                      <th className="center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredReviews.map((r) => {
+                      const isExpanded = expandedReview === r.review_id
+                      const inFlight = moderating[r.review_id]
+                      const ringTone = r.is_flagged ? 'danger' : r.is_public ? 'good' : 'pending'
+                      const reviewerName = r.reviewer_role === 'organization' ? (r.org_name ?? 'Organization') : (`${r.expert_first_name ?? ''} ${r.expert_last_name ?? ''}`.trim() || 'Expert')
+                      const revieweeName = r.reviewer_role === 'organization' ? (`${r.expert_first_name ?? ''} ${r.expert_last_name ?? ''}`.trim() || 'Expert') : (r.org_name ?? 'Organization')
+                      return (
+                        <Fragment key={r.review_id}>
+                          <tr className={r.is_flagged ? 'attn' : ''}>
+                            <td className="center">
+                              <button
+                                className="btn btn-ghost btn-icon"
+                                onClick={() => setExpandedReview(isExpanded ? null : r.review_id)}
+                                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                              >
+                                {isExpanded ? '▾' : '▸'}
+                              </button>
+                            </td>
+                            <td>
+                              <div className="identity-cell">
+                                <span className={`avatar-ring ${ringTone}`}>
+                                  <span className="avatar">{initials(reviewerName)}</span>
+                                </span>
+                                <span className="id-text">
+                                  <span className="primary">{reviewerName} → {revieweeName}</span>
+                                  <span className="secondary"><span className={`badge role-${r.reviewer_role}`}>{r.reviewer_role}</span></span>
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="submission-cell">
+                                <span className="tag">★ {r.overall_rating}</span>
+                                {r.review_title && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.review_title}</span>}
+                              </div>
+                            </td>
+                            <td className="center">
+                              {r.is_flagged ? (
+                                <span className="badge pending">flagged</span>
+                              ) : (
+                                <span className={`badge ${r.is_public ? 'approved' : 'rejected'}`}>{r.is_public ? 'public' : 'hidden'}</span>
+                              )}
+                              <div className="submitted-date" style={{ marginTop: 4 }}>{new Date(r.created_at).toLocaleDateString()}</div>
+                            </td>
+                            <td className="center">
+                              <div className="actions-row">
+                                {r.is_flagged && (
+                                  <button
+                                    className="icon-btn approve"
+                                    disabled={inFlight}
+                                    title="Dismiss flag, keep visible"
+                                    onClick={() => handleModerateReview(r.review_id, { is_flagged: false })}
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="4 12.5 9.5 18 20 6" />
+                                    </svg>
+                                  </button>
+                                )}
+                                {r.is_public && (
+                                  <button
+                                    className="icon-btn reject"
+                                    disabled={inFlight}
+                                    title="Hide review"
+                                    onClick={() => handleModerateReview(r.review_id, { is_public: false, is_flagged: false })}
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+                                    </svg>
+                                  </button>
+                                )}
+                                {!r.is_public && (
+                                  <button
+                                    className="btn btn-sm btn-acc"
+                                    disabled={inFlight}
+                                    onClick={() => handleModerateReview(r.review_id, { is_public: true, is_flagged: false })}
+                                  >
+                                    Restore
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr className="expanded-detail">
+                              <td colSpan={5} style={{ background: 'var(--bg)' }}>
+                                <div style={{ padding: '4px 10px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                  {r.review_body && <p style={{ fontSize: 12.5 }}>{r.review_body}</p>}
+                                  {r.is_flagged && r.flagged_reason && (
+                                    <p style={{ fontSize: 12, color: 'var(--danger)' }}>Flagged: {r.flagged_reason}</p>
+                                  )}
+                                  <span className="lead" style={{ fontSize: 11 }}>
+                                    {r.engagement_title || labelize(r.engagement_type)} (engagement #{r.engagement_id})
+                                  </span>
                                 </div>
                               </td>
                             </tr>

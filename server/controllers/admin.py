@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from server.dependencies import require_role
-from server.models import admin_model, ai_verification, expert_model
+from server.models import admin_model, ai_verification, expert_model, review_model
 
 router = APIRouter(tags=["admin"])
 
@@ -25,6 +25,11 @@ class DecideVerificationBody(BaseModel):
 
 class VerifyProfileBody(BaseModel):
     is_verified: bool
+
+
+class AdminReviewPatch(BaseModel):
+    is_public: Optional[bool] = None
+    is_flagged: Optional[bool] = None
 
 
 @router.get("/admin/users")
@@ -54,6 +59,24 @@ async def list_verifications(
     return await admin_model.list_verifications(
         status=status_filter, verification_type=verification_type
     )
+
+
+@router.get("/admin/reviews")
+async def list_reviews(
+    is_flagged: Optional[bool] = Query(None),
+    current_user=Depends(require_role("admin")),
+):
+    return await review_model.admin_list(is_flagged=is_flagged)
+
+
+@router.patch("/admin/reviews/{review_id}")
+async def update_review(
+    review_id: int,
+    body: AdminReviewPatch,
+    current_user=Depends(require_role("admin")),
+):
+    updates = body.model_dump(exclude_none=True)
+    return await review_model.admin_update(review_id, updates)
 
 
 @router.patch("/admin/verifications/{verification_id}")

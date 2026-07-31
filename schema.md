@@ -36,6 +36,9 @@ budget_range                    TEXT -- 'under_10k' | '10k_50k' | '50k_250k' | '
 urgency_level                   TEXT -- 'just_exploring' | 'planning_ahead' | 'urgent' | 'critical'
 default_connection_expiry_days  INTEGER DEFAULT 30
 is_verified                     BOOLEAN DEFAULT false
+avg_rating                      NUMERIC(3,2) -- computed from expert->org reviews only;
+                                 -- content stays private to the org (+ admin), only this
+                                 -- aggregate is ever exposed elsewhere (see reviews below)
 created_at                      TIMESTAMP DEFAULT NOW()
 updated_at                      TIMESTAMP DEFAULT NOW()
 
@@ -524,6 +527,12 @@ created_at              TIMESTAMP DEFAULT NOW()
 
 ## 7. Trust & Reviews
 
+Storage is symmetric (one row per side, distinguished by `reviewer_role`), but
+visibility is not: an expert's reviews are public (`GET /experts/:id/reviews`);
+an org's are private to the org itself and admins (`GET /organizations/:id/reviews`)
+— everyone else only ever sees `organization_profiles.avg_rating`, never the
+review text. See api-contract.md §9.
+
 ```
 reviews
 ─────────────────────────────────────────────────────
@@ -533,10 +542,6 @@ reviewer_id               INTEGER REFERENCES users(user_id)
 reviewee_id                INTEGER REFERENCES users(user_id)
 reviewer_role              TEXT NOT NULL -- 'organization' | 'expert'
 overall_rating              SMALLINT NOT NULL -- 1–5
-communication_rating        SMALLINT -- 1–5
-expertise_rating            SMALLINT -- 1–5 (expert reviews only)
-timeliness_rating           SMALLINT -- 1–5
-value_rating                 SMALLINT -- 1–5: was it worth the cost?
 review_title                 TEXT
 review_body                  TEXT
 is_public                    BOOLEAN DEFAULT true

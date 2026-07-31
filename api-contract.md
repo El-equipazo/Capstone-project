@@ -799,43 +799,44 @@ Request:
 ```json
 {
   "overall_rating": 5,
-  "communication_rating": 5,
-  "expertise_rating": 5,
-  "timeliness_rating": 4,
-  "value_rating": 5,
   "review_title": "Exactly the independent audit we needed",
   "review_body": "Standards-grounded findings our engineers could act on.",
   "is_public": true
 }
 ```
 
-Server sets `reviewer_id`, `reviewee_id`, `reviewer_role` from the caller; recomputes the reviewee expert's `avg_rating`.
+Server sets `reviewer_id`, `reviewee_id`, `reviewer_role` from the caller (never the request body); recomputes the reviewee's `avg_rating` — `organization_profiles.avg_rating` on an expert→org review, `expert_profiles.avg_rating` on an org→expert review. Averages every non-flagged review of that side, public or private, regardless of what's shown externally.
 
 Response `201`.
-Errors: `422` engagement not `completed` · `409` this side already reviewed · `400` `expertise_rating` supplied on an expert→org review.
+Errors: `422` engagement not `completed` · `409` this side already reviewed.
 
 ### GET /experts/:expertId/reviews
 
-**Auth: Any role.** Public (`is_public = true`, not flagged) reviews, paginated, plus aggregate:
+**Auth: Any role.** Public (`is_public = true`, not flagged) org→expert reviews only, paginated, plus aggregate. Query params: `page`, `limit`, `q` (keyword search across `review_title`/`review_body`), `min_stars` (1–5, filters `overall_rating >=`), `sort` (`top` — highest-rated first, the default — or `recent`).
 
 ```json
 {
-  "aggregate": { "avg_overall": 4.85, "avg_communication": 4.90, "count": 12 },
-  "data": [ ... ]
+  "aggregate": { "avg_overall": 4.85, "count": 12 },
+  "data": [ ... ],
+  "pagination": { "page": 1, "limit": 20, "total_items": 12, "total_pages": 1 }
 }
 ```
 
+### GET /organizations/:orgId/reviews
+
+**Auth: owner or admin.** An org's own private view of every expert→org review left about them — full review text, no `is_public` filter. This is intentionally asymmetric with experts: an org's review *content* is never shown to anyone else, including the expert who wrote it after submission or other experts evaluating the org — only the aggregate `organization_profiles.avg_rating` field is ever exposed externally (e.g. on `GET /organizations/:orgId` itself, surfaced to an expert on an incoming connection request or in an active engagement).
+
 ### GET /engagements/:engagementId/reviews
 
-**Auth: participant or admin.** Both reviews (if present), including private ones.
+**Auth: participant or admin.** Both reviews (if present) for one specific engagement, including private ones — unpaginated (at most 2 rows).
 
 ### POST /reviews/:reviewId/flag
 
-**Auth: any authenticated user.** Body: `{ "flagged_reason": "Contains confidential client details" }` → `200` (sets `is_flagged`; hides from public listings pending admin review).
+**Auth: any authenticated user.** Body: `{ "flagged_reason": "Contains confidential client details" }` → `200` (sets `is_flagged`; hides from public listings pending admin review; recomputes the affected side's `avg_rating`).
 
 ### Admin moderation
 
-`GET /admin/reviews?is_flagged=true` · `PATCH /admin/reviews/:reviewId` (`{ "is_flagged": false }` or `{ "is_public": false }`) — **Auth: admin**
+`GET /admin/reviews?is_flagged=true` · `PATCH /admin/reviews/:reviewId` (`{ "is_flagged": false }` or `{ "is_public": false }`) — **Auth: admin**. Toggling `is_flagged` recomputes the affected side's `avg_rating`.
 
 ### File uploads
 

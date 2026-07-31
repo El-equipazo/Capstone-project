@@ -10,7 +10,7 @@ _ORG_COLS = (
     "org_profile_id, user_id, org_name, contact_name, contact_title, sector, sub_sector, "
     "founded_year, employee_count_range, country, state_province, website, org_description, "
     "quantum_knowledge_level, budget_range, urgency_level, "
-    "default_connection_expiry_days, is_verified, created_at, updated_at"
+    "default_connection_expiry_days, is_verified, avg_rating, created_at, updated_at"
 )
 
 _INFRA_COLS = (

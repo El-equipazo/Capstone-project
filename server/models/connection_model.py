@@ -129,7 +129,7 @@ async def list_requests(*, org_id=None, expert_id=None, status=None,
                    op.country, op.website, op.quantum_knowledge_level,
                    op.budget_range, op.urgency_level,
                    op.is_verified AS org_is_verified,
-                   op.contact_name, op.contact_title
+                   op.contact_name, op.contact_title, op.avg_rating AS org_avg_rating
             FROM connection_requests cr
             JOIN organization_profiles op ON op.org_profile_id = cr.org_id
             {clause}

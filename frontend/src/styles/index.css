@@ -436,6 +436,21 @@ button, input, select, textarea {
   white-space: nowrap;
 }
 
+.star-input-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px;
+  color: var(--acc);
+}
+
+.star-input-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .tag-input-chip {
   display: inline-flex;
   align-items: center;

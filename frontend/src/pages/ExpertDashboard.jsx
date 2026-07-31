@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
 import MilestoneMap from '../components/MilestoneMap'
+import RatingStars from '../components/RatingStars'
 import TagInput from '../components/organization/TagInput'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
@@ -716,7 +717,11 @@ export default function ExpertDashboard() {
     .map((c) => ({ id: `conn-${c.connection_id}`, label: c.org_name, status: c.status, link: null }))
   const _pastEngagements = engagements
     .filter((e) => ['completed', 'cancelled'].includes(e.status))
-    .map((e) => ({ id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status, link: `/engagements/${e.engagement_id}` }))
+    .map((e) => ({
+      id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status,
+      link: `/engagements/${e.engagement_id}`,
+      needsReview: e.status === 'completed' && !e.my_review_submitted,
+    }))
   const allPastItems = [..._pastConnections, ..._pastEngagements]
 
   const DISMISSED_KEY = `qc_dismissed_${user?.user_id}`
@@ -839,6 +844,7 @@ export default function ExpertDashboard() {
                             <p style={{ fontSize: 12.5, color: 'var(--fg-muted, #666)', margin: 0 }}>{c.org_description}</p>
                           )}
                           <div className="row gap-8 wrap">
+                            {c.org_avg_rating != null && <RatingStars rating={c.org_avg_rating} label="org reviews" />}
                             {c.employee_count_range && <span className="tag" style={{ fontSize: 11 }}>{c.employee_count_range} employees</span>}
                             {c.country && <span className="tag" style={{ fontSize: 11 }}>{c.country}</span>}
                             {c.budget_range && <span className="tag" style={{ fontSize: 11 }}>{BUDGET_RANGE_LABEL[c.budget_range] ?? labelize(c.budget_range)}</span>}
@@ -1000,6 +1006,11 @@ export default function ExpertDashboard() {
                           <span style={{ fontSize: 12.5 }}>{item.label}</span>
                         )}
                         <span className="tag" style={{ fontSize: 11 }}>{labelize(item.status)}</span>
+                        {item.needsReview && (
+                          <Link to={item.link} className="badge" style={{ fontSize: 11 }}>
+                            Review available
+                          </Link>
+                        )}
                       </div>
                       <button
                         className="btn btn-sm"
