@@ -21,7 +21,7 @@ from server.models.errors import (
 from server.storage import UPLOAD_DIR
 from server.controllers import (
     admin, auth, connections, engagements, experts, notifications,
-    organizations, threads, uploads, verifications,
+    organizations, reviews, threads, uploads, verifications,
 )
 
 
@@ -142,6 +142,7 @@ app.include_router(threads.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(verifications.router, prefix="/api/v1")
 app.include_router(uploads.router, prefix="/api/v1")
+app.include_router(reviews.router, prefix="/api/v1")
 
 # --- SPA static file serving (must come after all API routers) ---
 # In production the Vite build lands at frontend/dist. API routes above always

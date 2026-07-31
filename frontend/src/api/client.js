@@ -211,6 +211,12 @@ export const organizationsApi = {
       headers: authHeader(),
     })
   },
+
+  // Private -- full review text, owner/admin only. Everyone else only ever
+  // sees this org's aggregate avg_rating field.
+  async getMyReviews(orgId) {
+    return await apiFetch(`/organizations/${orgId}/reviews`, { headers: authHeader() })
+  },
 }
 
 // ---------------- Connections ------------------------------------------------
@@ -477,6 +483,58 @@ export const adminApi = {
     return await apiFetch(`/admin/organizations/${orgProfileId}/verify`, {
       method: 'PATCH',
       body: { is_verified: true },
+      headers: authHeader(),
+    })
+  },
+
+  async listReviews({ is_flagged } = {}) {
+    const params = new URLSearchParams()
+    if (is_flagged != null) params.set('is_flagged', is_flagged)
+    const qs = params.toString() ? `?${params}` : ''
+    return await apiFetch(`/admin/reviews${qs}`, { headers: authHeader() })
+  },
+
+  async updateReview(reviewId, patch) {
+    return await apiFetch(`/admin/reviews/${reviewId}`, {
+      method: 'PATCH',
+      body: patch,
+      headers: authHeader(),
+    })
+  },
+}
+
+// ---------------- Reviews -----------------------------------------------------
+
+export const reviewsApi = {
+  async create(engagementId, data) {
+    return await apiFetch(`/engagements/${engagementId}/reviews`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  // GET /experts/:id/reviews returns { data, pagination, aggregate } -- unlike
+  // most list() helpers, this deliberately does NOT unwrap to .data, since
+  // callers need the aggregate and pagination alongside the review rows.
+  async listForExpert(expertId, { page = 1, limit = 10, q, minStars, sort } = {}) {
+    const params = new URLSearchParams({ page, limit })
+    if (q) params.set('q', q)
+    if (minStars) params.set('min_stars', minStars)
+    if (sort) params.set('sort', sort)
+    return await apiFetch(`/experts/${expertId}/reviews?${params}`)
+  },
+
+  // Participant/admin only -- both sides' reviews (including private ones)
+  // for one engagement. Small, unpaginated result set (at most 2 rows).
+  async listForEngagement(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/reviews`, { headers: authHeader() })
+  },
+
+  async flag(reviewId, flaggedReason) {
+    return await apiFetch(`/reviews/${reviewId}/flag`, {
+      method: 'POST',
+      body: { flagged_reason: flaggedReason },
       headers: authHeader(),
     })
   },

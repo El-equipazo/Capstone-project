@@ -97,6 +97,7 @@ async def seed():
                 urgency_level                  TEXT,
                 default_connection_expiry_days INTEGER DEFAULT 30,
                 is_verified                    BOOLEAN DEFAULT false,
+                avg_rating                     NUMERIC(3,2),
                 created_at                     TIMESTAMP DEFAULT NOW(),
                 updated_at                     TIMESTAMP DEFAULT NOW()
             )
@@ -426,10 +427,6 @@ async def seed():
                 reviewee_id            INTEGER REFERENCES users(user_id),
                 reviewer_role          TEXT NOT NULL,
                 overall_rating         SMALLINT NOT NULL CHECK (overall_rating BETWEEN 1 AND 5),
-                communication_rating   SMALLINT CHECK (communication_rating BETWEEN 1 AND 5),
-                expertise_rating       SMALLINT CHECK (expertise_rating BETWEEN 1 AND 5),
-                timeliness_rating      SMALLINT CHECK (timeliness_rating BETWEEN 1 AND 5),
-                value_rating           SMALLINT CHECK (value_rating BETWEEN 1 AND 5),
                 review_title           TEXT,
                 review_body            TEXT,
                 is_public              BOOLEAN DEFAULT true,
@@ -539,7 +536,7 @@ async def seed():
                 website="https://www.firstcommunitybankny.com",
                 org_description="A regional community bank serving the Hudson Valley since 1987, storing decades of customer financial and mortgage records.",
                 quantum_knowledge_level="basic", budget_range="50k_250k", urgency_level="urgent",
-                default_connection_expiry_days=14, is_verified=True,
+                default_connection_expiry_days=14, is_verified=True, avg_rating=4.7,
                 infrastructure=dict(
                     data_categories=["customer_financial_records", "mortgage_data", "SSNs", "transaction_history"],
                     storage_type="hybrid",
@@ -560,7 +557,7 @@ async def seed():
                 website="https://www.medicore-health.com",
                 org_description="MediCore Health Systems operates a network of 12 hospitals and 45 outpatient clinics across California, handling electronic health records, medical imaging, and insurance billing systems.",
                 quantum_knowledge_level="intermediate", budget_range="250k_1m", urgency_level="high",
-                default_connection_expiry_days=30, is_verified=True,
+                default_connection_expiry_days=30, is_verified=True, avg_rating=4.4,
                 infrastructure=dict(
                     data_categories=["electronic_health_records", "medical_imaging", "insurance_billing", "patient_pii"],
                     storage_type="cloud",
@@ -587,15 +584,15 @@ async def seed():
                     user_id, org_name, contact_name, contact_title, sector, sub_sector, founded_year,
                     employee_count_range, country, state_province, website,
                     org_description, quantum_knowledge_level, budget_range,
-                    urgency_level, default_connection_expiry_days, is_verified
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                    urgency_level, default_connection_expiry_days, is_verified, avg_rating
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
                 RETURNING org_profile_id
             """,
                 org_user["user_id"], org["org_name"], org["contact_name"], org["contact_title"],
                 org["sector"], org["sub_sector"], org["founded_year"], org["employee_count_range"],
                 org["country"], org["state_province"], org["website"], org["org_description"],
                 org["quantum_knowledge_level"], org["budget_range"], org["urgency_level"],
-                org["default_connection_expiry_days"], org["is_verified"],
+                org["default_connection_expiry_days"], org["is_verified"], org.get("avg_rating"),
             )
 
             infra = org["infrastructure"]
@@ -1127,6 +1124,20 @@ async def seed():
                          order_index=4, due_in_weeks=16, deliverable_description="Final roadmap PDF",
                          status="completed", confirmed_days_ago=108, completed_days_ago=5),
                 ],
+                reviews=[
+                    dict(reviewer_role="organization", overall_rating=5,
+                         review_title="Thorough, standards-grounded roadmap",
+                         review_body="Dr. Patel's migration plan was exactly what our board needed -- "
+                                      "clear phasing, realistic timelines, and defensible against our examiners.",
+                         is_public=True, days_ago=4),
+                    dict(reviewer_role="expert", overall_rating=5,
+                         review_title="Responsive, well-prepared client",
+                         review_body="First Community's team came prepared to every working session "
+                                      "and made decisions quickly -- a model client for this kind of engagement.",
+                         is_public=True, is_flagged=True,
+                         flagged_reason="Contains a specific internal-reorg detail the org asked to redact",
+                         days_ago=4),
+                ],
             ),
             dict(
                 org_email="cto@firstcommunitybankny.com", expert_email="a.bello@auditpqc.com",
@@ -1259,6 +1270,26 @@ async def seed():
                     m.get("deliverable_description"), m["status"],
                     confirmed_by_expert_id, confirmed_at,
                     m.get("requires_client_approval", False), completed_at,
+                )
+
+            # reviews.avg_rating on expert/organization profiles is hand-curated
+            # above, independent of the actual seeded engagement/review counts
+            # (mirrors how total_completed_engagements is already hand-set rather
+            # than derived) -- these inserts are NOT followed by a recompute.
+            for r in eng.get("reviews", []):
+                reviewer_user_id = org_user_id if r["reviewer_role"] == "organization" else expert_user_id
+                reviewee_user_id = expert_user_id if r["reviewer_role"] == "organization" else org_user_id
+                review_created_at = now - timedelta(days=r["days_ago"])
+                await conn.execute("""
+                    INSERT INTO reviews (
+                        engagement_id, reviewer_id, reviewee_id, reviewer_role,
+                        overall_rating, review_title, review_body,
+                        is_public, is_flagged, flagged_reason, created_at
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                """,
+                    engagement["engagement_id"], reviewer_user_id, reviewee_user_id, r["reviewer_role"],
+                    r["overall_rating"], r.get("review_title"), r.get("review_body"),
+                    r.get("is_public", True), r.get("is_flagged", False), r.get("flagged_reason"), review_created_at,
                 )
 
         return {
