@@ -84,13 +84,24 @@ async def create_review(
 
 @router.get("/engagements/{engagement_id}/reviews")
 async def list_engagement_reviews(engagement_id: int, current_user=Depends(get_current_user)):
+    is_admin = current_user["role"] == "admin"
     is_p, _, _ = await engagement_model.is_participant(engagement_id, current_user["user_id"])
-    if not is_p and current_user["role"] != "admin":
+    if not is_p and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": {"code": "FORBIDDEN", "message": "Not a participant in this engagement"}},
         )
-    return await review_model.get_for_engagement(engagement_id)
+
+    rows = await review_model.get_for_engagement(engagement_id)
+    if is_admin:
+        return rows
+
+    # Blind the counterparty's review until the caller has submitted their
+    # own -- otherwise a participant could read the other side's rating/text
+    # via this endpoint before writing (or without ever writing) theirs,
+    # even though the frontend only checks existence and never renders it.
+    my_submitted = any(r["reviewer_id"] == current_user["user_id"] for r in rows)
+    return rows if my_submitted else []
 
 
 @router.get("/experts/{expert_id}/reviews")
@@ -115,4 +126,20 @@ async def list_expert_reviews(
 
 @router.post("/reviews/{review_id}/flag")
 async def flag_review(review_id: int, body: ReviewFlag, current_user=Depends(get_current_user)):
+    review = await review_model.get(review_id)
+    is_admin = current_user["role"] == "admin"
+    is_p, _, _ = await engagement_model.is_participant(review["engagement_id"], current_user["user_id"])
+    if not is_p and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "Not a participant in this engagement"}},
+        )
+    # A review's own reviewee flagging it themselves would let them suppress
+    # a negative review the moment they see it -- is_flagged takes effect
+    # immediately (no admin approval gate), so this can't be caught later.
+    if current_user["user_id"] == review["reviewee_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "You cannot flag a review of yourself"}},
+        )
     return await review_model.flag(review_id, body.flagged_reason)

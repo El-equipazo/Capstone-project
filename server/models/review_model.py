@@ -106,6 +106,13 @@ async def create(
     return dict(row)
 
 
+async def get(review_id: int) -> dict:
+    row = await pool.fetchrow("SELECT * FROM reviews WHERE review_id = $1", review_id)
+    if row is None:
+        raise NotFoundError("review not found")
+    return dict(row)
+
+
 async def get_for_engagement(engagement_id: int) -> list:
     rows = await pool.fetch(
         "SELECT * FROM reviews WHERE engagement_id = $1 ORDER BY reviewer_role ASC",

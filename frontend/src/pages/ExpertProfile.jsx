@@ -90,6 +90,7 @@ export default function ExpertProfile() {
   const [flaggingId, setFlaggingId] = useState(null) // review_id currently showing the report form
   const [flagReason, setFlagReason] = useState('')
   const [flagged, setFlagged] = useState({}) // { [review_id]: true } after a successful report
+  const [flagError, setFlagError] = useState('')
 
   useEffect(() => {
     setReviewsLoading(true)
@@ -518,20 +519,26 @@ export default function ExpertProfile() {
                                 try {
                                   await reviewsApi.flag(r.review_id, flagReason.trim())
                                   setFlagged((p) => ({ ...p, [r.review_id]: true }))
-                                } finally {
                                   setFlaggingId(null); setFlagReason('')
+                                } catch (err) {
+                                  setFlagError(
+                                    err.status === 403
+                                      ? 'Only participants in this engagement can report this review.'
+                                      : err.body?.error?.message || 'Could not submit report.'
+                                  )
                                 }
                               }}
                             >
                               Submit
                             </button>
-                            <button className="btn btn-sm" onClick={() => { setFlaggingId(null); setFlagReason('') }}>Cancel</button>
+                            <button className="btn btn-sm" onClick={() => { setFlaggingId(null); setFlagReason(''); setFlagError('') }}>Cancel</button>
+                            {flagError && <span className="lead" style={{ fontSize: 10.5, color: 'var(--err, #e53)' }}>{flagError}</span>}
                           </div>
                         ) : user ? (
                           <button
                             className="btn btn-sm"
                             style={{ padding: '1px 8px', fontSize: 10.5, alignSelf: 'flex-start' }}
-                            onClick={() => { setFlaggingId(r.review_id); setFlagReason('') }}
+                            onClick={() => { setFlaggingId(r.review_id); setFlagReason(''); setFlagError('') }}
                           >
                             Report
                           </button>
