@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import RecommendationCard from '../components/matching/RecommendationCard'
 import RatingStars from '../components/RatingStars'
+import ChangePasswordCard from '../components/ChangePasswordCard'
 import TagInput from '../components/organization/TagInput'
 import { labelize, BUDGET_RANGE_LABEL, toNumberOrNull } from '../utils/format'
 
@@ -532,7 +533,8 @@ export default function OrganizationDashboard() {
         )}
 
         {tab === 'profile' && (
-          <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 640 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 640 }}>
+          <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <span className="section-label">Profile</span>
 
             <div className="row gap-10">
@@ -637,6 +639,9 @@ export default function OrganizationDashboard() {
               {saving ? 'Saving…' : 'Save changes'}
             </button>
           </form>
+
+          <ChangePasswordCard />
+          </div>
         )}
 
         {tab === 'infrastructure' && (
