@@ -178,9 +178,14 @@ async def hard_delete(user_id: int) -> None:
       4. users -- cascades to organization_profiles, organization_infrastructure,
          notifications, and verification_records
 
-    Every expert who had an engagement with this org is then notified that
-    the org left and its data is gone -- captured before the delete, since
-    engagements (and the org's name) won't exist to query afterward.
+    Every expert this org has EVER contacted is then notified that the org
+    left and its data is gone -- not just experts with a formal engagement.
+    POST /threads only requires role=organization (see threads.py), not an
+    organization_profiles row, so a chat thread (and thus messages) can
+    exist for this user_id even with no org profile at all -- collected via
+    chat_threads in addition to engagements/connection_requests, and
+    everything is captured before the delete since it won't exist to query
+    afterward.
 
     All in one transaction: either the whole account disappears (with
     notifications sent) or none of it does.
@@ -190,10 +195,19 @@ async def hard_delete(user_id: int) -> None:
             "SELECT org_profile_id, org_name FROM organization_profiles WHERE user_id = $1",
             user_id,
         )
-        expert_user_ids: list[int] = []
+        user_row = await conn.fetchrow("SELECT email FROM users WHERE user_id = $1", user_id)
+        org_name = org["org_name"] if org is not None else (user_row["email"] if user_row else "An organization")
+
+        expert_user_ids: set[int] = set()
+        thread_rows = await conn.fetch(
+            "SELECT DISTINCT expert_user_id FROM chat_threads WHERE org_user_id = $1",
+            user_id,
+        )
+        expert_user_ids.update(r["expert_user_id"] for r in thread_rows)
+
         if org is not None:
             org_id = org["org_profile_id"]
-            expert_rows = await conn.fetch(
+            engagement_rows = await conn.fetch(
                 """
                 SELECT DISTINCT ep.user_id
                 FROM engagements e
@@ -202,22 +216,33 @@ async def hard_delete(user_id: int) -> None:
                 """,
                 org_id,
             )
-            expert_user_ids = [r["user_id"] for r in expert_rows]
+            expert_user_ids.update(r["user_id"] for r in engagement_rows)
+
+            connection_rows = await conn.fetch(
+                """
+                SELECT DISTINCT ep.user_id
+                FROM connection_requests cr
+                JOIN expert_profiles ep ON ep.expert_profile_id = cr.expert_id
+                WHERE cr.org_id = $1
+                """,
+                org_id,
+            )
+            expert_user_ids.update(r["user_id"] for r in connection_rows)
+
             await conn.execute("DELETE FROM engagements WHERE org_id = $1", org_id)
             await conn.execute("DELETE FROM connection_requests WHERE org_id = $1", org_id)
+
         await conn.execute("DELETE FROM chat_threads WHERE org_user_id = $1", user_id)
         await conn.execute("DELETE FROM users WHERE user_id = $1", user_id)
 
-        if org is not None:
-            org_name = org["org_name"]
-            for expert_user_id in expert_user_ids:
-                await conn.execute(
-                    """
-                    INSERT INTO notifications (user_id, type, title, body)
-                    VALUES ($1, 'organization_deleted', $2, $3)
-                    """,
-                    expert_user_id,
-                    f"{org_name} has left the platform",
-                    "This organization deleted its account, and all engagement, "
-                    "message, and milestone history with them has been permanently removed.",
-                )
+        for expert_user_id in expert_user_ids:
+            await conn.execute(
+                """
+                INSERT INTO notifications (user_id, type, title, body)
+                VALUES ($1, 'organization_deleted', $2, $3)
+                """,
+                expert_user_id,
+                f"{org_name} has left the platform",
+                "This organization deleted its account, and all engagement, "
+                "message, and milestone history with them has been permanently removed.",
+            )

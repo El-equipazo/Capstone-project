@@ -172,7 +172,13 @@ Errors: `401` bad credentials · `403` account deactivated (`is_active = false`)
 
 ### DELETE /auth/me
 
-**Auth: Any role.** Soft-deactivate (`is_active = false`). → `204`
+**Auth: Any role.** → `204`
+
+- **Organization:** hard delete. Permanently erases the account and everything
+  tied to it — engagements, connection requests, chat threads/messages, and
+  milestones shared with every expert it worked with. Each affected expert
+  gets an `organization_deleted` notification. Irreversible.
+- **Expert / admin:** soft-deactivate (`is_active = false`) — unchanged.
 
 ---
 

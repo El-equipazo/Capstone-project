@@ -647,7 +647,9 @@ export default function OrganizationDashboard() {
           <div className="card" style={{ padding: 22, maxWidth: 640, marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span className="section-label">Danger zone</span>
             <p className="lead" style={{ fontSize: 12.5 }}>
-              Deleting your account deactivates it immediately and signs you out. This cannot be undone.
+              Deleting your account permanently erases it — along with every engagement, connection
+              request, chat message, and milestone shared with experts you've worked with. Affected
+              experts will be notified that you've left. This cannot be undone.
             </p>
             <button
               type="button"

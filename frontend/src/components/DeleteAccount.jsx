@@ -41,6 +41,12 @@ export default function DeleteAccount({ orgName, onClose, onDeleted }) {
           Delete &quot;{orgName}&quot; account
         </h2>
 
+        <div className="alert alert-error">
+          This permanently deletes your account, along with every engagement, connection request,
+          chat message, and milestone shared with experts you've worked with. Affected experts will
+          be notified that you've left. This cannot be undone.
+        </div>
+
         {error && <div className="alert alert-error">{error}</div>}
 
         <div className="field-group">
