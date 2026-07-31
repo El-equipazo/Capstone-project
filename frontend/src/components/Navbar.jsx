@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useLanguage } from '../context/LanguageContext'
+import { LANGUAGE_OPTIONS } from '../i18n/translations'
 import NotificationBell from './NotificationBell'
+import LanguagePopup from './LanguagePopup'
 
 function initials(str) {
   const words = (str || '').replace(/[^a-zA-Z\s]/g, ' ').trim().split(/\s+/).filter(Boolean)
@@ -11,15 +14,52 @@ function initials(str) {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
+function SunIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  )
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  )
+}
+
 export default function Navbar() {
   const { user, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const { language, t } = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
   const isLanding = location.pathname === '/'
   const [scrolled, setScrolled] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [showLanguagePopup, setShowLanguagePopup] = useState(false)
   const accountRef = useRef(null)
+  const currentLanguageName = LANGUAGE_OPTIONS.find((o) => o.code === language)?.name ?? language
 
   useEffect(() => {
     if (!accountOpen) return
@@ -61,23 +101,14 @@ export default function Navbar() {
         </Link>
         <div className="nav-right">
           <nav className="nav-links">
-            <NavLink to="/experts">Browse experts</NavLink>
-            <NavLink to="/how-it-works">How it works</NavLink>
-            {user?.role === 'expert' && <NavLink to="/dashboard">Dashboard</NavLink>}
-            {user?.role === 'organization' && <NavLink to="/organization">Dashboard</NavLink>}
-            {user?.role === 'admin' && <NavLink to="/admin">Admin</NavLink>}
-            {!user && <Link to="/login">Sign in</Link>}
+            <NavLink to="/experts">{t('nav.browseExperts')}</NavLink>
+            <NavLink to="/how-it-works">{t('nav.howItWorks')}</NavLink>
+            {user?.role === 'expert' && <NavLink to="/dashboard">{t('nav.dashboard')}</NavLink>}
+            {user?.role === 'organization' && <NavLink to="/organization">{t('nav.dashboard')}</NavLink>}
+            {user?.role === 'admin' && <NavLink to="/admin">{t('nav.admin')}</NavLink>}
+            {!user && <Link to="/login">{t('nav.signIn')}</Link>}
           </nav>
           <div className="nav-actions">
-            <button
-              type="button"
-              className="theme-toggle"
-              onClick={toggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
             <NotificationBell />
             {user ? (
               <div className="account-wrap" ref={accountRef}>
@@ -94,20 +125,31 @@ export default function Navbar() {
                         <span className={`badge role-${user.role}`}>{user.role}</span>
                       </div>
                     </div>
-                    <button className="account-row" onClick={handleLogout}>
-                      Sign out
+                    <button type="button" className="account-row" onClick={toggleTheme}>
+                      {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+                      <span className="account-row-label">{t('nav.darkMode')}</span>
+                      <span className="account-row-value">{theme === 'dark' ? t('nav.on') : t('nav.off')}</span>
+                    </button>
+                    <button type="button" className="account-row" onClick={() => { setShowLanguagePopup(true); setAccountOpen(false) }}>
+                      <GlobeIcon />
+                      <span className="account-row-label">{t('nav.language')}</span>
+                      <span className="account-row-value">{currentLanguageName}</span>
+                    </button>
+                    <button className="account-row danger" onClick={handleLogout}>
+                      {t('nav.signOut')}
                     </button>
                   </div>
                 )}
               </div>
             ) : (
               <Link to="/sign-up" className="btn btn-acc">
-                Get started
+                {t('nav.getStarted')}
               </Link>
             )}
           </div>
         </div>
       </div>
+      {showLanguagePopup && <LanguagePopup onClose={() => setShowLanguagePopup(false)} />}
     </header>
   )
 }

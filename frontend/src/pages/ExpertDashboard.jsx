@@ -924,7 +924,7 @@ export default function ExpertDashboard() {
                             <input
                               className="field-input"
                               type="date"
-                              min={todayStr}
+                              min={timelineForm.start_date || todayStr}
                               value={timelineForm.estimated_end_date}
                               onChange={(e) => setTimelineForm((p) => ({ ...p, estimated_end_date: e.target.value }))}
                             />

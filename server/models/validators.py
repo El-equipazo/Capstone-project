@@ -45,6 +45,15 @@ def check_not_past(value, field):
             )
 
 
+def check_date_order(start, end, start_field="start_date", end_field="estimated_end_date"):
+    """An end date can't fall before its paired start date."""
+    if start is not None and end is not None and end < start:
+        raise ValidationError(
+            f"{end_field} cannot be before {start_field}",
+            field=end_field, issue="date_before_start",
+        )
+
+
 def check_rate_range(rate_min, rate_max):
     """expert_profiles.hourly_rate_min must be <= hourly_rate_max."""
     if rate_min is not None and rate_max is not None and rate_min > rate_max:

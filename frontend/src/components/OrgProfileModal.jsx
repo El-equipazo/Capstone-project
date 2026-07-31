@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { organizationsApi, engagementsApi } from '../api/client'
+import { useEffect, useState } from 'react'
+import { organizationsApi } from '../api/client'
 import { labelize, BUDGET_RANGE_LABEL } from '../utils/format'
 
 function Field({ label, value }) {
@@ -12,34 +12,15 @@ function Field({ label, value }) {
   )
 }
 
-export default function OrgProfileModal({ orgId, engagementId, onClose }) {
+export default function OrgProfileModal({ orgId, onClose }) {
   const [org, setOrg] = useState(null)
   const [error, setError] = useState('')
-
-  const [notes, setNotes] = useState('')
-  const [notesStatus, setNotesStatus] = useState('') // '' | 'saving' | 'saved'
-  const notesLoaded = useRef(false)
 
   useEffect(() => {
     organizationsApi.getById(orgId)
       .then(setOrg)
       .catch(() => setError('Could not load organization profile.'))
-    engagementsApi.getNotes(engagementId)
-      .then((res) => { setNotes(res.content || ''); notesLoaded.current = true })
-      .catch(() => { notesLoaded.current = true })
-  }, [orgId, engagementId])
-
-  async function saveNotes() {
-    if (!notesLoaded.current) return
-    setNotesStatus('saving')
-    try {
-      await engagementsApi.updateNotes(engagementId, notes)
-      setNotesStatus('saved')
-      setTimeout(() => setNotesStatus(''), 1500)
-    } catch {
-      setNotesStatus('')
-    }
-  }
+  }, [orgId])
 
   return (
     <div
@@ -90,22 +71,6 @@ export default function OrgProfileModal({ orgId, engagementId, onClose }) {
               <div style={{ flex: 1 }}>
                 <Field label="Urgency" value={org.urgency_level ? labelize(org.urgency_level) : null} />
               </div>
-            </div>
-
-            <div className="field-group" style={{ marginTop: 8, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <label className="field-label">My Notes</label>
-                {notesStatus === 'saving' && <span className="lead" style={{ fontSize: 11 }}>Saving…</span>}
-                {notesStatus === 'saved' && <span className="lead" style={{ fontSize: 11 }}>Saved</span>}
-              </div>
-              <textarea
-                className="field-input"
-                rows={5}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                onBlur={saveNotes}
-                placeholder="Private notes only you can see…"
-              />
             </div>
           </div>
         )}

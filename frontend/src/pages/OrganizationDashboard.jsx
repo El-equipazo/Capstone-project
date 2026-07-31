@@ -341,25 +341,25 @@ export default function OrganizationDashboard() {
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{labelize(profile.urgency_level)}</span>
-                  <span className="l">urgency</span>
+                  <span className="l">Urgency</span>
                 </div>
               </div>
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{BUDGET_RANGE_LABEL[profile.budget_range]}</span>
-                  <span className="l">budget range</span>
+                  <span className="l">Budget Range</span>
                 </div>
               </div>
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{labelize(profile.quantum_knowledge_level)}</span>
-                  <span className="l">quantum knowledge</span>
+                  <span className="l">Quantum Knowledge</span>
                 </div>
               </div>
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{profile.employee_count_range}</span>
-                  <span className="l">employees</span>
+                  <span className="l">Employees</span>
                 </div>
               </div>
             </div>

@@ -366,13 +366,15 @@ button, input, select, textarea {
 }
 
 .account-row {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   text-align: left;
   padding: 11px 16px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--danger);
+  color: var(--ink);
   background: none;
   border: none;
   cursor: pointer;
@@ -380,6 +382,20 @@ button, input, select, textarea {
 
 .account-row:hover {
   background: var(--fill2);
+}
+
+.account-row.danger {
+  color: var(--danger);
+}
+
+.account-row-label {
+  flex: 1;
+}
+
+.account-row-value {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
 }
 
 /* ---------- Buttons ---------- */
@@ -434,27 +450,6 @@ button, input, select, textarea {
 
 .btn-danger:disabled {
   cursor: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+PHRleHQgeD0iMSIgeT0iMTkiIGZvbnQtc2l6ZT0iMTgiPvCfmqs8L3RleHQ+PC9zdmc+') 12 12, not-allowed;
-}
-
-/* ---------- Theme toggle ---------- */
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1.5px solid var(--line);
-  background: var(--paper);
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  transition: opacity 0.15s ease, border-color 0.15s ease;
-}
-
-.theme-toggle:hover {
-  opacity: 0.8;
 }
 
 .btn-sm {
@@ -657,8 +652,8 @@ button, input, select, textarea {
   width: 17px;
   height: 17px;
   border-radius: 50%;
-  background: var(--ink);
-  color: #fff;
+  background: var(--solid);
+  color: var(--solid-fg);
   font-size: 9.5px;
   display: flex;
   align-items: center;
@@ -888,6 +883,8 @@ button, input, select, textarea {
   font-size: 14px;
   color: var(--ink);
   background: var(--paper);
+  max-width: 100%;
+  resize: none;
 }
 
 /* Native date-picker calendar glyph renders black regardless of theme
@@ -901,7 +898,7 @@ button, input, select, textarea {
   :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(1);
   }
-}
+}Delete account
 
 .field-input:focus {
   outline: none;
@@ -1401,7 +1398,7 @@ button, input, select, textarea {
   align-items: center;
   gap: 8px;
   background: #fff;
-  color: var(--ink);
+  color: #1a1a1a;
   border: none;
   border-radius: 999px;
   padding: 13px 24px;
@@ -1418,7 +1415,7 @@ button, input, select, textarea {
 
 /* ---------- Landing page: verification band ---------- */
 .verify-band {
-  background: var(--ink);
+  background: #1a1a1a;
   border-radius: var(--radius-lg);
   padding: 30px 32px;
   margin-bottom: 56px;
@@ -2059,9 +2056,9 @@ button, input, select, textarea {
 }
 
 .onboard-step.on .n {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
+  border-color: var(--solid);
+  background: var(--solid);
+  color: var(--solid-fg);
 }
 
 .onboard-step.done .n {

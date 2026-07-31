@@ -5,7 +5,7 @@ from jose import JWTError, jwt
 
 from server.config import settings
 from server.dependencies import get_current_user
-from server.models import user_model
+from server.models import organization_model, user_model
 from server.models.errors import AuthenticationError, DeactivatedError
 from server.schemas.auth import (
     LoginRequest,
@@ -165,5 +165,11 @@ async def update_me(body: UpdateMeRequest, current_user=Depends(get_current_user
 
 @router.delete("/auth/me", status_code=204)
 async def delete_me(current_user=Depends(get_current_user)):
-    await user_model.deactivate(current_user["user_id"])
+    # Organizations get a real, permanent delete (see organization_model.hard_delete
+    # for why engagements/connection_requests need explicit cleanup first).
+    # Experts and admins still just get deactivated -- unchanged for now.
+    if current_user["role"] == "organization":
+        await organization_model.hard_delete(current_user["user_id"])
+    else:
+        await user_model.deactivate(current_user["user_id"])
     return Response(status_code=204)
