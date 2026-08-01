@@ -308,6 +308,12 @@ async def seed():
                 cancellation_reason      TEXT,
                 proposal_feedback        TEXT,
                 proposal_expires_at      TIMESTAMP,
+                pending_start_date               DATE,
+                pending_estimated_end_date       DATE,
+                pending_agreed_budget            NUMERIC(12,2),
+                pending_payment_structure        TEXT,
+                pending_requested_by_user_id     INTEGER REFERENCES users(user_id),
+                pending_requested_at             TIMESTAMP,
                 created_at               TIMESTAMP DEFAULT NOW(),
                 updated_at               TIMESTAMP DEFAULT NOW()
             )
