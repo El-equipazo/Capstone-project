@@ -8,7 +8,7 @@ from datetime import date
 from server.db import connection_pool as pool
 from .enums import ENGAGEMENT_STATUS, ENGAGEMENT_TYPE, PAYMENT_STRUCTURE
 from .errors import ConflictError, NotFoundError, TransitionError, ValidationError
-from .validators import check_enum, check_not_past
+from .validators import check_date_order, check_enum, check_not_past
 
 _TERMINAL = {"completed", "cancelled"}
 _MUTABLE_FIELDS = {
@@ -362,6 +362,14 @@ async def propose_terms_change(engagement_id: int, user_id: int, **fields) -> di
     # a party corrects the recorded start_date, not just schedules a future one.
     check_not_past(proposed.get("estimated_end_date"), "estimated_end_date")
     check_enum(proposed.get("payment_structure"), PAYMENT_STRUCTURE, "payment_structure", allow_none=True)
+    # A proposal can touch just one of the two date fields -- validate against
+    # the *effective* pair (proposed value, else the engagement's current
+    # value) so a lone start_date/estimated_end_date change can't sneak past
+    # the other side's existing date.
+    check_date_order(
+        proposed.get("start_date", existing["start_date"]),
+        proposed.get("estimated_end_date", existing["estimated_end_date"]),
+    )
 
     if (existing["pending_requested_by_user_id"] is not None
             and existing["pending_requested_by_user_id"] != user_id):
@@ -392,6 +400,13 @@ async def accept_terms_change(engagement_id: int) -> dict:
     existing = await get(engagement_id)
     if existing["pending_requested_by_user_id"] is None:
         raise TransitionError("No pending terms change to accept")
+
+    # Mirrors the COALESCE below -- re-validated here (not just at propose
+    # time) as a backstop against pre-existing bad data on either date field.
+    check_date_order(
+        existing["pending_start_date"] or existing["start_date"],
+        existing["pending_estimated_end_date"] or existing["estimated_end_date"],
+    )
 
     row = await pool.fetchrow(
         """
