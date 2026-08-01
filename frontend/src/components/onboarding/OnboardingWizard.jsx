@@ -9,6 +9,10 @@ const URGENCY_OPTIONS = ['just_exploring', 'planning_ahead', 'urgent', 'critical
 
 const STEP_LABELS = ['Personal details', 'Company profile', 'Invite team']
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
 // Presentational only — doesn't know about client.js or auth. The parent page
 // owns the actual API call and decides what to do with a blank org_name
 // (schema.md marks it NOT NULL), passed back via onComplete(formData).
@@ -49,8 +53,15 @@ export default function OnboardingWizard({ onComplete }) {
     })
   }
 
+  // "Skip" means skip inviting anyone -- it shouldn't silently submit
+  // whatever partial/invalid text happens to be sitting in the fields.
+  function skip() {
+    onComplete({ ...form, invite_emails: [] })
+  }
+
   const step1Valid = form.contact_name.trim() !== '' && form.contact_title.trim() !== ''
   const step2Valid = form.org_name.trim() !== '' && form.budget_range !== '' && form.urgency_level !== ''
+  const emailsValid = emails.every((e) => e.trim() === '' || isValidEmail(e.trim()))
 
   return (
     <div className="card" style={{ padding: 28, maxWidth: 560, margin: '0 auto' }}>
@@ -205,26 +216,36 @@ export default function OnboardingWizard({ onComplete }) {
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {emails.map((email, i) => (
-              <div key={i} className="row gap-8">
-                <input
-                  type="email"
-                  className="field-input"
-                  style={{ flex: 1 }}
-                  placeholder="teammate@yourcompany.com"
-                  value={email}
-                  onChange={(e) => updateEmail(i, e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => removeEmailRow(i)}
-                  aria-label={`Remove email ${i + 1}`}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            {emails.map((email, i) => {
+              const invalid = email.trim() !== '' && !isValidEmail(email.trim())
+              return (
+                <div key={i}>
+                  <div className="row gap-8">
+                    <input
+                      type="email"
+                      className="field-input"
+                      style={{ flex: 1, borderColor: invalid ? 'var(--danger)' : undefined }}
+                      placeholder="teammate@yourcompany.com"
+                      value={email}
+                      onChange={(e) => updateEmail(i, e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => removeEmailRow(i)}
+                      aria-label={`Remove email ${i + 1}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {invalid && (
+                    <p style={{ fontSize: 11.5, color: 'var(--danger)', margin: '4px 0 0' }}>
+                      Enter a valid email address.
+                    </p>
+                  )}
+                </div>
+              )
+            })}
           </div>
           <button type="button" className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={addEmailRow}>
             + Add another
@@ -242,7 +263,7 @@ export default function OnboardingWizard({ onComplete }) {
         </div>
         <div className="row gap-10">
           {step === 3 && (
-            <button type="button" className="btn btn-sm" onClick={finish}>
+            <button type="button" className="btn btn-sm" onClick={skip}>
               Skip
             </button>
           )}
@@ -256,7 +277,7 @@ export default function OnboardingWizard({ onComplete }) {
               Next →
             </button>
           ) : (
-            <button type="button" className="btn btn-acc" onClick={finish}>
+            <button type="button" className="btn btn-acc" disabled={!emailsValid} onClick={finish}>
               Finish
             </button>
           )}
