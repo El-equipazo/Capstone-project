@@ -242,7 +242,7 @@ Response `200` / `201`.
 
 ### GET /organizations/:orgId/infrastructure
 
-**Auth: org owner, admin, or an expert with an `accepted` connection / active engagement with this org** (infrastructure is sensitive — it is _not_ public). Otherwise `403`.
+**Auth: org owner, admin, or an expert with an `accepted` connection to this org** (infrastructure is sensitive — it is _not_ public). Access starts as soon as the connection is accepted, covering proposal drafting through an active/completed engagement — it is not gated on engagement status. Otherwise `403`.
 
 ---
 

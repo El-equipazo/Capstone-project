@@ -97,6 +97,25 @@ async def get(connection_id: int):
     return row
 
 
+async def find_accepted_between(org_id: int, expert_id: int):
+    """
+    Return the accepted connection between this org and expert, or None.
+    'accepted' is a one-way door (see respond()) so this covers the whole
+    relationship from proposal drafting through an active/completed
+    engagement -- unlike engagement_model.find_open_between, which excludes
+    completed/cancelled engagements, this stays true for as long as the
+    connection itself has been accepted.
+    """
+    return await pool.fetchrow(
+        """
+        SELECT connection_id, status FROM connection_requests
+        WHERE org_id = $1 AND expert_id = $2 AND status = 'accepted'
+        LIMIT 1
+        """,
+        org_id, expert_id,
+    )
+
+
 async def list_requests(*, org_id=None, expert_id=None, status=None,
                         page=1, limit=20):
     """

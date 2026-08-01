@@ -9,7 +9,7 @@ from server.schemas.organizations import (
     OrgUpdate,
 )
 
-from server.models import review_model
+from server.models import connection_model, expert_model, review_model
 
 try:
     from server.models import organization_model
@@ -86,12 +86,20 @@ async def upsert_infrastructure(
 async def get_infrastructure(org_id: int, current_user=Depends(get_current_user)):
     org_row = await organization_model.get(org_id)
     # Infrastructure is sensitive — accessible only to the owner, admins, or an
-    # expert with an accepted connection / active engagement (§3 of the contract).
-    # The connection/engagement check requires the connection model; for now enforce
-    # owner + admin access. Expand once the connection model is available.
+    # expert with an accepted connection (§3 of the contract). "Accepted" is
+    # deliberately broad rather than gating on engagement status: an expert
+    # needs this to scope an accurate proposal, so access starts as soon as
+    # the connection is accepted -- through scoping/proposal drafting, not
+    # just once the engagement goes active.
     is_owner = org_row["user_id"] == current_user["user_id"]
     is_admin = current_user["role"] == "admin"
-    if not is_owner and not is_admin:
+    is_connected_expert = False
+    if not is_owner and not is_admin and current_user["role"] == "expert":
+        expert = await expert_model.find_by_user(current_user["user_id"])
+        if expert is not None:
+            connection = await connection_model.find_accepted_between(org_id, expert["expert_profile_id"])
+            is_connected_expert = connection is not None
+    if not is_owner and not is_admin and not is_connected_expert:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": {"code": "FORBIDDEN", "message": "Infrastructure data is restricted"}},

@@ -17,6 +17,11 @@ export default function OrgProfileModal({ orgId, engagementId, onClose }) {
   const [org, setOrg] = useState(null)
   const [error, setError] = useState('')
 
+  // Infrastructure is sensitive and gated server-side (owner/admin/connected
+  // expert only, api-contract.md §3) -- 403/404 (not connected yet, or the
+  // org hasn't filled it in) just means the section stays hidden, not an error.
+  const [infra, setInfra] = useState(null)
+
   const [notes, setNotes] = useState('')
   const [notesStatus, setNotesStatus] = useState('') // '' | 'saving' | 'saved'
   const notesLoaded = useRef(false)
@@ -25,6 +30,7 @@ export default function OrgProfileModal({ orgId, engagementId, onClose }) {
     organizationsApi.getById(orgId)
       .then(setOrg)
       .catch(() => setError('Could not load organization profile.'))
+    organizationsApi.getInfrastructure(orgId).then(setInfra).catch(() => {})
     engagementsApi.getNotes(engagementId)
       .then((res) => { setNotes(res.content || ''); notesLoaded.current = true })
       .catch(() => { notesLoaded.current = true })
@@ -95,6 +101,38 @@ export default function OrgProfileModal({ orgId, engagementId, onClose }) {
                 <Field label="Urgency" value={org.urgency_level ? labelize(org.urgency_level) : null} />
               </div>
             </div>
+
+            {infra && (
+              <div className="field-group" style={{ marginTop: 8, borderTop: '1px solid var(--brd)', paddingTop: 16 }}>
+                <label className="field-label" style={{ display: 'block', marginBottom: 8 }}>Infrastructure</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="row gap-10">
+                    <div style={{ flex: 1 }}>
+                      <Field label="Storage type" value={infra.storage_type ? labelize(infra.storage_type) : null} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Field label="Data retention" value={infra.data_retention_years ? `${infra.data_retention_years} years` : null} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Field label="Oldest system age" value={infra.oldest_system_age_years ? `${infra.oldest_system_age_years} years` : null} />
+                    </div>
+                  </div>
+                  <Field label="Data categories" value={infra.data_categories?.length ? infra.data_categories.map(labelize).join(', ') : null} />
+                  <Field label="Cloud providers" value={infra.primary_cloud_providers?.length ? infra.primary_cloud_providers.join(', ') : null} />
+                  <Field label="Encryption standards" value={infra.current_encryption_standards?.length ? infra.current_encryption_standards.join(', ') : null} />
+                  <Field label="Compliance requirements" value={infra.compliance_requirements?.length ? infra.compliance_requirements.join(', ') : null} />
+                  <div className="row gap-10">
+                    <div style={{ flex: 1 }}>
+                      <Field label="Dedicated security team" value={infra.has_dedicated_security_team != null ? (infra.has_dedicated_security_team ? 'Yes' : 'No') : null} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Field label="Prior quantum assessment" value={infra.had_prior_quantum_assessment != null ? (infra.had_prior_quantum_assessment ? 'Yes' : 'No') : null} />
+                    </div>
+                  </div>
+                  <Field label="Known risks" value={infra.known_risks_freetext} />
+                </div>
+              </div>
+            )}
 
             <div className="field-group" style={{ marginTop: 8, borderTop: '1px solid var(--brd)', paddingTop: 16 }}>
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
