@@ -76,6 +76,7 @@ NOTIFICATION_TYPE = {
     "milestone_change_proposed", "milestone_change_confirmed", "milestone_change_declined",
     "milestone_proposed",
     "organization_deleted",
+    "engagement_terms_proposed", "engagement_terms_accepted", "engagement_terms_declined",
     "review_received",
 }
 
