@@ -5,6 +5,7 @@ import { useRequireAuth } from '../hooks/useRequireAuth'
 import { useChat_context } from '../context/ChatContext'
 import { labelize, ENGAGEMENT_TYPE_OPTIONS, PAYMENT_STRUCTURE_OPTIONS } from '../utils/format'
 import OrgProfileModal from '../components/OrgProfileModal'
+import EngagementNotes from '../components/EngagementNotes'
 import RatingStars from '../components/RatingStars'
 import StarRatingInput from '../components/StarRatingInput'
 
@@ -483,6 +484,16 @@ export default function EngagementDetail() {
           </button>
         </div>
 
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: role === 'expert' ? 'minmax(0, 1fr) 300px' : '1fr',
+            gap: 24,
+            alignItems: 'start',
+          }}
+        >
+        <div style={{ minWidth: 0 }}>
+
         {/* Counterparty info */}
         {role === 'organization' && engagement.expert_first_name && (
           <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -517,7 +528,6 @@ export default function EngagementDetail() {
         {showOrgModal && (
           <OrgProfileModal
             orgId={engagement.org_id}
-            engagementId={engagementId}
             onClose={() => setShowOrgModal(false)}
           />
         )}
@@ -1249,6 +1259,15 @@ export default function EngagementDetail() {
             </div>
             )
           })}
+        </div>
+
+        </div>
+
+        {role === 'expert' && (
+          <div style={{ position: 'sticky', top: 84 }}>
+            <EngagementNotes engagementId={engagementId} />
+          </div>
+        )}
         </div>
 
       </div>

@@ -1,39 +1,40 @@
 import { Link } from 'react-router-dom'
 import LatticeHeroArt from '../components/LatticeHeroArt'
-
-const SECTORS = [
-  { label: 'Banks', sub: 'Retail, commercial & community banks' },
-  { label: 'Payment processors', sub: 'Card networks, payment rails, fintech infrastructure' },
-  { label: 'Investment firms', sub: 'Asset managers, hedge funds, broker-dealers' },
-  { label: 'Insurers', sub: 'Carriers holding decades of policyholder data' },
-]
-
-const VERIFY_STEPS = [
-  { n: 1, title: 'Credentials submitted', body: 'Institution, certification, or license — with supporting documents, not a self-reported checkbox.' },
-  { n: 2, title: 'AI-assisted review', body: 'Every document is screened for inconsistencies and red flags before a human ever looks at it.' },
-  { n: 3, title: 'Verified, not assumed', body: 'An admin makes the final call. Only then does the verified badge appear on a public profile.' },
-]
+import { useLanguage } from '../context/LanguageContext'
 
 export default function Landing() {
+  const { t } = useLanguage()
+
+  const SECTORS = [
+    { label: t('landing.sectorBanks'), sub: t('landing.sectorBanksSub') },
+    { label: t('landing.sectorPayments'), sub: t('landing.sectorPaymentsSub') },
+    { label: t('landing.sectorInvestment'), sub: t('landing.sectorInvestmentSub') },
+    { label: t('landing.sectorInsurers'), sub: t('landing.sectorInsurersSub') },
+  ]
+
+  const VERIFY_STEPS = [
+    { n: 1, title: t('landing.verify1Title'), body: t('landing.verify1Body') },
+    { n: 2, title: t('landing.verify2Title'), body: t('landing.verify2Body') },
+    { n: 3, title: t('landing.verify3Title'), body: t('landing.verify3Body') },
+  ]
+
   return (
     <>
       <section className="hero-sky">
         <LatticeHeroArt />
         <div className="container">
           <div className="hero-sky-inner">
-            <span className="hero-eyebrow">◆ post-quantum readiness, before the quantum cliff arrives</span>
+            <span className="hero-eyebrow">◆ {t('landing.eyebrow')}</span>
             <h1 className="hero-serif">
-              Quantum risk has two sides.
+              {t('landing.heroTitle1')}
               <br />
-              Pick yours.
+              {t('landing.heroTitle2')}
             </h1>
             <p className="hero-sub">
-              Lattice is a verified marketplace connecting high-risk financial institutions with
-              the quantum security experts who can assess and remediate their cryptographic
-              exposure — before a quantum breakthrough renders today&apos;s protections obsolete.
+              {t('landing.heroSub')}
             </p>
             <Link to="/experts" className="pill-btn">
-              Browse verified experts <span aria-hidden="true">→</span>
+              {t('landing.browseVerifiedExperts')} <span aria-hidden="true">→</span>
             </Link>
           </div>
         </div>
@@ -51,32 +52,28 @@ export default function Landing() {
           >
             <div className="card" style={{ padding: 26, background: 'var(--fill2)' }}>
               <span className="section-label" style={{ color: 'var(--acc)' }}>
-                for organizations
+                {t('landing.forOrganizations')}
               </span>
               <h2 className="h2" style={{ margin: '10px 0 8px' }}>
-                Assess &amp; remediate your quantum exposure
+                {t('landing.orgHeading')}
               </h2>
               <p className="lead" style={{ marginBottom: 18 }}>
-                Search a curated directory of verified quantum security professionals, filtered by
-                specialization, engagement type, and compliance familiarity — then engage
-                end-to-end in a secure workspace.
+                {t('landing.orgBody')}
               </p>
               <Link to="/experts" className="btn btn-acc btn-block">
-                Browse verified experts
+                {t('landing.browseVerifiedExperts')}
               </Link>
             </div>
             <div className="card" style={{ padding: 26 }}>
-              <span className="section-label">for experts</span>
+              <span className="section-label">{t('landing.forExperts')}</span>
               <h2 className="h2" style={{ margin: '10px 0 8px' }}>
-                Get discovered by institutions that need you
+                {t('landing.expertHeading')}
               </h2>
               <p className="lead" style={{ marginBottom: 18 }}>
-                Build a structured profile — credentials, specializations, sector experience,
-                engagement types — and stop spending your time on leads who aren&apos;t ready to
-                act.
+                {t('landing.expertBody')}
               </p>
               <Link to="/sign-up?role=expert" className="btn btn-solid btn-block">
-                Create your profile
+                {t('landing.createProfile')}
               </Link>
             </div>
           </div>
@@ -84,8 +81,8 @@ export default function Landing() {
           {/* Verification band */}
           <div className="verify-band">
             <div className="verify-head">
-              <span className="section-label">how vetting works</span>
-              <h3>Every expert on Lattice is verified before you ever see their profile.</h3>
+              <span className="section-label">{t('landing.howVettingWorks')}</span>
+              <h3>{t('landing.vettingHeading')}</h3>
             </div>
             <div className="verify-steps">
               {VERIFY_STEPS.map((step) => (
@@ -103,7 +100,7 @@ export default function Landing() {
 
           {/* Target sectors */}
           <div style={{ marginBottom: 56 }}>
-            <span className="section-label">who this is for</span>
+            <span className="section-label">{t('landing.whoThisIsFor')}</span>
             <div
               style={{
                 display: 'grid',
@@ -128,16 +125,16 @@ export default function Landing() {
           <div className="close-band">
             <div>
               <span className="section-label" style={{ color: 'var(--acc)' }}>
-                ready when you are
+                {t('landing.readyWhenYouAre')}
               </span>
-              <h3>Find your quantum security partner — or your next engagement.</h3>
+              <h3>{t('landing.closingHeading')}</h3>
             </div>
             <div className="close-actions">
               <Link to="/sign-up?role=expert" className="btn">
-                Create your profile
+                {t('landing.createProfile')}
               </Link>
               <Link to="/experts" className="btn btn-acc">
-                Browse verified experts →
+                {t('landing.browseVerifiedExperts')} →
               </Link>
             </div>
           </div>

@@ -931,7 +931,7 @@ export default function ExpertDashboard() {
                             <input
                               className="field-input"
                               type="date"
-                              min={todayStr}
+                              min={timelineForm.start_date || todayStr}
                               value={timelineForm.estimated_end_date}
                               onChange={(e) => setTimelineForm((p) => ({ ...p, estimated_end_date: e.target.value }))}
                             />
@@ -1063,7 +1063,7 @@ export default function ExpertDashboard() {
                       />
                     </label>
                   </div>
-                  {photoError && <p style={{ fontSize: 12, color: 'var(--err, #e53)', marginTop: 6 }}>{photoError}</p>}
+                  {photoError && <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{photoError}</p>}
                 </div>
 
                 <div className="row gap-10">
@@ -1259,7 +1259,7 @@ export default function ExpertDashboard() {
                           <span className="tag">Pending review</span>
                         )}
                         {status === 'rejected' && (
-                          <span className="tag" style={{ color: 'var(--err, #e53)' }}>Rejected</span>
+                          <span className="tag" style={{ color: 'var(--danger)' }}>Rejected</span>
                         )}
                         {status !== 'approved' && status !== 'pending' && (
                           <button
@@ -1298,7 +1298,7 @@ export default function ExpertDashboard() {
                       }
                       if (latest.status === 'rejected' && latest.rejection_reason) {
                         return (
-                          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--err, #e53)' }}>
+                          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--danger)' }}>
                             Rejected: {latest.rejection_reason}
                           </p>
                         )
@@ -1330,7 +1330,7 @@ export default function ExpertDashboard() {
                             />
                           </label>
                           {uploadError && (
-                            <p style={{ fontSize: 12, color: 'var(--err, #e53)', marginTop: 6 }}>{uploadError}</p>
+                            <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{uploadError}</p>
                           )}
                         </div>
                         <button

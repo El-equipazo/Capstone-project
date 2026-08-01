@@ -251,7 +251,7 @@ export default function ExpertProfile() {
                     >
                       {askLoading ? 'Opening…' : 'Ask a question'}
                     </button>
-                    {askError && <p style={{ color: 'var(--err, red)', fontSize: 12, marginTop: 4 }}>{askError}</p>}
+                    {askError && <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>{askError}</p>}
                   </div>
                 )}
                 {canRequestAssessment ? (
@@ -284,7 +284,7 @@ export default function ExpertProfile() {
                           placeholder={`Briefly describe what you're looking for…`}
                         />
                       </div>
-                      {requestError && <p style={{ color: 'var(--err, red)', fontSize: 12, margin: 0 }}>{requestError}</p>}
+                      {requestError && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{requestError}</p>}
                       <button className="xp-tap-link" type="submit" disabled={requesting} style={{ alignSelf: 'flex-start' }}>
                         {requesting ? 'Sending…' : 'Send request ↗'}
                       </button>

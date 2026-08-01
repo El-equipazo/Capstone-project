@@ -84,6 +84,17 @@ export const authApi = {
     return getStoredSession()
   },
 
+  // DELETE /auth/me: for organizations this permanently erases the account
+  // (organization_model.hard_delete -- engagements, connections, chat threads,
+  // and all shared history are actually deleted, not just the account).
+  // Experts/admins still just get soft-deactivated (is_active = false).
+  // Either way every authenticated route already 401s once the account is
+  // gone/inactive via get_current_user, so this clears the local session too.
+  async deleteAccount() {
+    await apiFetch('/auth/me', { method: 'DELETE', headers: authHeader() })
+    localStorage.removeItem(SESSION_KEY)
+  },
+
   // GET /auth/me already resolves either an organization_profile or an
   // expert_profile server-side depending on the user's role, so this stays
   // generic rather than branching on role itself.

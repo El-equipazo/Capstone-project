@@ -45,12 +45,12 @@ def check_not_past(value, field):
             )
 
 
-def check_date_order(start_date, estimated_end_date):
-    """estimated_end_date, if set, can't be before start_date, if set."""
-    if start_date is not None and estimated_end_date is not None and estimated_end_date < start_date:
+def check_date_order(start, end, start_field="start_date", end_field="estimated_end_date"):
+    """An end date can't fall before its paired start date."""
+    if start is not None and end is not None and end < start:
         raise ValidationError(
-            "estimated_end_date cannot be before start_date",
-            field="estimated_end_date", issue="date_order",
+            f"{end_field} cannot be before {start_field}",
+            field=end_field, issue="date_before_start",
         )
 
 

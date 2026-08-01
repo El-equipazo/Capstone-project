@@ -48,6 +48,7 @@ async def create(
     check_enum(payment_structure, PAYMENT_STRUCTURE, "payment_structure", allow_none=True)
     check_not_past(start_date, "start_date")
     check_not_past(estimated_end_date, "estimated_end_date")
+    check_date_order(start_date, estimated_end_date)
 
     try:
         row = await pool.fetchrow(
@@ -277,6 +278,10 @@ async def update(engagement_id: int, caller_role: str, updates: dict) -> dict:
     check_not_past(updates.get("start_date"), "start_date")
     check_not_past(updates.get("estimated_end_date"), "estimated_end_date")
     check_not_past(updates.get("proposal_expires_at"), "proposal_expires_at")
+    check_date_order(
+        updates.get("start_date", existing["start_date"]),
+        updates.get("estimated_end_date", existing["estimated_end_date"]),
+    )
 
     new_status = updates.get("status")
     if new_status is not None:
