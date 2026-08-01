@@ -13,6 +13,18 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function RequiredMark() {
+  return <span style={{ color: 'var(--danger)', marginLeft: 2 }}>*</span>
+}
+
+function FieldError() {
+  return (
+    <p style={{ fontSize: 11.5, color: 'var(--danger)', margin: '4px 0 0' }}>
+      This is a required field
+    </p>
+  )
+}
+
 // Presentational only — doesn't know about client.js or auth. The parent page
 // owns the actual API call and decides what to do with a blank org_name
 // (schema.md marks it NOT NULL), passed back via onComplete(formData).
@@ -29,6 +41,7 @@ export default function OnboardingWizard({ onComplete }) {
     urgency_level: '',
   })
   const [emails, setEmails] = useState([''])
+  const [showErrors, setShowErrors] = useState(false)
 
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -63,6 +76,21 @@ export default function OnboardingWizard({ onComplete }) {
   const step2Valid = form.org_name.trim() !== '' && form.budget_range !== '' && form.urgency_level !== ''
   const emailsValid = emails.every((e) => e.trim() === '' || isValidEmail(e.trim()))
 
+  function goNext() {
+    const valid = step === 1 ? step1Valid : step === 2 ? step2Valid : true
+    if (!valid) {
+      setShowErrors(true)
+      return
+    }
+    setShowErrors(false)
+    setStep((s) => s + 1)
+  }
+
+  function goBack() {
+    setShowErrors(false)
+    setStep((s) => s - 1)
+  }
+
   return (
     <div className="card" style={{ padding: 28, maxWidth: 560, margin: '0 auto' }}>
       <div className="onboard-steps">
@@ -92,23 +120,28 @@ export default function OnboardingWizard({ onComplete }) {
             </p>
           </div>
           <div className="field-group">
-            <label className="field-label">Your name</label>
+            <label className="field-label">Your name<RequiredMark /></label>
             <input
               className="field-input"
+              style={showErrors && form.contact_name.trim() === '' ? { borderColor: 'var(--danger)' } : undefined}
               value={form.contact_name}
               onChange={(e) => updateField('contact_name', e.target.value)}
               placeholder="Jane Doe"
             />
+            {showErrors && form.contact_name.trim() === '' && <FieldError />}
           </div>
           <div className="field-group">
-            <label className="field-label">Your role</label>
+            <label className="field-label">Your role<RequiredMark /></label>
             <input
               className="field-input"
+              style={showErrors && form.contact_title.trim() === '' ? { borderColor: 'var(--danger)' } : undefined}
               value={form.contact_title}
               onChange={(e) => updateField('contact_title', e.target.value)}
               placeholder="e.g. Head of Security, CISO"
             />
+            {showErrors && form.contact_title.trim() === '' && <FieldError />}
           </div>
+          <p className="lead" style={{ fontSize: 11.5 }}><RequiredMark /> Indicates required fields</p>
         </div>
       )}
 
@@ -123,14 +156,16 @@ export default function OnboardingWizard({ onComplete }) {
             </p>
           </div>
           <div className="field-group">
-            <label className="field-label">Company name</label>
+            <label className="field-label">Company name<RequiredMark /></label>
             <input
               className="field-input"
               required
+              style={showErrors && form.org_name.trim() === '' ? { borderColor: 'var(--danger)' } : undefined}
               value={form.org_name}
               onChange={(e) => updateField('org_name', e.target.value)}
               placeholder="Acme Bank"
             />
+            {showErrors && form.org_name.trim() === '' && <FieldError />}
           </div>
           <div className="row gap-10">
             <div className="field-group" style={{ flex: 1 }}>
@@ -169,10 +204,11 @@ export default function OnboardingWizard({ onComplete }) {
           </div>
           <div className="row gap-10">
             <div className="field-group" style={{ flex: 1 }}>
-              <label className="field-label">Budget range</label>
+              <label className="field-label">Budget range<RequiredMark /></label>
               <select
                 className="field-input"
                 required
+                style={showErrors && form.budget_range === '' ? { borderColor: 'var(--danger)' } : undefined}
                 value={form.budget_range}
                 onChange={(e) => updateField('budget_range', e.target.value)}
               >
@@ -183,12 +219,14 @@ export default function OnboardingWizard({ onComplete }) {
                   </option>
                 ))}
               </select>
+              {showErrors && form.budget_range === '' && <FieldError />}
             </div>
             <div className="field-group" style={{ flex: 1 }}>
-              <label className="field-label">Urgency</label>
+              <label className="field-label">Urgency<RequiredMark /></label>
               <select
                 className="field-input"
                 required
+                style={showErrors && form.urgency_level === '' ? { borderColor: 'var(--danger)' } : undefined}
                 value={form.urgency_level}
                 onChange={(e) => updateField('urgency_level', e.target.value)}
               >
@@ -199,8 +237,10 @@ export default function OnboardingWizard({ onComplete }) {
                   </option>
                 ))}
               </select>
+              {showErrors && form.urgency_level === '' && <FieldError />}
             </div>
           </div>
+          <p className="lead" style={{ fontSize: 11.5 }}><RequiredMark /> Indicates required fields</p>
         </div>
       )}
 
@@ -256,7 +296,7 @@ export default function OnboardingWizard({ onComplete }) {
       <div className="row" style={{ justifyContent: 'space-between', marginTop: 28 }}>
         <div>
           {step > 1 && (
-            <button type="button" className="btn btn-sm" onClick={() => setStep((s) => s - 1)}>
+            <button type="button" className="btn btn-sm" onClick={goBack}>
               ← Back
             </button>
           )}
@@ -271,8 +311,7 @@ export default function OnboardingWizard({ onComplete }) {
             <button
               type="button"
               className="btn btn-acc"
-              disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
-              onClick={() => setStep((s) => s + 1)}
+              onClick={goNext}
             >
               Next →
             </button>
