@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { engagementsApi, reviewsApi, threadsApi } from '../api/client'
 import { useRequireAuth } from '../hooks/useRequireAuth'
 import { useChat_context } from '../context/ChatContext'
-import { labelize, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
+import { labelize, ENGAGEMENT_TYPE_OPTIONS, PAYMENT_STRUCTURE_OPTIONS } from '../utils/format'
 import OrgProfileModal from '../components/OrgProfileModal'
 import RatingStars from '../components/RatingStars'
 import StarRatingInput from '../components/StarRatingInput'
@@ -28,15 +28,30 @@ function engagementBadgeClass(s) {
   return 'tag'
 }
 
-function getStatusActions(engStatus, role) {
+// Skipped milestones don't count against completion -- they were
+// deliberately dropped, not left undone. Zero milestones (engagement never
+// used the feature) is vacuously "all done."
+function allMilestonesDone(milestones) {
+  return milestones.every((m) => m.status === 'completed' || m.status === 'skipped')
+}
+
+function getStatusActions(engStatus, role, milestones) {
   const actions = []
   // 'scoping' -> 'proposal_sent' has its own dedicated form (description +
   // response deadline) below, not a bare status-change button.
   // proposal_sent for org is handled by the dedicated timeline review UI below
   if (engStatus === 'proposal_accepted')
     actions.push({ label: 'Start Engagement', newStatus: 'active', primary: true })
-  if (engStatus === 'active' && role === 'expert')
-    actions.push({ label: 'Mark Complete', newStatus: 'completed', confirm: true })
+  if (engStatus === 'active' && role === 'expert') {
+    const canComplete = allMilestonesDone(milestones)
+    actions.push({
+      label: 'Mark Complete',
+      newStatus: 'completed',
+      confirm: true,
+      disabled: !canComplete,
+      disabledReason: canComplete ? null : 'Complete (or skip) all milestones before completing the engagement.',
+    })
+  }
   if (engStatus === 'active')
     actions.push({ label: 'Put on Hold', newStatus: 'on_hold' })
   if (engStatus === 'on_hold')
@@ -96,6 +111,14 @@ export default function EngagementDetail() {
 
   const [showOrgModal, setShowOrgModal] = useState(false)
 
+  // Terms negotiation (start/end date, budget, payment structure) once the
+  // engagement is active/on_hold -- separate from proposalForm above, which
+  // only covers the initial scoping-phase description + deadline.
+  const [showTermsForm, setShowTermsForm] = useState(false)
+  const [termsForm, setTermsForm] = useState({ start_date: '', estimated_end_date: '', agreed_budget: '', payment_structure: '' })
+  const [termsError, setTermsError] = useState('')
+  const [termsLoading, setTermsLoading] = useState(false)
+
   // Review card -- only fetched once the engagement is completed, since
   // that's the only state reviews can be left in.
   const [engagementReviews, setEngagementReviews] = useState([])
@@ -154,7 +177,7 @@ export default function EngagementDetail() {
   const milestones = engagement.milestones || []
   const isTerminal = ['completed', 'cancelled'].includes(engagement.status)
   const backPath = role === 'expert' ? '/dashboard' : '/organization'
-  const statusActions = getStatusActions(engagement.status, role)
+  const statusActions = getStatusActions(engagement.status, role, milestones)
   const myReview = engagementReviews.find((r) => r.reviewer_role === role)
   const otherReview = engagementReviews.find((r) => r.reviewer_role !== role)
   const counterpartyLabel = role === 'organization' ? (engagement.expert_first_name || 'the expert') : (engagement.org_name || 'the organization')
@@ -368,7 +391,67 @@ export default function EngagementDetail() {
     }
   }
 
+  function openTermsForm() {
+    setTermsForm({
+      start_date: engagement.pending_start_date || engagement.start_date || '',
+      estimated_end_date: engagement.pending_estimated_end_date || engagement.estimated_end_date || '',
+      agreed_budget: (engagement.pending_agreed_budget ?? engagement.agreed_budget) ?? '',
+      payment_structure: engagement.pending_payment_structure || engagement.payment_structure || '',
+    })
+    setTermsError('')
+    setShowTermsForm(true)
+  }
 
+  async function handleProposeTerms(e) {
+    e.preventDefault()
+    const data = {}
+    if (termsForm.start_date)          data.start_date          = termsForm.start_date
+    if (termsForm.estimated_end_date)  data.estimated_end_date  = termsForm.estimated_end_date
+    if (termsForm.agreed_budget !== '') data.agreed_budget      = Number(termsForm.agreed_budget)
+    if (termsForm.payment_structure)   data.payment_structure   = termsForm.payment_structure
+    if (Object.keys(data).length === 0) {
+      setTermsError('Change at least one field before sending.')
+      return
+    }
+    setTermsLoading(true)
+    setTermsError('')
+    try {
+      const updated = await engagementsApi.proposeTerms(engagementId, data)
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+      setShowTermsForm(false)
+    } catch (err) {
+      setTermsError(err.body?.error?.message ?? 'Failed to send proposal.')
+    } finally {
+      setTermsLoading(false)
+    }
+  }
+
+  async function handleAcceptTerms() {
+    setActionLoading(true)
+    setError('')
+    try {
+      const updated = await engagementsApi.acceptTermsChange(engagementId)
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to accept the proposed change.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleDeclineTerms() {
+    if (!window.confirm('Decline this proposed change?')) return
+    setActionLoading(true)
+    setError('')
+    try {
+      const updated = await engagementsApi.declineTermsChange(engagementId)
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to decline the proposed change.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   return (
     <div className="page">
@@ -663,12 +746,18 @@ export default function EngagementDetail() {
                   className={`btn${action.primary ? ' btn-acc' : action.danger ? '' : ''}`}
                   style={action.danger ? { color: 'var(--danger, #c0392b)' } : {}}
                   onClick={() => handleStatusAction(action)}
-                  disabled={actionLoading}
+                  disabled={actionLoading || action.disabled}
+                  title={action.disabled ? action.disabledReason : undefined}
                 >
                   {action.label}
                 </button>
               ))}
             </div>
+            {statusActions.some((a) => a.disabled && a.disabledReason) && (
+              <p className="lead" style={{ fontSize: 11.5, marginTop: 8 }}>
+                {statusActions.find((a) => a.disabled && a.disabledReason).disabledReason}
+              </p>
+            )}
             <p className="lead" style={{ fontSize: 11.5, marginTop: 10 }}>
               Status:{' '}
               <strong>
@@ -695,6 +784,117 @@ export default function EngagementDetail() {
               {engagement.actual_end_date ? ` — ended ${engagement.actual_end_date}` : ''}.
               {engagement.cancellation_reason ? ` Reason: ${engagement.cancellation_reason}` : ''}
             </span>
+          </div>
+        )}
+
+        {/* Terms negotiation -- once active/on_hold, dates/budget/payment
+            structure were often left blank at proposal time (optional there
+            by design) and now need a way to get set or revised. Either party
+            can propose a change; the other must accept or decline. */}
+        {['active', 'on_hold'].includes(engagement.status) && (
+          <div className="card" style={{ padding: 18, marginBottom: 20 }}>
+            <span className="section-label" style={{ display: 'block', marginBottom: 12 }}>Engagement Terms</span>
+            <div className="row gap-10 wrap" style={{ marginBottom: 14 }}>
+              {engagement.start_date && <span className="tag">Start: {engagement.start_date}</span>}
+              {engagement.estimated_end_date && <span className="tag">Est. end: {engagement.estimated_end_date}</span>}
+              {engagement.agreed_budget != null && <span className="tag">${Number(engagement.agreed_budget).toLocaleString()}</span>}
+              {engagement.payment_structure && <span className="tag">{labelize(engagement.payment_structure)}</span>}
+              {!engagement.start_date && !engagement.estimated_end_date && engagement.agreed_budget == null && !engagement.payment_structure && (
+                <span className="lead" style={{ fontSize: 12.5 }}>No terms set yet.</span>
+              )}
+            </div>
+
+            {termsError && <div className="alert alert-error" style={{ marginBottom: 12 }}>{termsError}</div>}
+
+            {engagement.pending_requested_by_user_id != null ? (
+              <div>
+                <div className="row gap-8 wrap" style={{ marginBottom: 10 }}>
+                  {engagement.pending_start_date && <span className="tag">Start → {engagement.pending_start_date}</span>}
+                  {engagement.pending_estimated_end_date && <span className="tag">Est. end → {engagement.pending_estimated_end_date}</span>}
+                  {engagement.pending_agreed_budget != null && <span className="tag">Budget → ${Number(engagement.pending_agreed_budget).toLocaleString()}</span>}
+                  {engagement.pending_payment_structure && <span className="tag">Payment → {labelize(engagement.pending_payment_structure)}</span>}
+                </div>
+                {engagement.pending_requested_by_user_id === user.user_id ? (
+                  <>
+                    <p className="lead" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                      Waiting for {role === 'expert' ? engagement.org_name : `${engagement.expert_first_name} ${engagement.expert_last_name}`} to respond to your proposed change.
+                    </p>
+                    <button className="btn btn-sm" onClick={openTermsForm}>Update proposal</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="lead" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                      {role === 'expert' ? engagement.org_name : `${engagement.expert_first_name} ${engagement.expert_last_name}`} proposed this change.
+                    </p>
+                    <div className="row gap-8">
+                      <button className="btn btn-sm btn-acc" disabled={actionLoading} onClick={handleAcceptTerms}>Accept</button>
+                      <button className="btn btn-sm" disabled={actionLoading} onClick={handleDeclineTerms}>Decline</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : showTermsForm ? (
+              <form onSubmit={handleProposeTerms} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="row gap-10">
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Start date</label>
+                    <input
+                      className="field-input"
+                      type="date"
+                      value={termsForm.start_date}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, start_date: e.target.value }))}
+                    />
+                  </div>
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Estimated end date</label>
+                    <input
+                      className="field-input"
+                      type="date"
+                      min={todayStr}
+                      value={termsForm.estimated_end_date}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, estimated_end_date: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="row gap-10">
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Budget</label>
+                    <input
+                      className="field-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={termsForm.agreed_budget}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, agreed_budget: e.target.value }))}
+                      placeholder="e.g. 75000"
+                    />
+                  </div>
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Payment structure</label>
+                    <select
+                      className="field-input"
+                      value={termsForm.payment_structure}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, payment_structure: e.target.value }))}
+                    >
+                      <option value="">— No change —</option>
+                      {PAYMENT_STRUCTURE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="row gap-8">
+                  <button className="btn btn-acc" type="submit" disabled={termsLoading}>
+                    {termsLoading ? 'Sending…' : 'Send Proposal'}
+                  </button>
+                  <button className="btn" type="button" onClick={() => setShowTermsForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button className="btn btn-sm" onClick={openTermsForm}>Propose a change</button>
+            )}
           </div>
         )}
 
