@@ -14,6 +14,13 @@ const AVAILABILITY_OPTIONS = Object.keys(AVAILABILITY_LABEL)
 // Engagement dates can't be set before today (server enforces this too).
 const todayStr = new Date().toISOString().slice(0, 10)
 
+// Connections/engagements/avg_rating change from the *other* party's session
+// (they accept a request, complete an engagement, leave a review) -- nothing
+// pushes that here, so without this the dashboard goes stale until a manual
+// reload. Same interval-polling precedent as NotificationBell.jsx (25s);
+// slightly longer since this refetch does more work per tick.
+const DASHBOARD_POLL_MS = 30000
+
 const BLANK_FORM = {
   first_name: '',
   last_name: '',
@@ -124,6 +131,7 @@ export default function ExpertDashboard() {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_dismissed_${user?.user_id}`) || '[]')) }
     catch { return new Set() }
   })
+  const [showDismissed, setShowDismissed] = useState(false)
 
   useEffect(() => {
     if (!user) {
@@ -147,6 +155,30 @@ export default function ExpertDashboard() {
       setEngagements(engs)
     })
     verificationsApi.list().then(setVerifications).catch(() => {})
+  }, [expertId])
+
+  // Background refresh so a counterparty's action (accepting a connection,
+  // completing an engagement, leaving a review) shows up here without a
+  // manual reload -- on an interval, and immediately whenever the tab
+  // regains focus. Deliberately skips `form`/`loading` (see profileToForm
+  // above) so an in-progress profile edit is never clobbered mid-typing.
+  useEffect(() => {
+    if (!expertId) return
+    function refetch() {
+      Promise.all([connectionsApi.listForExpert(), engagementsApi.list()])
+        .then(([conns, engs]) => { setConnections(conns); setEngagements(engs) })
+        .catch(() => {})
+      authApi.me().then(({ profile: result }) => { if (result) setProfile(result) }).catch(() => {})
+    }
+    const id = setInterval(refetch, DASHBOARD_POLL_MS)
+    function onVisible() { if (document.visibilityState === 'visible') refetch() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
   }, [expertId])
 
   // Most recent professional_credential verification for one credential, if any —
@@ -734,6 +766,15 @@ export default function ExpertDashboard() {
     })
   }
 
+  function undismissItem(id) {
+    setDismissed((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
   function clearAllPast() {
     const ids = allPastItems.map((i) => i.id)
     setDismissed((prev) => {
@@ -744,6 +785,8 @@ export default function ExpertDashboard() {
   }
 
   const pastItems = allPastItems.filter((i) => !dismissed.has(i.id))
+  const dismissedCount = allPastItems.length - pastItems.length
+  const visiblePastItems = showDismissed ? allPastItems : pastItems
 
   const draftExpert = {
     ...profile,
@@ -983,21 +1026,36 @@ export default function ExpertDashboard() {
               </div>
             </div>
 
-            {pastItems.length > 0 && (
+            {allPastItems.length > 0 && (
               <div className="card" style={{ padding: 22 }}>
                 <div className="row gap-8" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
                   <span className="section-label">Past requests</span>
-                  <button
-                    className="btn btn-sm"
-                    style={{ fontSize: 11 }}
-                    onClick={clearAllPast}
-                  >
-                    Clear all
-                  </button>
+                  <div className="row gap-8">
+                    {dismissedCount > 0 && (
+                      <button
+                        className="btn btn-sm"
+                        style={{ fontSize: 11 }}
+                        onClick={() => setShowDismissed((v) => !v)}
+                      >
+                        {showDismissed ? 'Hide dismissed' : `Show dismissed (${dismissedCount})`}
+                      </button>
+                    )}
+                    {pastItems.length > 0 && (
+                      <button
+                        className="btn btn-sm"
+                        style={{ fontSize: 11 }}
+                        onClick={clearAllPast}
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {pastItems.map((item) => (
-                    <div key={item.id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  {visiblePastItems.map((item) => {
+                    const isDismissed = dismissed.has(item.id)
+                    return (
+                    <div key={item.id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center', opacity: isDismissed ? 0.55 : 1 }}>
                       <div className="row gap-8 wrap" style={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
                         {item.link ? (
                           <Link to={item.link} style={{ fontWeight: 500, fontSize: 12.5, color: 'inherit' }}>
@@ -1016,13 +1074,14 @@ export default function ExpertDashboard() {
                       <button
                         className="btn btn-sm"
                         style={{ fontSize: 11, padding: '2px 8px' }}
-                        onClick={() => dismissItem(item.id)}
-                        title="Dismiss"
+                        onClick={() => isDismissed ? undismissItem(item.id) : dismissItem(item.id)}
+                        title={isDismissed ? 'Restore' : 'Dismiss'}
                       >
-                        ×
+                        {isDismissed ? '↺' : '×'}
                       </button>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
