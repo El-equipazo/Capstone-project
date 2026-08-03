@@ -30,6 +30,9 @@ class RegisterResponse(BaseModel):
     role: str
     is_email_verified: bool
     created_at: datetime
+    # No email-sending service exists in this stack, so the verification
+    # token is returned directly instead of mailed -- see user_model.create().
+    verification_token: str
 
 
 class VerifyEmailRequest(BaseModel):

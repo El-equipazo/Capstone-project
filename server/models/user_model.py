@@ -11,6 +11,8 @@ Password hashing uses passlib bcrypt, matching seed.py. Keep BCRYPT_ROUNDS in
 sync with whatever the rest of the stack uses so hashes stay portable.
 """
 
+import secrets
+
 from passlib.context import CryptContext
 
 from server.db import connection_pool as pool
@@ -23,11 +25,17 @@ pwd_context = CryptContext(
     schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=BCRYPT_ROUNDS,
 )
 
-# Columns safe to expose. password_hash is deliberately excluded.
+VERIFICATION_TOKEN_TTL_INTERVAL = "24 hours"
+
+# Columns safe to expose. password_hash and verification_token are deliberately excluded.
 _PUBLIC_COLS = (
     "user_id, email, role, is_email_verified, is_active, "
     "last_login_at, created_at, updated_at"
 )
+
+
+def _new_verification_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 def hash_password(password: str) -> str:
@@ -36,25 +44,53 @@ def hash_password(password: str) -> str:
 
 async def create(email: str, password: str, role: str):
     """
-    Register a user. Returns the public row (no password_hash).
+    Register a user. Returns the public row (no password_hash) plus a
+    verification_token field. There's no email-sending service in this stack,
+    so the token is surfaced directly in the response rather than mailed --
+    a real deployment would email a link containing it instead.
     Raises ValidationError on bad role, ConflictError on duplicate email.
     """
     check_enum(role, USER_ROLE, "role")
     password_hash = hash_password(password)
+    token = _new_verification_token()
     try:
         return await pool.fetchrow(
             f"""
-            INSERT INTO users (email, password_hash, role)
-            VALUES ($1, $2, $3)
-            RETURNING {_PUBLIC_COLS}
+            INSERT INTO users (email, password_hash, role, verification_token, verification_token_expires_at)
+            VALUES ($1, $2, $3, $4, NOW() + INTERVAL '{VERIFICATION_TOKEN_TTL_INTERVAL}')
+            RETURNING {_PUBLIC_COLS}, verification_token
             """,
-            email, password_hash, role,
+            email, password_hash, role, token,
         )
     except Exception as e:
         # asyncpg raises UniqueViolationError (subclass); check SQLSTATE 23505.
         if getattr(e, "sqlstate", None) == "23505":
             raise ConflictError("email already registered") from e
         raise
+
+
+async def verify_email(token: str):
+    """
+    Consume a verification token: sets is_email_verified = true and clears
+    the token so it can't be reused. Raises ValidationError (-> 400) if the
+    token doesn't match any user or has expired.
+    """
+    row = await pool.fetchrow(
+        f"""
+        UPDATE users
+        SET is_email_verified = true, verification_token = NULL,
+            verification_token_expires_at = NULL, updated_at = NOW()
+        WHERE verification_token = $1 AND verification_token_expires_at > NOW()
+        RETURNING {_PUBLIC_COLS}
+        """,
+        token,
+    )
+    if row is None:
+        raise ValidationError(
+            "invalid or expired verification token",
+            field="token", issue="invalid_or_expired",
+        )
+    return row
 
 
 async def find(user_id: int):
@@ -74,13 +110,17 @@ async def find_by_email(email: str):
 async def update(user_id: int, updates: dict) -> dict:
     """
     Update mutable fields on a user (email and/or password). Returns the
-    public row. Fields are handled explicitly rather than looped over, so an
-    unrelated key like `current_password` can never be mistaken for a column.
+    public row, plus verification_token when the email changed (re-triggering
+    verification -- see create()'s docstring on why the token is surfaced
+    directly instead of emailed). Fields are handled explicitly rather than
+    looped over, so an unrelated key like `current_password` can never be
+    mistaken for a column.
 
     Raises ValidationError (-> 400) if a new password is given without the
     correct current_password, ConflictError (-> 409) on a duplicate email.
     """
     set_parts: dict = {}
+    extra_clauses: list[str] = []
 
     if "password" in updates:
         row = await pool.fetchrow(
@@ -96,20 +136,28 @@ async def update(user_id: int, updates: dict) -> dict:
 
     if "email" in updates:
         set_parts["email"] = updates["email"]
+        set_parts["is_email_verified"] = False
+        set_parts["verification_token"] = _new_verification_token()
+        extra_clauses.append(
+            f"verification_token_expires_at = NOW() + INTERVAL '{VERIFICATION_TOKEN_TTL_INTERVAL}'"
+        )
 
     if not set_parts:
         return await find(user_id)
 
     keys = list(set_parts.keys())
     vals = [set_parts[k] for k in keys]
-    clauses = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(keys))
+    clauses = ", ".join([f"{k} = ${i + 2}" for i, k in enumerate(keys)] + extra_clauses)
+    # verification_token is only selected back when an email change actually
+    # issued one -- a password-only update must never leak a standing token.
+    returning_cols = _PUBLIC_COLS + (", verification_token" if "email" in updates else "")
 
     try:
         return await pool.fetchrow(
             f"""
             UPDATE users SET {clauses}, updated_at = NOW()
             WHERE user_id = $1
-            RETURNING {_PUBLIC_COLS}
+            RETURNING {returning_cols}
             """,
             user_id, *vals,
         )
