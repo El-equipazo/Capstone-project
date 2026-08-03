@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import ChatWindow from './components/ChatWindow'
@@ -16,6 +16,11 @@ import EngagementDetail from './pages/EngagementDetail'
 import NotFound from './pages/NotFound'
 
 export default function App() {
+  // The landing page renders its own footer section (styled to match its
+  // v5 marketing palette) as part of its content -- the plain global
+  // Footer would just duplicate it directly underneath.
+  const isLanding = useLocation().pathname === '/'
+
   return (
     <ChatProvider>
       <Navbar />
@@ -32,7 +37,7 @@ export default function App() {
         <Route path="/engagements/:id" element={<EngagementDetail />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      <Footer />
+      {!isLanding && <Footer />}
       <ChatWindow />
     </ChatProvider>
   )

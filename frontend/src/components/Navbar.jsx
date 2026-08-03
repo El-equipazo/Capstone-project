@@ -93,7 +93,7 @@ export default function Navbar() {
   const transparent = isLanding && !scrolled
 
   return (
-    <header className={`navbar ${isLanding ? 'navbar-overlay' : ''} ${transparent ? 'navbar-transparent' : ''}`}>
+    <header className={`navbar ${isLanding ? 'navbar-overlay' : ''} ${transparent ? 'navbar-transparent' : ''} ${isLanding && scrolled ? 'navbar-landing-solid' : ''}`}>
       <div className="container navbar-inner">
         <Link to="/" className="brand">
           <span className="brand-mark">L</span>
