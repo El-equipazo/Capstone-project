@@ -13,30 +13,86 @@ export default function SignUp() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const { user, register, login } = useAuth()
+  // Set once registration succeeds, holding the verification link the user
+  // would otherwise have received by email -- there's no email-sending
+  // service in this stack (see user_model.create()), so the token is shown
+  // directly here instead. Its presence also gates the confirmation screen
+  // below, which the sign-in redirect effect must not skip past.
+  const [verifyLink, setVerifyLink] = useState(null)
+
+  const { user, register, login, refreshUser } = useAuth()
   const navigate = useNavigate()
 
   // Already signed in — bounce to their dashboard rather than showing a form
   // to create a second account (or a stale "sign in" link back to /login).
+  // Skipped once verifyLink is set: handleSubmit already signed the user in
+  // to reach that screen, and this effect would otherwise navigate away
+  // from it the instant `user` becomes truthy.
   useEffect(() => {
-    if (user) navigate(landingPathFor(user.role), { replace: true })
-  }, [user, navigate])
+    if (user && !verifyLink) navigate(landingPathFor(user.role), { replace: true })
+  }, [user, verifyLink, navigate])
 
-  if (user) return null
+  if (user && !verifyLink) return null
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setSubmitting(true)
     try {
-      await register({ email, password, role })
-      const { user } = await login({ email, password })
-      navigate(landingPathFor(user.role))
+      const registered = await register({ email, password, role })
+      // Set before login() rather than after: login() makes `user` truthy,
+      // and if verifyLink were still null at that instant, the "already
+      // signed in" redirect effect below would fire and navigate away
+      // before this screen ever renders.
+      const link = `${window.location.origin}/verify-email?token=${registered.verification_token}`
+      setVerifyLink(link)
+      await login({ email, password })
+      // Populates is_email_verified on the session's user object -- login()
+      // alone only stores {user_id, email, role}, and the navbar's status
+      // row would otherwise show nothing until the next /auth/me call
+      // (e.g. on the dashboard's own mount effect).
+      await refreshUser().catch(() => {})
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (verifyLink) {
+    return (
+      <div className="page">
+        <div className="container" style={{ maxWidth: 440 }}>
+          <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <h1 className="h2" style={{ marginBottom: 6 }}>Confirm your email</h1>
+              <p className="lead">
+                We'd normally send a verification link to <strong>{email}</strong>. This project
+                doesn't have an email service configured yet, so here's that link directly:
+              </p>
+            </div>
+
+            <div className="field-group">
+              <label className="field-label">Verification link</label>
+              <input className="field-input" readOnly value={verifyLink} onFocus={(e) => e.target.select()} />
+            </div>
+
+            <div className="row gap-8 wrap">
+              <a href={verifyLink} className="btn btn-acc">
+                Verify now
+              </a>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => navigate(landingPathFor(user?.role))}
+              >
+                Skip for now
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

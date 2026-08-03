@@ -48,6 +48,15 @@ function GlobeIcon() {
   )
 }
 
+function MailIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m2 6 10 7 10-7" />
+    </svg>
+  )
+}
+
 export default function Navbar() {
   const { user, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
@@ -135,6 +144,18 @@ export default function Navbar() {
                       <span className="account-row-label">{t('nav.language')}</span>
                       <span className="account-row-value">{currentLanguageName}</span>
                     </button>
+                    {typeof user.is_email_verified === 'boolean' && (
+                      <div className="account-row static">
+                        <MailIcon />
+                        <span className="account-row-label">{t('nav.email')}</span>
+                        <span
+                          className="account-row-value"
+                          style={user.is_email_verified ? undefined : { color: 'var(--pending)' }}
+                        >
+                          {user.is_email_verified ? t('nav.emailVerified') : t('nav.emailUnverified')}
+                        </span>
+                      </div>
+                    )}
                     <button className="account-row danger" onClick={handleLogout}>
                       {t('nav.signOut')}
                     </button>

@@ -461,6 +461,16 @@ button, input, select, textarea {
   color: var(--danger);
 }
 
+/* Informational row (e.g. email verification status) -- not a button,
+   nothing happens on click, so it shouldn't look clickable. */
+.account-row.static {
+  cursor: default;
+}
+
+.account-row.static:hover {
+  background: none;
+}
+
 .account-row-label {
   flex: 1;
 }

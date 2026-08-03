@@ -64,6 +64,14 @@ export const authApi = {
     return await apiFetch('/auth/register', { method: 'POST', body: { email, password, role } })
   },
 
+  // Public -- no auth header. There's no email-sending service in this
+  // stack (see user_model.create()/update()), so the token this consumes
+  // comes from the register/updateMe response shown directly to the user,
+  // not from a link they clicked in an actual email.
+  async verifyEmail(token) {
+    return await apiFetch('/auth/verify-email', { method: 'POST', body: { token } })
+  },
+
   async login({ email, password }) {
     const data = await apiFetch('/auth/login', { method: 'POST', body: { email, password } })
     const session = { access_token: data.access_token, user: data.user }
@@ -104,7 +112,10 @@ export const authApi = {
     const data = await apiFetch('/auth/me', { headers: authHeader() })
     // Transform flat response into { user, profile } shape the dashboard expects
     const { profile, ...userFields } = data
-    const user = { user_id: userFields.user_id, email: userFields.email, role: userFields.role }
+    const user = {
+      user_id: userFields.user_id, email: userFields.email, role: userFields.role,
+      is_email_verified: userFields.is_email_verified,
+    }
     // Keep stored session user fields fresh
     storeSession({ ...session, user })
     return { user, profile }

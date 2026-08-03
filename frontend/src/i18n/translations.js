@@ -25,6 +25,9 @@ export const translations = {
       on: 'On',
       off: 'Off',
       language: 'Language',
+      email: 'Email',
+      emailVerified: 'Verified',
+      emailUnverified: 'Not verified',
       signOut: 'Sign out',
     },
     languagePopup: {
@@ -93,6 +96,9 @@ export const translations = {
       on: 'Activado',
       off: 'Desactivado',
       language: 'Idioma',
+      email: 'Correo',
+      emailVerified: 'Verificado',
+      emailUnverified: 'No verificado',
       signOut: 'Cerrar sesión',
     },
     languagePopup: {
@@ -161,6 +167,9 @@ export const translations = {
       on: 'Activé',
       off: 'Désactivé',
       language: 'Langue',
+      email: 'E-mail',
+      emailVerified: 'Vérifié',
+      emailUnverified: 'Non vérifié',
       signOut: 'Se déconnecter',
     },
     languagePopup: {
@@ -229,6 +238,9 @@ export const translations = {
       on: 'Ativado',
       off: 'Desativado',
       language: 'Idioma',
+      email: 'E-mail',
+      emailVerified: 'Verificado',
+      emailUnverified: 'Não verificado',
       signOut: 'Sair',
     },
     languagePopup: {
@@ -297,6 +309,9 @@ export const translations = {
       on: 'An',
       off: 'Aus',
       language: 'Sprache',
+      email: 'E-Mail',
+      emailVerified: 'Verifiziert',
+      emailUnverified: 'Nicht verifiziert',
       signOut: 'Abmelden',
     },
     languagePopup: {
