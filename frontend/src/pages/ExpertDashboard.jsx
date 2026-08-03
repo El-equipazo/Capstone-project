@@ -6,6 +6,7 @@ import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
 import MilestoneMap from '../components/MilestoneMap'
 import RatingStars from '../components/RatingStars'
+import ChangePasswordCard from '../components/ChangePasswordCard'
 import TagInput from '../components/organization/TagInput'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
@@ -1402,6 +1403,8 @@ export default function ExpertDashboard() {
                   </div>
                 </form>
               </div>
+
+              <ChangePasswordCard />
             </div>
 
             <aside style={{ position: 'sticky', top: 84, alignSelf: 'flex-start' }}>

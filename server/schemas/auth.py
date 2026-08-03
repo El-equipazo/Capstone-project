@@ -30,6 +30,9 @@ class RegisterResponse(BaseModel):
     role: str
     is_email_verified: bool
     created_at: datetime
+    # No email-sending service exists in this stack, so the verification
+    # token is returned directly instead of mailed -- see user_model.create().
+    verification_token: str
 
 
 class VerifyEmailRequest(BaseModel):
@@ -62,3 +65,10 @@ class UpdateMeRequest(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     current_password: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) < 8:
+            raise ValueError("password must be at least 8 characters")
+        return v

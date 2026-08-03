@@ -6,6 +6,7 @@ import MilestoneMap from '../components/MilestoneMap'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import RecommendationCard from '../components/matching/RecommendationCard'
 import RatingStars from '../components/RatingStars'
+import ChangePasswordCard from '../components/ChangePasswordCard'
 import TagInput from '../components/organization/TagInput'
 import DeleteAccount from '../components/DeleteAccount'
 import { labelize, BUDGET_RANGE_LABEL, toNumberOrNull } from '../utils/format'
@@ -535,8 +536,8 @@ export default function OrganizationDashboard() {
         )}
 
         {tab === 'profile' && (
-          <>
-          <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 640 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 640 }}>
+          <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <span className="section-label">Profile</span>
 
             <div className="row gap-10">
@@ -642,7 +643,9 @@ export default function OrganizationDashboard() {
             </button>
           </form>
 
-          <div className="card" style={{ padding: 22, maxWidth: 640, marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <ChangePasswordCard />
+
+          <div className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span className="section-label">Danger zone</span>
             <p className="lead" style={{ fontSize: 12.5 }}>
               Deleting your account permanently erases it — along with every engagement, connection
@@ -669,7 +672,7 @@ export default function OrganizationDashboard() {
               }}
             />
           )}
-          </>
+          </div>
         )}
 
         {tab === 'infrastructure' && (

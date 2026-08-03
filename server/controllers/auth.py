@@ -55,8 +55,6 @@ async def register(body: RegisterRequest):
 
 @router.post("/auth/verify-email")
 async def verify_email(body: VerifyEmailRequest):
-    # Expects user_model.verify_email(token) -> sets is_email_verified = true.
-    # Teammate implementing user_model should add this function.
     await user_model.verify_email(body.token)
     return {"is_email_verified": True}
 
