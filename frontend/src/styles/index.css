@@ -199,6 +199,10 @@ h1, h2, h3, h4, p {
   margin: 0;
 }
 
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+}
+
 button, input, select, textarea {
   font-family: inherit;
   color: inherit;
@@ -290,6 +294,7 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   gap: 9px;
+  font-family: var(--font-heading);
   font-weight: 700;
   font-size: 17px;
   letter-spacing: -0.01em;
@@ -307,6 +312,7 @@ button, input, select, textarea {
   align-items: center;
   justify-content: center;
   color: #fff;
+  font-family: var(--font-heading);
   font-size: 13px;
   transition: background-color 0.25s ease, border-color 0.25s ease;
   font-weight: 700;
@@ -504,9 +510,14 @@ button, input, select, textarea {
 }
 
 .btn-acc {
-  background: var(--acc);
-  border-color: var(--acc);
+  background: var(--lp-coral);
+  border-color: var(--lp-coral);
   color: #fff;
+}
+
+.btn-acc:hover {
+  background: var(--lp-coral-pressed);
+  border-color: var(--lp-coral-pressed);
 }
 
 .btn-danger {
@@ -1044,6 +1055,7 @@ button, input, select, textarea {
 }
 
 .h1 {
+  font-family: var(--font-heading);
   font-weight: 700;
   font-size: 34px;
   line-height: 1.15;
@@ -1051,6 +1063,7 @@ button, input, select, textarea {
 }
 
 .h2 {
+  font-family: var(--font-heading);
   font-weight: 700;
   font-size: 20px;
   line-height: 1.25;
