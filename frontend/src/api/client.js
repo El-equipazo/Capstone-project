@@ -2,7 +2,7 @@
 // All callers use the same function signatures as the old localStorage mock,
 // so no page components needed to change.
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const SESSION_KEY = 'qc_session'
 
 class ApiError extends Error {
@@ -46,6 +46,12 @@ async function apiFetch(path, { method = 'GET', body, headers = {} } = {}) {
 
   if (!res.ok) {
     const err = data?.error ?? {}
+    // A 401 with a stored session means the token has expired — clear it so the
+    // user is prompted to log in again instead of looping on stale credentials.
+    if (res.status === 401 && getStoredSession()) {
+      localStorage.removeItem(SESSION_KEY)
+      window.dispatchEvent(new Event('auth:session-expired'))
+    }
     throw new ApiError(res.status, err.code ?? 'ERROR', err.message ?? res.statusText)
   }
   return data
@@ -78,6 +84,17 @@ export const authApi = {
     return getStoredSession()
   },
 
+  // DELETE /auth/me: for organizations this permanently erases the account
+  // (organization_model.hard_delete -- engagements, connections, chat threads,
+  // and all shared history are actually deleted, not just the account).
+  // Experts/admins still just get soft-deactivated (is_active = false).
+  // Either way every authenticated route already 401s once the account is
+  // gone/inactive via get_current_user, so this clears the local session too.
+  async deleteAccount() {
+    await apiFetch('/auth/me', { method: 'DELETE', headers: authHeader() })
+    localStorage.removeItem(SESSION_KEY)
+  },
+
   // GET /auth/me already resolves either an organization_profile or an
   // expert_profile server-side depending on the user's role, so this stays
   // generic rather than branching on role itself.
@@ -100,7 +117,10 @@ export const expertsApi = {
   async list(filters = {}) {
     const params = new URLSearchParams()
     for (const [key, val] of Object.entries(filters)) {
-      if (val !== undefined && val !== null && val !== '') {
+      if (val === undefined || val === null || val === '') continue
+      if (Array.isArray(val)) {
+        val.forEach((v) => params.append(key, v))
+      } else {
         params.set(key, val)
       }
     }
@@ -187,6 +207,10 @@ export const organizationsApi = {
     })
   },
 
+  async getById(orgId) {
+    return await apiFetch(`/organizations/${orgId}`, { headers: authHeader() })
+  },
+
   async getInfrastructure(orgId) {
     return await apiFetch(`/organizations/${orgId}/infrastructure`, { headers: authHeader() })
   },
@@ -197,6 +221,12 @@ export const organizationsApi = {
       body: data,
       headers: authHeader(),
     })
+  },
+
+  // Private -- full review text, owner/admin only. Everyone else only ever
+  // sees this org's aggregate avg_rating field.
+  async getMyReviews(orgId) {
+    return await apiFetch(`/organizations/${orgId}/reviews`, { headers: authHeader() })
   },
 }
 
@@ -309,34 +339,66 @@ export const engagementsApi = {
       headers: authHeader(),
     })
   },
-}
 
-// ---------------- Messages -----------------------------------------------
-
-export const messagesApi = {
-  async list(engagementId, { unreadOnly, page, limit } = {}) {
-    const params = new URLSearchParams()
-    if (unreadOnly) params.set('unread', 'true')
-    if (page) params.set('page', page)
-    if (limit) params.set('limit', limit)
-    const qs = params.toString() ? `?${params}` : ''
-    // { data, pagination } envelope -- return it whole (not just .data)
-    // since the chat hook needs the pagination info too.
-    return await apiFetch(`/engagements/${engagementId}/messages${qs}`, { headers: authHeader() })
-  },
-
-  async send(engagementId, { message_type = 'text', content, document_id } = {}) {
-    return await apiFetch(`/engagements/${engagementId}/messages`, {
+  async proposeMilestoneChange(engagementId, milestoneId, data) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/propose-change`, {
       method: 'POST',
-      body: { message_type, content, ...(document_id ? { document_id } : {}) },
+      body: data,
       headers: authHeader(),
     })
   },
 
-  async markRead(engagementId, { message_ids, all } = {}) {
-    return await apiFetch(`/engagements/${engagementId}/messages/read`, {
+  async proposeMilestoneCancel(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/propose-cancel`, {
       method: 'POST',
-      body: all ? { all: true } : { message_ids },
+      headers: authHeader(),
+    })
+  },
+
+  async acceptMilestoneChange(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/accept-change`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async declineMilestoneChange(engagementId, milestoneId) {
+    return await apiFetch(`/engagements/${engagementId}/milestones/${milestoneId}/decline-change`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async proposeTerms(engagementId, data) {
+    return await apiFetch(`/engagements/${engagementId}/propose-terms`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async acceptTermsChange(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/terms/accept`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async declineTermsChange(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/terms/decline`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async getNotes(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/notes`, { headers: authHeader() })
+  },
+
+  async updateNotes(engagementId, content) {
+    return await apiFetch(`/engagements/${engagementId}/notes`, {
+      method: 'PUT',
+      body: { content },
       headers: authHeader(),
     })
   },
@@ -435,6 +497,13 @@ export const adminApi = {
     })
   },
 
+  async reviewVerificationWithAI(verificationId) {
+    return await apiFetch(`/admin/verifications/${verificationId}/ai-review`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
   async setExpertVerified(expertProfileId, isVerified) {
     return await apiFetch(`/admin/experts/${expertProfileId}/verify`, {
       method: 'PATCH',
@@ -443,10 +512,62 @@ export const adminApi = {
     })
   },
 
-  async verifyOrganization(orgProfileId) {
+  async setOrganizationVerified(orgProfileId, isVerified) {
     return await apiFetch(`/admin/organizations/${orgProfileId}/verify`, {
       method: 'PATCH',
-      body: { is_verified: true },
+      body: { is_verified: isVerified },
+      headers: authHeader(),
+    })
+  },
+
+  async listReviews({ is_flagged } = {}) {
+    const params = new URLSearchParams()
+    if (is_flagged != null) params.set('is_flagged', is_flagged)
+    const qs = params.toString() ? `?${params}` : ''
+    return await apiFetch(`/admin/reviews${qs}`, { headers: authHeader() })
+  },
+
+  async updateReview(reviewId, patch) {
+    return await apiFetch(`/admin/reviews/${reviewId}`, {
+      method: 'PATCH',
+      body: patch,
+      headers: authHeader(),
+    })
+  },
+}
+
+// ---------------- Reviews -----------------------------------------------------
+
+export const reviewsApi = {
+  async create(engagementId, data) {
+    return await apiFetch(`/engagements/${engagementId}/reviews`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  // GET /experts/:id/reviews returns { data, pagination, aggregate } -- unlike
+  // most list() helpers, this deliberately does NOT unwrap to .data, since
+  // callers need the aggregate and pagination alongside the review rows.
+  async listForExpert(expertId, { page = 1, limit = 10, q, minStars, sort } = {}) {
+    const params = new URLSearchParams({ page, limit })
+    if (q) params.set('q', q)
+    if (minStars) params.set('min_stars', minStars)
+    if (sort) params.set('sort', sort)
+    return await apiFetch(`/experts/${expertId}/reviews?${params}`)
+  },
+
+  // Participant/admin only -- both sides' reviews (including private ones)
+  // for one engagement. Small, unpaginated result set (at most 2 rows).
+  async listForEngagement(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/reviews`, { headers: authHeader() })
+  },
+
+  async flag(reviewId, flaggedReason) {
+    return await apiFetch(`/reviews/${reviewId}/flag`, {
+      method: 'POST',
+      body: { flagged_reason: flaggedReason },
       headers: authHeader(),
     })
   },
@@ -464,5 +585,79 @@ export const matchingApi = {
       body: { need_description, limit },
       headers: authHeader(),
     })
+  },
+}
+
+// ---------------- Uploads -----------------------------------------------------
+// multipart/form-data, so this can't go through apiFetch (which always
+// JSON-encodes the body) — a raw fetch with FormData, no Content-Type
+// override (the browser sets the multipart boundary itself).
+
+export const uploadsApi = {
+  async upload(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch(`${BASE}/uploads`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: formData,
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      const err = data?.error ?? {}
+      throw new ApiError(res.status, err.code ?? 'ERROR', err.message ?? res.statusText)
+    }
+    return data
+  },
+}
+
+// ---------------- Threads (pre-connection inquiry chat) -----------------------
+
+export const threadsApi = {
+  async getOrCreate(expertProfileId) {
+    return await apiFetch('/threads', {
+      method: 'POST',
+      body: { expert_profile_id: expertProfileId },
+      headers: authHeader(),
+    })
+  },
+
+  async list() {
+    return await apiFetch('/threads', { headers: authHeader() })
+  },
+
+  async messages(threadId, { page = 1, limit = 20 } = {}) {
+    return await apiFetch(`/threads/${threadId}/messages?page=${page}&limit=${limit}`, {
+      headers: authHeader(),
+    })
+  },
+
+  async send(threadId, content) {
+    return await apiFetch(`/threads/${threadId}/messages`, {
+      method: 'POST',
+      body: { message_type: 'text', content },
+      headers: authHeader(),
+    })
+  },
+
+  async markRead(threadId) {
+    return await apiFetch(`/threads/${threadId}/messages/read`, {
+      method: 'POST',
+      body: { all: true },
+      headers: authHeader(),
+    })
+  },
+
+  async getOrCreateForEngagement(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/thread`, { headers: authHeader() })
+  },
+
+  wsUrl(threadId) {
+    const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    const wsBase = base.startsWith('/')
+      ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}${base}`
+      : base.replace(/^http/, 'ws')
+    const token = authApi.getSession()?.access_token ?? ''
+    return `${wsBase}/threads/${threadId}/ws?token=${encodeURIComponent(token)}`
   },
 }

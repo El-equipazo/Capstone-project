@@ -10,13 +10,17 @@ _USER_COLS = (
 _VR_COLS = (
     "verification_id, user_id, verification_type, related_credential_id, "
     "status, reviewed_by_admin_id, submitted_document_urls, admin_notes, "
-    "rejection_reason, reviewed_at, expires_at, created_at"
+    "rejection_reason, reviewed_at, expires_at, "
+    "ai_recommendation, ai_confidence, ai_reasoning, ai_red_flags, ai_reviewed_at, "
+    "created_at"
 )
 
 _VR_COLS_JOINED = (
     "vr.verification_id, vr.user_id, vr.verification_type, vr.related_credential_id, "
     "vr.status, vr.reviewed_by_admin_id, vr.submitted_document_urls, vr.admin_notes, "
-    "vr.rejection_reason, vr.reviewed_at, vr.expires_at, vr.created_at"
+    "vr.rejection_reason, vr.reviewed_at, vr.expires_at, "
+    "vr.ai_recommendation, vr.ai_confidence, vr.ai_reasoning, vr.ai_red_flags, vr.ai_reviewed_at, "
+    "vr.created_at"
 )
 
 
@@ -68,7 +72,8 @@ async def list_verifications(status=None, verification_type=None) -> list:
         SELECT {_VR_COLS_JOINED},
                u.email AS user_email,
                u.role  AS user_role,
-               ec.credential_name
+               ec.credential_type, ec.credential_name, ec.institution,
+               ec.year_obtained, ec.expiry_date, ec.verification_url AS credential_verification_url
         FROM verification_records vr
         JOIN users u ON u.user_id = vr.user_id
         LEFT JOIN expert_credentials ec ON ec.credential_id = vr.related_credential_id
@@ -78,6 +83,46 @@ async def list_verifications(status=None, verification_type=None) -> list:
         *args,
     )
     return [dict(r) for r in rows]
+
+
+async def get_verification(verification_id: int) -> dict:
+    row = await pool.fetchrow(
+        f"""
+        SELECT {_VR_COLS_JOINED},
+               u.email AS user_email,
+               u.role  AS user_role,
+               ec.credential_type, ec.credential_name, ec.institution,
+               ec.year_obtained, ec.expiry_date, ec.verification_url AS credential_verification_url
+        FROM verification_records vr
+        JOIN users u ON u.user_id = vr.user_id
+        LEFT JOIN expert_credentials ec ON ec.credential_id = vr.related_credential_id
+        WHERE vr.verification_id = $1
+        """,
+        verification_id,
+    )
+    if row is None:
+        raise NotFoundError("verification record not found")
+    return dict(row)
+
+
+async def save_ai_review(verification_id: int, *, recommendation: str,
+                         confidence: str, reasoning: str, red_flags: list) -> dict:
+    row = await pool.fetchrow(
+        f"""
+        UPDATE verification_records
+        SET ai_recommendation = $1,
+            ai_confidence     = $2,
+            ai_reasoning      = $3,
+            ai_red_flags      = $4,
+            ai_reviewed_at    = NOW()
+        WHERE verification_id = $5
+        RETURNING {_VR_COLS}
+        """,
+        recommendation, confidence, reasoning, red_flags, verification_id,
+    )
+    if row is None:
+        raise NotFoundError("verification record not found")
+    return dict(row)
 
 
 async def decide_verification(
@@ -202,14 +247,15 @@ async def set_expert_verified(expert_profile_id: int, is_verified: bool) -> dict
     return dict(row)
 
 
-async def verify_organization(org_profile_id: int) -> dict:
+async def set_organization_verified(org_profile_id: int, is_verified: bool) -> dict:
     row = await pool.fetchrow(
         """
         UPDATE organization_profiles
-        SET is_verified = true, updated_at = NOW()
-        WHERE org_profile_id = $1
+        SET is_verified = $1, updated_at = NOW()
+        WHERE org_profile_id = $2
         RETURNING org_profile_id, user_id, org_name, is_verified
         """,
+        is_verified,
         org_profile_id,
     )
     if row is None:

@@ -36,6 +36,9 @@ budget_range                    TEXT -- 'under_10k' | '10k_50k' | '50k_250k' | '
 urgency_level                   TEXT -- 'just_exploring' | 'planning_ahead' | 'urgent' | 'critical'
 default_connection_expiry_days  INTEGER DEFAULT 30
 is_verified                     BOOLEAN DEFAULT false
+avg_rating                      NUMERIC(3,2) -- computed from expert->org reviews only;
+                                 -- content stays private to the org (+ admin), only this
+                                 -- aggregate is ever exposed elsewhere (see reviews below)
 created_at                      TIMESTAMP DEFAULT NOW()
 updated_at                      TIMESTAMP DEFAULT NOW()
 
@@ -348,6 +351,16 @@ start_date              DATE
 estimated_end_date      DATE
 actual_end_date         DATE
 cancellation_reason     TEXT
+proposal_feedback       TEXT -- org's "request changes" note when bouncing proposal_sent back to scoping
+proposal_expires_at     TIMESTAMP -- deadline for the org to respond to a sent proposal, set by the expert;
+                        -- lazily swept back to 'scoping' if it lapses (mirrors connection_requests.expires_at)
+pending_start_date              DATE -- proposed new start_date, awaiting the other party's accept/decline
+pending_estimated_end_date      DATE -- proposed new estimated_end_date
+pending_agreed_budget           NUMERIC(12,2) -- proposed new agreed_budget
+pending_payment_structure       TEXT -- proposed new payment_structure
+pending_requested_by_user_id    INTEGER REFERENCES users(user_id) -- who proposed it (org or expert side --
+                                -- unlike engagement_milestones.pending_*, this negotiation is bidirectional)
+pending_requested_at            TIMESTAMP
 created_at              TIMESTAMP DEFAULT NOW()
 updated_at              TIMESTAMP DEFAULT NOW()
 
@@ -370,8 +383,24 @@ confirmed_at              TIMESTAMP
 completed_at              TIMESTAMP
 requires_client_approval  BOOLEAN DEFAULT false
 client_approved_at        TIMESTAMP
+pending_action                    TEXT -- NULL | 'change' | 'cancel' -- an org-proposed change
+                                  -- awaiting the expert's accept/decline; at most one at a time
+pending_due_date                  DATE -- proposed new due_date, when pending_action = 'change'
+pending_deliverable_description   TEXT -- proposed new deliverable_description, when pending_action = 'change'
+pending_requested_by_user_id      INTEGER REFERENCES users(user_id)
+pending_requested_at              TIMESTAMP
 created_at                TIMESTAMP DEFAULT NOW()
 updated_at                TIMESTAMP DEFAULT NOW()
+
+engagement_notes
+─────────────────────────────────────────────────────
+note_id           SERIAL PRIMARY KEY
+engagement_id     INTEGER NOT NULL REFERENCES engagements(engagement_id) ON DELETE CASCADE
+expert_user_id    INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE
+content           TEXT -- private scratchpad; the organization side never reads these
+created_at        TIMESTAMP DEFAULT NOW()
+updated_at        TIMESTAMP DEFAULT NOW()
+UNIQUE (engagement_id, expert_user_id)
 ```
 
 ### Diagram
@@ -498,6 +527,12 @@ created_at              TIMESTAMP DEFAULT NOW()
 
 ## 7. Trust & Reviews
 
+Storage is symmetric (one row per side, distinguished by `reviewer_role`), but
+visibility is not: an expert's reviews are public (`GET /experts/:id/reviews`);
+an org's are private to the org itself and admins (`GET /organizations/:id/reviews`)
+— everyone else only ever sees `organization_profiles.avg_rating`, never the
+review text. See api-contract.md §9.
+
 ```
 reviews
 ─────────────────────────────────────────────────────
@@ -507,10 +542,6 @@ reviewer_id               INTEGER REFERENCES users(user_id)
 reviewee_id                INTEGER REFERENCES users(user_id)
 reviewer_role              TEXT NOT NULL -- 'organization' | 'expert'
 overall_rating              SMALLINT NOT NULL -- 1–5
-communication_rating        SMALLINT -- 1–5
-expertise_rating            SMALLINT -- 1–5 (expert reviews only)
-timeliness_rating           SMALLINT -- 1–5
-value_rating                 SMALLINT -- 1–5: was it worth the cost?
 review_title                 TEXT
 review_body                  TEXT
 is_public                    BOOLEAN DEFAULT true
@@ -536,6 +567,11 @@ admin_notes                  TEXT
 rejection_reason             TEXT
 reviewed_at                  TIMESTAMP
 expires_at                   DATE
+ai_recommendation            TEXT -- 'approve' | 'reject' | 'needs_more_info'; advisory, admin decides regardless
+ai_confidence                TEXT -- 'low' | 'medium' | 'high'
+ai_reasoning                 TEXT
+ai_red_flags                 TEXT[]
+ai_reviewed_at                TIMESTAMP -- set when an admin has triggered an AI review; NULL until then
 created_at                    TIMESTAMP DEFAULT NOW()
 ```
 

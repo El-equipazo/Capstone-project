@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi } from '../api/client'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { authApi, connectionsApi, engagementsApi, expertsApi, verificationsApi, uploadsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
+import MilestoneMap from '../components/MilestoneMap'
+import RatingStars from '../components/RatingStars'
+import TagInput from '../components/organization/TagInput'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
 
 const AVAILABILITY_OPTIONS = Object.keys(AVAILABILITY_LABEL)
+
+// Engagement dates can't be set before today (server enforces this too).
+const todayStr = new Date().toISOString().slice(0, 10)
 
 const BLANK_FORM = {
   first_name: '',
@@ -39,10 +46,23 @@ function profileToForm(profile) {
 export default function ExpertDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { openChat } = useChat_context()
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'overview')
+
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    setTab(t || 'overview')
+    // Handle notification deep-links: ?open_thread=X (new) or ?tab=messages&thread=X (legacy)
+    const threadId = searchParams.get('open_thread') || searchParams.get('thread')
+    if (threadId) {
+      openChat(parseInt(threadId, 10), 'Conversation')
+      navigate('/dashboard', { replace: true })
+    }
+  }, [searchParams, openChat, navigate])
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -60,6 +80,31 @@ export default function ExpertDashboard() {
     years_in_specialization: '',
   })
 
+  // Specializations picked before the profile exists yet (creation form only) --
+  // posted one-by-one to POST /experts/{id}/specializations right after the
+  // profile itself is created, since that endpoint requires an existing id.
+  const [newSpecForm, setNewSpecForm] = useState({
+    specialization: SPECIALIZATIONS[0],
+    proficiency_level: PROFICIENCY_LEVELS[0],
+    years_in_specialization: '',
+  })
+  const [pendingSpecs, setPendingSpecs] = useState([])
+
+  function addPendingSpecialization(e) {
+    e.preventDefault()
+    if (pendingSpecs.some((s) => s.specialization === newSpecForm.specialization)) {
+      setError('That specialization is already added.')
+      return
+    }
+    setError('')
+    setPendingSpecs((prev) => [...prev, newSpecForm])
+    setNewSpecForm({ specialization: SPECIALIZATIONS[0], proficiency_level: PROFICIENCY_LEVELS[0], years_in_specialization: '' })
+  }
+
+  function removePendingSpecialization(specialization) {
+    setPendingSpecs((prev) => prev.filter((s) => s.specialization !== specialization))
+  }
+
   const [verifyPrompt, setVerifyPrompt] = useState(false)
   const [verifying, setVerifying] = useState(false)
 
@@ -68,6 +113,14 @@ export default function ExpertDashboard() {
   const [credForm, setCredForm] = useState(BLANK_CRED)
   const [addingCred, setAddingCred] = useState(false)
   const [credError, setCredError] = useState('')
+  const [verifyFormFor, setVerifyFormFor] = useState(null)
+  const [verifyDocUrls, setVerifyDocUrls] = useState([])
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const [verifications, setVerifications] = useState([])
+  const [submittingVerification, setSubmittingVerification] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_dismissed_${user?.user_id}`) || '[]')) }
     catch { return new Set() }
@@ -94,7 +147,29 @@ export default function ExpertDashboard() {
       setConnections(conns)
       setEngagements(engs)
     })
+    verificationsApi.list().then(setVerifications).catch(() => {})
   }, [expertId])
+
+  // Most recent professional_credential verification for one credential, if any —
+  // list_for_user() already orders by created_at DESC, so [0] is the latest
+  // (a credential can be resubmitted after a rejection).
+  function latestVerificationFor(credentialId) {
+    return verifications.find(
+      (v) => v.verification_type === 'professional_credential' && v.related_credential_id === credentialId
+    )
+  }
+
+  // Single source of truth for a credential's verification state — the
+  // `verification_status` field some code used to set client-side on the
+  // credential object was never actually populated from the backend on
+  // page load (list_credentials()/_full_profile() only return `is_verified`,
+  // a plain boolean), so it was always undefined on a fresh load and the
+  // "Request verification" button showed even for already-approved
+  // credentials. Deriving it from the real verification_records fetch fixes
+  // that for approved/pending/rejected alike.
+  function credentialStatus(credentialId) {
+    return latestVerificationFor(credentialId)?.status ?? null
+  }
 
   if (!user) return null
 
@@ -131,6 +206,14 @@ export default function ExpertDashboard() {
 
   async function handleCreate(e) {
     e.preventDefault()
+    if (!form.headline.trim() || !form.linkedin_url.trim()) {
+      setError('Headline and LinkedIn URL are required.')
+      return
+    }
+    if (pendingSpecs.length === 0) {
+      setError('Add at least one specialization.')
+      return
+    }
     setError('')
     setSaving(true)
     try {
@@ -140,8 +223,29 @@ export default function ExpertDashboard() {
         hourly_rate_min: toNumberOrNull(form.hourly_rate_min),
         hourly_rate_max: toNumberOrNull(form.hourly_rate_max),
       })
+      // The profile now exists server-side no matter what happens below --
+      // always advance past the creation form so a specialization POST
+      // failing (network blip, transient error) can't strand the user on a
+      // form that looks like nothing happened. allSettled (rather than
+      // stopping at the first rejection) also means one bad specialization
+      // doesn't take out the rest of the batch.
+      const outcomes = await Promise.allSettled(
+        pendingSpecs.map((spec) =>
+          expertsApi.addSpecialization(result.expert_profile_id, {
+            ...spec,
+            years_in_specialization: toNumberOrNull(spec.years_in_specialization),
+          })
+        )
+      )
+      const failed = outcomes
+        .map((o, i) => (o.status === 'rejected' ? pendingSpecs[i] : null))
+        .filter(Boolean)
       setProfile(result)
       setVerifyPrompt(true)
+      if (failed.length > 0) {
+        const names = failed.map((s) => labelize(s.specialization)).join(', ')
+        setError(`Profile created, but couldn't add: ${names}. Add them from your Profile tab.`)
+      }
     } catch (err) {
       setError(err.body?.error?.message ?? 'Something went wrong. Please try again.')
     } finally {
@@ -189,6 +293,10 @@ export default function ExpertDashboard() {
   }
 
   async function handleRemoveSpecialization(specializationId) {
+    if (profile.specializations.length <= 1) {
+      setError('Your profile must have at least one specialization — add another before removing this one.')
+      return
+    }
     setError('')
     try {
       await expertsApi.removeSpecialization(profile.expert_profile_id, specializationId)
@@ -226,7 +334,7 @@ export default function ExpertDashboard() {
       })
       setProfile((prev) => ({
         ...prev,
-        credentials: [...(prev.credentials || []), { ...result, verification_status: null }],
+        credentials: [...(prev.credentials || []), result],
       }))
       setCredForm(BLANK_CRED)
     } catch (err) {
@@ -249,21 +357,51 @@ export default function ExpertDashboard() {
     }
   }
 
-  async function handleRequestCredentialVerification(credentialId) {
+  async function handleRequestCredentialVerification(credentialId, documentUrls) {
     setCredError('')
+    setSubmittingVerification(true)
     try {
       await verificationsApi.submit({
         verification_type: 'professional_credential',
         related_credential_id: credentialId,
+        submitted_document_urls: documentUrls.length ? documentUrls : undefined,
       })
-      setProfile((prev) => ({
-        ...prev,
-        credentials: (prev.credentials || []).map((c) =>
-          c.credential_id === credentialId ? { ...c, verification_status: 'pending' } : c
-        ),
-      }))
+      setVerifications(await verificationsApi.list())
+      setVerifyFormFor(null)
+      setVerifyDocUrls([])
     } catch (err) {
       setCredError(err.body?.error?.message ?? 'Could not submit verification request.')
+    } finally {
+      setSubmittingVerification(false)
+    }
+  }
+
+  async function handleUploadDocument(file) {
+    setUploadError('')
+    setUploadingDoc(true)
+    try {
+      const { url } = await uploadsApi.upload(file)
+      setVerifyDocUrls((prev) => [...prev, url])
+    } catch (err) {
+      setUploadError(err.body?.error?.message ?? 'Could not upload file. Please try again.')
+    } finally {
+      setUploadingDoc(false)
+    }
+  }
+
+  // Saves immediately on upload (no separate "Save profile" click needed) --
+  // matches how a photo/avatar control behaves in most products.
+  async function handleUploadPhoto(file) {
+    setPhotoError('')
+    setUploadingPhoto(true)
+    try {
+      const { url } = await uploadsApi.upload(file)
+      const updated = await expertsApi.updateProfile(profile.expert_profile_id, { profile_photo_url: url })
+      setProfile(updated)
+    } catch (err) {
+      setPhotoError(err.body?.error?.message ?? 'Could not upload photo. Please try again.')
+    } finally {
+      setUploadingPhoto(false)
     }
   }
 
@@ -359,6 +497,7 @@ export default function ExpertDashboard() {
                 <label className="field-label">Headline</label>
                 <input
                   className="field-input"
+                  required
                   placeholder="e.g. Post-Quantum Cryptography Specialist"
                   value={form.headline}
                   onChange={(e) => updateField('headline', e.target.value)}
@@ -373,6 +512,73 @@ export default function ExpertDashboard() {
                   value={form.bio}
                   onChange={(e) => updateField('bio', e.target.value)}
                 />
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">Specializations</label>
+                <div className="row gap-8 wrap" style={{ marginBottom: pendingSpecs.length ? 10 : 0 }}>
+                  {pendingSpecs.length === 0 && (
+                    <p style={{ fontSize: 12.5, color: 'var(--danger, #c0392b)' }}>
+                      Required — add at least one specialization below.
+                    </p>
+                  )}
+                  {pendingSpecs.map((s) => (
+                    <span key={s.specialization} className="chip on">
+                      {labelize(s.specialization)} <span className="tag" style={{ marginLeft: 4 }}>{labelize(s.proficiency_level)}</span>
+                      <button
+                        type="button"
+                        onClick={() => removePendingSpecialization(s.specialization)}
+                        aria-label={`Remove ${labelize(s.specialization)}`}
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', marginLeft: 4, fontSize: 13 }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="row gap-8 wrap" style={{ alignItems: 'flex-end' }}>
+                  <div className="field-group">
+                    <label className="field-label">Specialization</label>
+                    <select
+                      className="field-input"
+                      value={newSpecForm.specialization}
+                      onChange={(e) => setNewSpecForm((prev) => ({ ...prev, specialization: e.target.value }))}
+                    >
+                      {SPECIALIZATIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {labelize(s)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Proficiency</label>
+                    <select
+                      className="field-input"
+                      value={newSpecForm.proficiency_level}
+                      onChange={(e) => setNewSpecForm((prev) => ({ ...prev, proficiency_level: e.target.value }))}
+                    >
+                      {PROFICIENCY_LEVELS.map((p) => (
+                        <option key={p} value={p}>
+                          {labelize(p)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field-group" style={{ width: 90 }}>
+                    <label className="field-label">Years</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="field-input"
+                      value={newSpecForm.years_in_specialization}
+                      onChange={(e) => setNewSpecForm((prev) => ({ ...prev, years_in_specialization: e.target.value }))}
+                    />
+                  </div>
+                  <button className="btn btn-sm" type="button" onClick={addPendingSpecialization}>
+                    Add
+                  </button>
+                </div>
               </div>
 
               <div className="row gap-10">
@@ -413,6 +619,7 @@ export default function ExpertDashboard() {
                   <label className="field-label">Availability</label>
                   <select
                     className="field-input"
+                    required
                     value={form.availability_status}
                     onChange={(e) => updateField('availability_status', e.target.value)}
                   >
@@ -443,6 +650,7 @@ export default function ExpertDashboard() {
                 <label className="field-label">LinkedIn URL</label>
                 <input
                   className="field-input"
+                  required
                   placeholder="https://linkedin.com/in/…"
                   value={form.linkedin_url}
                   onChange={(e) => updateField('linkedin_url', e.target.value)}
@@ -509,7 +717,11 @@ export default function ExpertDashboard() {
     .map((c) => ({ id: `conn-${c.connection_id}`, label: c.org_name, status: c.status, link: null }))
   const _pastEngagements = engagements
     .filter((e) => ['completed', 'cancelled'].includes(e.status))
-    .map((e) => ({ id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status, link: `/engagements/${e.engagement_id}` }))
+    .map((e) => ({
+      id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status,
+      link: `/engagements/${e.engagement_id}`,
+      needsReview: e.status === 'completed' && !e.my_review_submitted,
+    }))
   const allPastItems = [..._pastConnections, ..._pastEngagements]
 
   const DISMISSED_KEY = `qc_dismissed_${user?.user_id}`
@@ -562,10 +774,10 @@ export default function ExpertDashboard() {
         </div>
 
         <div className="dash-tabs">
-          <button className={`dash-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>
+          <button className={`dash-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => navigate('/dashboard')}>
             Overview
           </button>
-          <button className={`dash-tab ${tab === 'profile' ? 'on' : ''}`} onClick={() => setTab('profile')}>
+          <button className={`dash-tab ${tab === 'profile' ? 'on' : ''}`} onClick={() => navigate('/dashboard?tab=profile')}>
             Profile
           </button>
         </div>
@@ -632,6 +844,7 @@ export default function ExpertDashboard() {
                             <p style={{ fontSize: 12.5, color: 'var(--fg-muted, #666)', margin: 0 }}>{c.org_description}</p>
                           )}
                           <div className="row gap-8 wrap">
+                            {c.org_avg_rating != null && <RatingStars rating={c.org_avg_rating} label="org reviews" />}
                             {c.employee_count_range && <span className="tag" style={{ fontSize: 11 }}>{c.employee_count_range} employees</span>}
                             {c.country && <span className="tag" style={{ fontSize: 11 }}>{c.country}</span>}
                             {c.budget_range && <span className="tag" style={{ fontSize: 11 }}>{BUDGET_RANGE_LABEL[c.budget_range] ?? labelize(c.budget_range)}</span>}
@@ -708,6 +921,7 @@ export default function ExpertDashboard() {
                             <input
                               className="field-input"
                               type="date"
+                              min={todayStr}
                               value={timelineForm.start_date}
                               onChange={(e) => setTimelineForm((p) => ({ ...p, start_date: e.target.value }))}
                             />
@@ -717,6 +931,7 @@ export default function ExpertDashboard() {
                             <input
                               className="field-input"
                               type="date"
+                              min={timelineForm.start_date || todayStr}
                               value={timelineForm.estimated_end_date}
                               onChange={(e) => setTimelineForm((p) => ({ ...p, estimated_end_date: e.target.value }))}
                             />
@@ -756,14 +971,12 @@ export default function ExpertDashboard() {
                   </p>
                 )}
                 {activeEngagements.map((e) => (
-                  <Link
-                    key={e.engagement_id}
-                    to={`/engagements/${e.engagement_id}`}
-                    className="row gap-8 wrap"
-                    style={{ justifyContent: 'space-between', textDecoration: 'none', color: 'inherit' }}
-                  >
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
-                    <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
+                  <Link key={e.engagement_id} to={`/engagements/${e.engagement_id}`} className="eng-list-row">
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title}</span>
+                      <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
+                    </div>
+                    <MilestoneMap milestones={e.milestones} />
                   </Link>
                 ))}
               </div>
@@ -793,6 +1006,11 @@ export default function ExpertDashboard() {
                           <span style={{ fontSize: 12.5 }}>{item.label}</span>
                         )}
                         <span className="tag" style={{ fontSize: 11 }}>{labelize(item.status)}</span>
+                        {item.needsReview && (
+                          <Link to={item.link} className="badge" style={{ fontSize: 11 }}>
+                            Review available
+                          </Link>
+                        )}
                       </div>
                       <button
                         className="btn btn-sm"
@@ -815,6 +1033,38 @@ export default function ExpertDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <span className="section-label">Profile</span>
+
+                <div className="field-group">
+                  <label className="field-label">Profile photo</label>
+                  <div className="row gap-10" style={{ alignItems: 'center' }}>
+                    <span className="avatar" style={{ width: 52, height: 52, fontSize: 16, overflow: 'hidden' }}>
+                      {profile.profile_photo_url ? (
+                        <img
+                          src={profile.profile_photo_url}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        `${profile.first_name[0]}${profile.last_name[0]}`
+                      )}
+                    </span>
+                    <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
+                      {uploadingPhoto ? 'Uploading…' : profile.profile_photo_url ? 'Change photo' : 'Upload photo'}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        style={{ display: 'none' }}
+                        disabled={uploadingPhoto}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleUploadPhoto(file)
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {photoError && <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{photoError}</p>}
+                </div>
 
                 <div className="row gap-10">
                   <div className="field-group" style={{ flex: 1 }}>
@@ -916,18 +1166,24 @@ export default function ExpertDashboard() {
               <div className="card" style={{ padding: 22 }}>
                 <span className="section-label">Specializations</span>
                 <div className="row gap-8 wrap" style={{ marginTop: 14, marginBottom: 16 }}>
-                  {profile.specializations.length === 0 && <p className="lead" style={{ fontSize: 12.5 }}>No specializations added yet.</p>}
+                  {profile.specializations.length === 0 && (
+                    <p style={{ fontSize: 12.5, color: 'var(--danger, #c0392b)' }}>
+                      Required — add at least one specialization below to complete your profile.
+                    </p>
+                  )}
                   {profile.specializations.map((s) => (
                     <span key={s.specialization_id} className="chip on">
                       {labelize(s.specialization)} <span className="tag" style={{ marginLeft: 4 }}>{labelize(s.proficiency_level)}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSpecialization(s.specialization_id)}
-                        aria-label={`Remove ${labelize(s.specialization)}`}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', marginLeft: 4, fontSize: 13 }}
-                      >
-                        ×
-                      </button>
+                      {profile.specializations.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSpecialization(s.specialization_id)}
+                          aria-label={`Remove ${labelize(s.specialization)}`}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', marginLeft: 4, fontSize: 13 }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -984,8 +1240,11 @@ export default function ExpertDashboard() {
                   {(profile.credentials || []).length === 0 && (
                     <p className="lead" style={{ fontSize: 12.5 }}>No credentials added yet.</p>
                   )}
-                  {(profile.credentials || []).map((c) => (
-                    <div key={c.credential_id} className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                  {(profile.credentials || []).map((c) => {
+                    const status = credentialStatus(c.credential_id)
+                    return (
+                    <div key={c.credential_id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{c.credential_name}</div>
                         <div className="lead" style={{ fontSize: 12, marginTop: 2 }}>
@@ -993,21 +1252,28 @@ export default function ExpertDashboard() {
                         </div>
                       </div>
                       <div className="row gap-8">
-                        {c.verification_status === 'approved' && (
+                        {status === 'approved' && (
                           <span className="tag" style={{ color: 'var(--acc)' }}>Verified</span>
                         )}
-                        {c.verification_status === 'pending' && (
+                        {status === 'pending' && (
                           <span className="tag">Pending review</span>
                         )}
-                        {c.verification_status === 'rejected' && (
-                          <span className="tag" style={{ color: 'var(--err, #e53)' }}>Rejected</span>
+                        {status === 'rejected' && (
+                          <span className="tag" style={{ color: 'var(--danger)' }}>Rejected</span>
                         )}
-                        {(!c.verification_status || c.verification_status === 'rejected') && (
+                        {status !== 'approved' && status !== 'pending' && (
                           <button
                             className="btn btn-sm"
-                            onClick={() => handleRequestCredentialVerification(c.credential_id)}
+                            onClick={() => {
+                              if (verifyFormFor === c.credential_id) {
+                                setVerifyFormFor(null)
+                              } else {
+                                setVerifyFormFor(c.credential_id)
+                                setVerifyDocUrls([])
+                              }
+                            }}
                           >
-                            Request verification
+                            {verifyFormFor === c.credential_id ? 'Cancel' : 'Request verification'}
                           </button>
                         )}
                         <button
@@ -1019,7 +1285,66 @@ export default function ExpertDashboard() {
                         </button>
                       </div>
                     </div>
-                  ))}
+
+                    {(() => {
+                      const latest = latestVerificationFor(c.credential_id)
+                      if (!latest) return null
+                      if (latest.status === 'approved' && latest.admin_notes) {
+                        return (
+                          <p className="lead" style={{ fontSize: 12, marginTop: 4, color: 'var(--acc)' }}>
+                            Approved: {latest.admin_notes}
+                          </p>
+                        )
+                      }
+                      if (latest.status === 'rejected' && latest.rejection_reason) {
+                        return (
+                          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--danger)' }}>
+                            Rejected: {latest.rejection_reason}
+                          </p>
+                        )
+                      }
+                      return null
+                    })()}
+
+                    {verifyFormFor === c.credential_id && (
+                      <div style={{ marginTop: 10, padding: 14, background: 'var(--bg)', borderRadius: 8 }}>
+                        <TagInput
+                          label="Supporting documents (optional)"
+                          values={verifyDocUrls}
+                          onChange={setVerifyDocUrls}
+                          placeholder="https://... (link to a certificate image or PDF)"
+                        />
+                        <div style={{ marginTop: 8 }}>
+                          <label className="btn btn-sm" style={{ cursor: 'pointer', display: 'inline-block' }}>
+                            {uploadingDoc ? 'Uploading…' : 'Upload from your computer'}
+                            <input
+                              type="file"
+                              accept="application/pdf,image/png,image/jpeg,image/webp"
+                              style={{ display: 'none' }}
+                              disabled={uploadingDoc}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) handleUploadDocument(file)
+                                e.target.value = ''
+                              }}
+                            />
+                          </label>
+                          {uploadError && (
+                            <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{uploadError}</p>
+                          )}
+                        </div>
+                        <button
+                          className="btn btn-acc btn-sm"
+                          style={{ marginTop: 10 }}
+                          disabled={submittingVerification}
+                          onClick={() => handleRequestCredentialVerification(c.credential_id, verifyDocUrls)}
+                        >
+                          {submittingVerification ? 'Submitting…' : 'Submit request'}
+                        </button>
+                      </div>
+                    )}
+                    </div>
+                  )})}
                 </div>
 
                 <form onSubmit={handleAddCredential} style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>

@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-ssr
+.vite
 *.local
 .DS_Store
 .env
@@ -11,3 +12,6 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+
+# Local file uploads (server/storage.py) — runtime artifacts, not source
+uploads/

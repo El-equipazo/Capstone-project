@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
@@ -59,11 +59,11 @@ async def create_expert(
 @router.get("/experts")
 async def list_experts(
     q: Optional[str] = Query(None),
-    specialization: Optional[str] = Query(None),
+    specialization: Optional[List[str]] = Query(None),
     proficiency_min: Optional[str] = Query(None),
     sector: Optional[str] = Query(None),
     compliance: Optional[str] = Query(None),
-    engagement_type: Optional[str] = Query(None),
+    engagement_type: Optional[List[str]] = Query(None),
     availability: Optional[str] = Query(None),
     rate_max: Optional[float] = Query(None),
     rating_min: Optional[float] = Query(None, ge=1, le=5),
@@ -87,7 +87,7 @@ async def list_experts(
             "years_experience_min": years_experience_min,
         }.items() if v is not None
     }
-    return await expert_model.list(filters=filters, page=page, limit=limit, sort=sort, order=order)
+    return await expert_model.list_experts(filters=filters, page=page, limit=limit, sort=sort, order=order)
 
 
 @router.get("/experts/{expert_id}", response_model=ExpertResponse)
@@ -236,6 +236,13 @@ async def delete_specialization(
 ):
     row = await expert_model.get(expert_id)
     _assert_owner_or_admin(current_user, row)
+    existing = await expert_model.list_specializations(expert_id)
+    if len(existing) <= 1:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "INVALID_STATE",
+                              "message": "A profile must have at least one specialization"}},
+        )
     await expert_model.delete_specialization(expert_id, specialization_id)
     return Response(status_code=204)
 

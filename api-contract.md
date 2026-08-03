@@ -172,7 +172,13 @@ Errors: `401` bad credentials · `403` account deactivated (`is_active = false`)
 
 ### DELETE /auth/me
 
-**Auth: Any role.** Soft-deactivate (`is_active = false`). → `204`
+**Auth: Any role.** → `204`
+
+- **Organization:** hard delete. Permanently erases the account and everything
+  tied to it — engagements, connection requests, chat threads/messages, and
+  milestones shared with every expert it worked with. Each affected expert
+  gets an `organization_deleted` notification. Irreversible.
+- **Expert / admin:** soft-deactivate (`is_active = false`) — unchanged.
 
 ---
 
@@ -799,43 +805,68 @@ Request:
 ```json
 {
   "overall_rating": 5,
-  "communication_rating": 5,
-  "expertise_rating": 5,
-  "timeliness_rating": 4,
-  "value_rating": 5,
   "review_title": "Exactly the independent audit we needed",
   "review_body": "Standards-grounded findings our engineers could act on.",
   "is_public": true
 }
 ```
 
-Server sets `reviewer_id`, `reviewee_id`, `reviewer_role` from the caller; recomputes the reviewee expert's `avg_rating`.
+Server sets `reviewer_id`, `reviewee_id`, `reviewer_role` from the caller (never the request body); recomputes the reviewee's `avg_rating` — `organization_profiles.avg_rating` on an expert→org review, `expert_profiles.avg_rating` on an org→expert review. Averages every non-flagged review of that side, public or private, regardless of what's shown externally.
 
 Response `201`.
-Errors: `422` engagement not `completed` · `409` this side already reviewed · `400` `expertise_rating` supplied on an expert→org review.
+Errors: `422` engagement not `completed` · `409` this side already reviewed.
 
 ### GET /experts/:expertId/reviews
 
-**Auth: Any role.** Public (`is_public = true`, not flagged) reviews, paginated, plus aggregate:
+**Auth: Any role.** Public (`is_public = true`, not flagged) org→expert reviews only, paginated, plus aggregate. Query params: `page`, `limit`, `q` (keyword search across `review_title`/`review_body`), `min_stars` (1–5, filters `overall_rating >=`), `sort` (`top` — highest-rated first, the default — or `recent`).
 
 ```json
 {
-  "aggregate": { "avg_overall": 4.85, "avg_communication": 4.90, "count": 12 },
-  "data": [ ... ]
+  "aggregate": { "avg_overall": 4.85, "count": 12 },
+  "data": [ ... ],
+  "pagination": { "page": 1, "limit": 20, "total_items": 12, "total_pages": 1 }
 }
 ```
 
+### GET /organizations/:orgId/reviews
+
+**Auth: owner or admin.** An org's own private view of every expert→org review left about them — full review text, no `is_public` filter. This is intentionally asymmetric with experts: an org's review *content* is never shown to anyone else, including the expert who wrote it after submission or other experts evaluating the org — only the aggregate `organization_profiles.avg_rating` field is ever exposed externally (e.g. on `GET /organizations/:orgId` itself, surfaced to an expert on an incoming connection request or in an active engagement).
+
 ### GET /engagements/:engagementId/reviews
 
-**Auth: participant or admin.** Both reviews (if present), including private ones.
+**Auth: participant or admin.** Both reviews (if present) for one specific engagement, including private ones — unpaginated (at most 2 rows).
 
 ### POST /reviews/:reviewId/flag
 
-**Auth: any authenticated user.** Body: `{ "flagged_reason": "Contains confidential client details" }` → `200` (sets `is_flagged`; hides from public listings pending admin review).
+**Auth: any authenticated user.** Body: `{ "flagged_reason": "Contains confidential client details" }` → `200` (sets `is_flagged`; hides from public listings pending admin review; recomputes the affected side's `avg_rating`).
 
 ### Admin moderation
 
-`GET /admin/reviews?is_flagged=true` · `PATCH /admin/reviews/:reviewId` (`{ "is_flagged": false }` or `{ "is_public": false }`) — **Auth: admin**
+`GET /admin/reviews?is_flagged=true` · `PATCH /admin/reviews/:reviewId` (`{ "is_flagged": false }` or `{ "is_public": false }`) — **Auth: admin**. Toggling `is_flagged` recomputes the affected side's `avg_rating`.
+
+### File uploads
+
+#### POST /uploads
+
+`multipart/form-data`: `file` — **Auth: any authenticated user**
+
+Generic upload, not tied to any one feature — currently used to attach
+documents to a `professional_credential` verification request (below), but
+not scoped to that. Backed by local disk storage (a real deployment would
+use S3/GCS with signed upload URLs instead). Allowed types: PDF, PNG, JPEG,
+WEBP. Max size: 10MB.
+
+Response `200`:
+
+```json
+{ "url": "http://localhost:8000/uploads/3f2a1c9e8b7d4f6a9c2e1b3d.pdf" }
+```
+
+The returned URL is absolute (not browser-relative) since it may also be
+fetched server-side (e.g. by the AI credential review feature), not only
+opened in a browser tab.
+
+Errors: `400` `UNSUPPORTED_TYPE` (not PDF/PNG/JPEG/WEBP) · `400` `FILE_TOO_LARGE`.
 
 ### Verification (`verification_records`)
 
@@ -902,6 +933,34 @@ Response `200`. Side effects:
 
 - Approving a record with `verification_type != 'professional_credential'` flips `is_verified` on the corresponding org/expert profile (and `verification_status` on expert profiles).
 - Approving a record with `related_credential_id` set makes that specific credential show `is_verified: true` on subsequent `GET /experts/:expertId/credentials` calls — no separate action needed.
+
+#### POST /admin/verifications/:verificationId/ai-review
+
+Admin manually triggers an AI (Gemini) pre-screen of a `professional_credential`
+verification — the credential's claimed details plus its submitted document
+files, if any. — **Auth: admin**
+
+**Advisory only.** Neither Gemini nor any LLM can authoritatively confirm a
+credential is genuine — there's no integration with any credentialing body's
+registry. This assesses plausibility, internal consistency, and visible signs
+of a fabricated document, and never changes `status` itself; the admin still
+calls `PATCH /admin/verifications/:verificationId` to actually decide.
+
+No request body. Response `200`, the verification record with:
+
+```json
+{
+  "ai_recommendation": "approve",
+  "ai_confidence": "medium",
+  "ai_reasoning": "CISSP is a real ISC2 certification; the claimed year and institution are internally consistent, and the submitted document visually resembles a standard ISC2 certificate. Could not confirm the certificate number against ISC2's registry — no such integration exists.",
+  "ai_red_flags": [],
+  "ai_reviewed_at": "2026-07-27T14:30:00Z"
+}
+```
+
+Errors: `422` verification isn't `professional_credential` type or has no
+linked credential · `503` `AI_NOT_CONFIGURED` (no `GEMINI_API_KEY`) · `502`
+`AI_UNAVAILABLE` (Gemini call failed).
 
 ---
 

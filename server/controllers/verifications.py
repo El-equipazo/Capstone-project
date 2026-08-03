@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 
 from server.dependencies import get_current_user
 from server.models import verification_model
@@ -13,11 +13,18 @@ router = APIRouter(tags=["verifications"])
 _EXPERT_TYPES = {"identity", "professional_credential", "background_check"}
 _ORG_TYPES = {"identity", "organization_legitimacy"}
 
+# submitted_document_urls is server-side-fetched later (ai_verification.py) --
+# capping count and per-URL length keeps a single verification from carrying
+# an unbounded number of fetch targets.
+_MAX_DOCUMENT_URLS = 5
+_MAX_URL_LENGTH = 2048
+DocumentUrl = Annotated[str, StringConstraints(max_length=_MAX_URL_LENGTH, min_length=1)]
+
 
 class SubmitVerificationBody(BaseModel):
     verification_type: str
     related_credential_id: Optional[int] = None
-    submitted_document_urls: Optional[List[str]] = None
+    submitted_document_urls: Optional[List[DocumentUrl]] = Field(default=None, max_length=_MAX_DOCUMENT_URLS)
 
 
 @router.post("/verifications", status_code=201)

@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { engagementsApi } from '../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { engagementsApi, reviewsApi, threadsApi } from '../api/client'
 import { useRequireAuth } from '../hooks/useRequireAuth'
-import { useEngagementChat } from '../hooks/useEngagementChat'
-import { labelize, ENGAGEMENT_TYPE_OPTIONS } from '../utils/format'
+import { useChat_context } from '../context/ChatContext'
+import { labelize, ENGAGEMENT_TYPE_OPTIONS, PAYMENT_STRUCTURE_OPTIONS } from '../utils/format'
+import OrgProfileModal from '../components/OrgProfileModal'
+import EngagementNotes from '../components/EngagementNotes'
+import RatingStars from '../components/RatingStars'
+import StarRatingInput from '../components/StarRatingInput'
 
 const MILESTONE_LABEL = {
   proposed:    'Proposed',
@@ -25,15 +29,30 @@ function engagementBadgeClass(s) {
   return 'tag'
 }
 
-function getStatusActions(engStatus, role) {
+// Skipped milestones don't count against completion -- they were
+// deliberately dropped, not left undone. Zero milestones (engagement never
+// used the feature) is vacuously "all done."
+function allMilestonesDone(milestones) {
+  return milestones.every((m) => m.status === 'completed' || m.status === 'skipped')
+}
+
+function getStatusActions(engStatus, role, milestones) {
   const actions = []
-  if (engStatus === 'scoping' && role === 'expert')
-    actions.push({ label: 'Send Proposal', newStatus: 'proposal_sent' })
+  // 'scoping' -> 'proposal_sent' has its own dedicated form (description +
+  // response deadline) below, not a bare status-change button.
   // proposal_sent for org is handled by the dedicated timeline review UI below
   if (engStatus === 'proposal_accepted')
     actions.push({ label: 'Start Engagement', newStatus: 'active', primary: true })
-  if (engStatus === 'active' && role === 'expert')
-    actions.push({ label: 'Mark Complete', newStatus: 'completed', confirm: true })
+  if (engStatus === 'active' && role === 'expert') {
+    const canComplete = allMilestonesDone(milestones)
+    actions.push({
+      label: 'Mark Complete',
+      newStatus: 'completed',
+      confirm: true,
+      disabled: !canComplete,
+      disabledReason: canComplete ? null : 'Complete (or skip) all milestones before completing the engagement.',
+    })
+  }
   if (engStatus === 'active')
     actions.push({ label: 'Put on Hold', newStatus: 'on_hold' })
   if (engStatus === 'on_hold')
@@ -45,10 +64,15 @@ function getStatusActions(engStatus, role) {
 
 const BLANK_FORM = { title: '', description: '', due_date: '', deliverable_description: '' }
 
+// Milestone due dates can't be set before today (server enforces this too).
+const todayStr = new Date().toISOString().slice(0, 10)
+
 export default function EngagementDetail() {
   const { id } = useParams()
   const engagementId = parseInt(id, 10)
   const user = useRequireAuth()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
 
   const [engagement, setEngagement] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -69,8 +93,45 @@ export default function EngagementDetail() {
   const [editingType, setEditingType] = useState(false)
   const [typeValue, setTypeValue] = useState('')
 
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
+  // Org's "propose a change" form for a confirmed/in-progress milestone --
+  // separate from the expert's editingId/editForm above so the two flows
+  // (immediate mutation vs. deferred proposal) don't collide.
+  const [proposingId, setProposingId] = useState(null)
+  const [proposeForm, setProposeForm] = useState({})
+  const [proposeError, setProposeError] = useState('')
+  const [flashConfirmedId, setFlashConfirmedId] = useState(null) // transient green outline after an accept
+  const milestoneRefs = useRef({})
+
+  // Expert's "send proposal" form (description + response deadline).
+  const [showProposalForm, setShowProposalForm] = useState(false)
+  const [proposalForm, setProposalForm] = useState({ description: '', proposal_expires_at: '' })
+  const [proposalError, setProposalError] = useState('')
+
+  // Org's "see full description" toggle on the proposal review card.
+  const [descExpanded, setDescExpanded] = useState(false)
+
+  const [showOrgModal, setShowOrgModal] = useState(false)
+
+  // Terms negotiation (start/end date, budget, payment structure) once the
+  // engagement is active/on_hold -- separate from proposalForm above, which
+  // only covers the initial scoping-phase description + deadline.
+  const [showTermsForm, setShowTermsForm] = useState(false)
+  const [termsForm, setTermsForm] = useState({ start_date: '', estimated_end_date: '', agreed_budget: '', payment_structure: '' })
+  const [termsError, setTermsError] = useState('')
+  const [termsLoading, setTermsLoading] = useState(false)
+
+  // Review card -- only fetched once the engagement is completed, since
+  // that's the only state reviews can be left in.
+  const [engagementReviews, setEngagementReviews] = useState([])
+  const [reviewsLoaded, setReviewsLoaded] = useState(false)
+  const [showReviewForm, setShowReviewForm] = useState(false)
+  const [reviewForm, setReviewForm] = useState({
+    overall_rating: 0, review_title: '', review_body: '', is_public: true,
+  })
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewError, setReviewError] = useState('')
+
+  const { openChat } = useChat_context()
 
   useEffect(() => {
     if (!user) return
@@ -79,12 +140,29 @@ export default function EngagementDetail() {
       .catch(() => { setError('Engagement not found or access denied.'); setLoading(false) })
   }, [user, engagementId])
 
-  // Only open the chat/socket once the participant-gated fetch above has
-  // actually succeeded -- don't connect for an engagement the caller turns
-  // out not to have access to.
-  const { messages, loading: messagesLoading, error: messagesError, sendMessage } = useEngagementChat(
-    engagement ? engagementId : null
-  )
+  useEffect(() => {
+    if (!engagement || engagement.status !== 'completed') return
+    reviewsApi.listForEngagement(engagementId)
+      .then((rows) => { setEngagementReviews(rows); setReviewsLoaded(true) })
+      .catch(() => setReviewsLoaded(true)) // fail open -- show the write-a-review prompt rather than block the page
+  }, [engagement, engagementId])
+
+  // Notification deep-link: ?highlight_milestone=X[&flash=confirmed] scrolls
+  // to and (optionally) briefly flashes a specific milestone, same pattern as
+  // ExpertDashboard.jsx's ?open_thread= deep-link handling.
+  useEffect(() => {
+    if (!engagement) return
+    const highlightId = searchParams.get('highlight_milestone')
+    if (!highlightId) return
+    const idNum = parseInt(highlightId, 10)
+    milestoneRefs.current[idNum]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (searchParams.get('flash') === 'confirmed') {
+      setFlashConfirmedId(idNum)
+      setTimeout(() => setFlashConfirmedId(null), 6000)
+    }
+    navigate(`/engagements/${engagementId}`, { replace: true })
+  }, [engagement, searchParams, engagementId, navigate])
+
 
   if (!user) return null
   if (loading) return <div className="page"><div className="container"><p className="lead">Loading…</p></div></div>
@@ -100,8 +178,39 @@ export default function EngagementDetail() {
   const milestones = engagement.milestones || []
   const isTerminal = ['completed', 'cancelled'].includes(engagement.status)
   const backPath = role === 'expert' ? '/dashboard' : '/organization'
-  const statusActions = getStatusActions(engagement.status, role)
-  const isMine = (m) => m.sender_id === user.user_id
+  const statusActions = getStatusActions(engagement.status, role, milestones)
+  const myReview = engagementReviews.find((r) => r.reviewer_role === role)
+  const otherReview = engagementReviews.find((r) => r.reviewer_role !== role)
+  const counterpartyLabel = role === 'organization' ? (engagement.expert_first_name || 'the expert') : (engagement.org_name || 'the organization')
+
+  async function handleSubmitReview(e) {
+    e.preventDefault()
+    if (!reviewForm.overall_rating) {
+      setReviewError('Please choose an overall rating.')
+      return
+    }
+    setReviewLoading(true)
+    setReviewError('')
+    try {
+      const data = { overall_rating: reviewForm.overall_rating, is_public: reviewForm.is_public }
+      if (reviewForm.review_title.trim()) data.review_title = reviewForm.review_title.trim()
+      if (reviewForm.review_body.trim()) data.review_body = reviewForm.review_body.trim()
+
+      const created = await reviewsApi.create(engagementId, data)
+      setEngagementReviews((prev) => [...prev, created])
+      setShowReviewForm(false)
+    } catch (err) {
+      setReviewError(
+        err.status === 409
+          ? 'You already submitted a review for this engagement.'
+          : err.status === 422
+            ? 'This engagement must be completed before it can be reviewed.'
+            : err.body?.error?.message ?? 'Failed to submit review.'
+      )
+    } finally {
+      setReviewLoading(false)
+    }
+  }
 
   async function handleTimelineDecision(decision) {
     setActionLoading(true)
@@ -208,15 +317,140 @@ export default function EngagementDetail() {
     }
   }
 
-  async function handleSend(e) {
-    e.preventDefault()
-    if (!draft.trim()) return
-    setSending(true)
+  async function handleProposeChange(milestoneId) {
+    setProposeError('')
     try {
-      await sendMessage(draft.trim())
-      setDraft('')
+      const data = {}
+      if (proposeForm.due_date) data.due_date = proposeForm.due_date
+      if (proposeForm.deliverable_description) data.deliverable_description = proposeForm.deliverable_description
+      if (!data.due_date && !data.deliverable_description) {
+        setProposeError('Change the due date or the deliverable before saving.')
+        return
+      }
+      const updated = await engagementsApi.proposeMilestoneChange(engagementId, milestoneId, data)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+      setProposingId(null)
+      setProposeForm({})
+    } catch (err) {
+      setProposeError(err.body?.error?.message ?? 'Failed to propose change.')
+    }
+  }
+
+  async function handleProposeCancel(milestoneId) {
+    if (!window.confirm('Request cancellation of this milestone? The expert will need to accept before it takes effect.')) return
+    setError('')
+    try {
+      const updated = await engagementsApi.proposeMilestoneCancel(engagementId, milestoneId)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to request cancellation.')
+    }
+  }
+
+  async function handleAcceptChange(milestoneId) {
+    setError('')
+    try {
+      const updated = await engagementsApi.acceptMilestoneChange(engagementId, milestoneId)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+      setFlashConfirmedId(milestoneId)
+      setTimeout(() => setFlashConfirmedId(null), 6000)
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to accept change.')
+    }
+  }
+
+  async function handleDeclineChange(milestoneId) {
+    setError('')
+    try {
+      const updated = await engagementsApi.declineMilestoneChange(engagementId, milestoneId)
+      setEngagement((prev) => ({ ...prev, milestones: prev.milestones.map((m) => m.milestone_id === milestoneId ? updated : m) }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to decline change.')
+    }
+  }
+
+  async function handleSendProposal(e) {
+    e.preventDefault()
+    if (!proposalForm.proposal_expires_at) {
+      setProposalError('Choose a deadline for the organization to respond.')
+      return
+    }
+    setActionLoading(true)
+    setProposalError('')
+    try {
+      const updated = await engagementsApi.update(engagementId, {
+        status: 'proposal_sent',
+        description: proposalForm.description,
+        proposal_expires_at: proposalForm.proposal_expires_at,
+      })
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+      setShowProposalForm(false)
+    } catch (err) {
+      setProposalError(err.body?.error?.message ?? 'Failed to send proposal.')
     } finally {
-      setSending(false)
+      setActionLoading(false)
+    }
+  }
+
+  function openTermsForm() {
+    setTermsForm({
+      start_date: engagement.pending_start_date || engagement.start_date || '',
+      estimated_end_date: engagement.pending_estimated_end_date || engagement.estimated_end_date || '',
+      agreed_budget: (engagement.pending_agreed_budget ?? engagement.agreed_budget) ?? '',
+      payment_structure: engagement.pending_payment_structure || engagement.payment_structure || '',
+    })
+    setTermsError('')
+    setShowTermsForm(true)
+  }
+
+  async function handleProposeTerms(e) {
+    e.preventDefault()
+    const data = {}
+    if (termsForm.start_date)          data.start_date          = termsForm.start_date
+    if (termsForm.estimated_end_date)  data.estimated_end_date  = termsForm.estimated_end_date
+    if (termsForm.agreed_budget !== '') data.agreed_budget      = Number(termsForm.agreed_budget)
+    if (termsForm.payment_structure)   data.payment_structure   = termsForm.payment_structure
+    if (Object.keys(data).length === 0) {
+      setTermsError('Change at least one field before sending.')
+      return
+    }
+    setTermsLoading(true)
+    setTermsError('')
+    try {
+      const updated = await engagementsApi.proposeTerms(engagementId, data)
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+      setShowTermsForm(false)
+    } catch (err) {
+      setTermsError(err.body?.error?.message ?? 'Failed to send proposal.')
+    } finally {
+      setTermsLoading(false)
+    }
+  }
+
+  async function handleAcceptTerms() {
+    setActionLoading(true)
+    setError('')
+    try {
+      const updated = await engagementsApi.acceptTermsChange(engagementId)
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to accept the proposed change.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleDeclineTerms() {
+    if (!window.confirm('Decline this proposed change?')) return
+    setActionLoading(true)
+    setError('')
+    try {
+      const updated = await engagementsApi.declineTermsChange(engagementId)
+      setEngagement((prev) => ({ ...updated, milestones: prev.milestones }))
+    } catch (err) {
+      setError(err.body?.error?.message ?? 'Failed to decline the proposed change.')
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -231,8 +465,34 @@ export default function EngagementDetail() {
         <span className="section-label" style={{ color: 'var(--acc)' }}>engagement</span>
         <div className="row gap-10 wrap" style={{ margin: '8px 0 4px', alignItems: 'center' }}>
           <h1 className="h2">{engagement.title || labelize(engagement.engagement_type)}</h1>
-          <span className={engagementBadgeClass(engagement.status)}>{labelize(engagement.status)}</span>
+          <span className={engagementBadgeClass(engagement.status)}>
+            {engagement.status === 'proposal_sent' && role === 'organization'
+              ? 'Proposal Received'
+              : labelize(engagement.status)}
+          </span>
+          <button
+            className="btn btn-sm"
+            onClick={async () => {
+              try {
+                const thread = await threadsApi.getOrCreateForEngagement(engagementId)
+                const title = engagement.title || engagement.org_name || engagement.expert_first_name
+                openChat(thread.thread_id, title)
+              } catch { /* non-fatal */ }
+            }}
+          >
+            Open Chat
+          </button>
         </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: role === 'expert' ? 'minmax(0, 1fr) 300px' : '1fr',
+            gap: 24,
+            alignItems: 'start',
+          }}
+        >
+        <div style={{ minWidth: 0 }}>
 
         {/* Counterparty info */}
         {role === 'organization' && engagement.expert_first_name && (
@@ -255,7 +515,21 @@ export default function EngagementDetail() {
             {engagement.org_sector && (
               <span className="lead" style={{ fontSize: 12, marginLeft: 2 }}>· {engagement.org_sector}</span>
             )}
+            <button
+              type="button"
+              className="tag"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowOrgModal(true)}
+            >
+              Profile
+            </button>
           </div>
+        )}
+        {showOrgModal && (
+          <OrgProfileModal
+            orgId={engagement.org_id}
+            onClose={() => setShowOrgModal(false)}
+          />
         )}
 
         <div className="lead" style={{ fontSize: 12.5, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -338,8 +612,29 @@ export default function EngagementDetail() {
                 <span className="tag">Est. end: {engagement.estimated_end_date}</span>
               )}
             </div>
+            {engagement.proposal_expires_at && (
+              <p className="lead" style={{ fontSize: 12, marginBottom: 10 }}>
+                Respond by {new Date(engagement.proposal_expires_at).toLocaleDateString()}
+              </p>
+            )}
+
             {engagement.description && (
-              <p style={{ fontSize: 12.5, marginBottom: 14 }}>{engagement.description}</p>
+              <div style={{ marginBottom: 14 }}>
+                <p style={{ fontSize: 12.5 }}>
+                  {descExpanded || engagement.description.length <= 200
+                    ? engagement.description
+                    : `${engagement.description.slice(0, 200)}…`}
+                </p>
+                {engagement.description.length > 200 && (
+                  <button
+                    className="btn btn-sm"
+                    style={{ padding: '2px 8px', fontSize: 11, marginTop: 4 }}
+                    onClick={() => setDescExpanded((v) => !v)}
+                  >
+                    {descExpanded ? 'Show less' : 'See full description'}
+                  </button>
+                )}
+              </div>
             )}
 
             {timelineReviewMode === null && (
@@ -398,6 +693,58 @@ export default function EngagementDetail() {
           </div>
         )}
 
+        {/* Expert: send proposal (description + response deadline) */}
+        {role === 'expert' && engagement.status === 'scoping' && (
+          <div className="card" style={{ padding: 18, marginBottom: 20 }}>
+            <span className="section-label" style={{ display: 'block', marginBottom: 12 }}>Send Proposal</span>
+            {!showProposalForm ? (
+              <button
+                className="btn btn-acc"
+                onClick={() => {
+                  setProposalForm({ description: engagement.description || '', proposal_expires_at: '' })
+                  setProposalError('')
+                  setShowProposalForm(true)
+                }}
+              >
+                Send Proposal
+              </button>
+            ) : (
+              <form onSubmit={handleSendProposal} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {proposalError && <div className="alert alert-error">{proposalError}</div>}
+                <div className="field-group">
+                  <label className="field-label">Description</label>
+                  <textarea
+                    className="field-input"
+                    rows={4}
+                    value={proposalForm.description}
+                    onChange={(e) => setProposalForm((p) => ({ ...p, description: e.target.value }))}
+                    placeholder="Describe your approach and scope…"
+                  />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Respond by *</label>
+                  <input
+                    className="field-input"
+                    type="date"
+                    required
+                    min={todayStr}
+                    value={proposalForm.proposal_expires_at}
+                    onChange={(e) => setProposalForm((p) => ({ ...p, proposal_expires_at: e.target.value }))}
+                  />
+                </div>
+                <div className="row gap-8">
+                  <button className="btn btn-acc" type="submit" disabled={actionLoading}>
+                    {actionLoading ? 'Sending…' : 'Send Proposal'}
+                  </button>
+                  <button className="btn" type="button" onClick={() => setShowProposalForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
         {/* Status actions */}
         {statusActions.length > 0 && !isTerminal && (
           <div className="card" style={{ padding: 18, marginBottom: 20 }}>
@@ -409,17 +756,31 @@ export default function EngagementDetail() {
                   className={`btn${action.primary ? ' btn-acc' : action.danger ? '' : ''}`}
                   style={action.danger ? { color: 'var(--danger, #c0392b)' } : {}}
                   onClick={() => handleStatusAction(action)}
-                  disabled={actionLoading}
+                  disabled={actionLoading || action.disabled}
+                  title={action.disabled ? action.disabledReason : undefined}
                 >
                   {action.label}
                 </button>
               ))}
             </div>
+            {statusActions.some((a) => a.disabled && a.disabledReason) && (
+              <p className="lead" style={{ fontSize: 11.5, marginTop: 8 }}>
+                {statusActions.find((a) => a.disabled && a.disabledReason).disabledReason}
+              </p>
+            )}
             <p className="lead" style={{ fontSize: 11.5, marginTop: 10 }}>
-              Status: <strong>{labelize(engagement.status)}</strong>
-              {engagement.status === 'scoping' && ' — define milestones and send the proposal when ready'}
-              {engagement.status === 'proposal_sent' && ' — waiting for the organization to accept'}
-              {engagement.status === 'proposal_accepted' && ' — both parties have agreed; start when ready'}
+              Status:{' '}
+              <strong>
+                {engagement.status === 'proposal_sent' && role === 'organization'
+                  ? 'Proposal Received'
+                  : labelize(engagement.status)}
+              </strong>
+              {engagement.status === 'scoping' && role === 'expert' && ' — define milestones and send the proposal when ready'}
+              {engagement.status === 'scoping' && role === 'organization' && ' — the expert is preparing the proposal'}
+              {engagement.status === 'proposal_sent' && role === 'expert' && ' — waiting for the organization to review and accept'}
+              {engagement.status === 'proposal_sent' && role === 'organization' && ' — review the milestones and accept, or request changes'}
+              {engagement.status === 'proposal_accepted' && role === 'expert' && ' — both parties have agreed; start when ready'}
+              {engagement.status === 'proposal_accepted' && role === 'organization' && ' — both parties have agreed; the expert will start when ready'}
               {engagement.status === 'active' && ' — work is underway'}
               {engagement.status === 'on_hold' && ' — engagement is paused'}
             </p>
@@ -433,6 +794,187 @@ export default function EngagementDetail() {
               {engagement.actual_end_date ? ` — ended ${engagement.actual_end_date}` : ''}.
               {engagement.cancellation_reason ? ` Reason: ${engagement.cancellation_reason}` : ''}
             </span>
+          </div>
+        )}
+
+        {/* Terms negotiation -- once active/on_hold, dates/budget/payment
+            structure were often left blank at proposal time (optional there
+            by design) and now need a way to get set or revised. Either party
+            can propose a change; the other must accept or decline. */}
+        {['active', 'on_hold'].includes(engagement.status) && (
+          <div className="card" style={{ padding: 18, marginBottom: 20 }}>
+            <span className="section-label" style={{ display: 'block', marginBottom: 12 }}>Engagement Terms</span>
+            <div className="row gap-10 wrap" style={{ marginBottom: 14 }}>
+              {engagement.start_date && <span className="tag">Start: {engagement.start_date}</span>}
+              {engagement.estimated_end_date && <span className="tag">Est. end: {engagement.estimated_end_date}</span>}
+              {engagement.agreed_budget != null && <span className="tag">${Number(engagement.agreed_budget).toLocaleString()}</span>}
+              {engagement.payment_structure && <span className="tag">{labelize(engagement.payment_structure)}</span>}
+              {!engagement.start_date && !engagement.estimated_end_date && engagement.agreed_budget == null && !engagement.payment_structure && (
+                <span className="lead" style={{ fontSize: 12.5 }}>No terms set yet.</span>
+              )}
+            </div>
+
+            {termsError && <div className="alert alert-error" style={{ marginBottom: 12 }}>{termsError}</div>}
+
+            {engagement.pending_requested_by_user_id != null ? (
+              <div>
+                <div className="row gap-8 wrap" style={{ marginBottom: 10 }}>
+                  {engagement.pending_start_date && <span className="tag">Start → {engagement.pending_start_date}</span>}
+                  {engagement.pending_estimated_end_date && <span className="tag">Est. end → {engagement.pending_estimated_end_date}</span>}
+                  {engagement.pending_agreed_budget != null && <span className="tag">Budget → ${Number(engagement.pending_agreed_budget).toLocaleString()}</span>}
+                  {engagement.pending_payment_structure && <span className="tag">Payment → {labelize(engagement.pending_payment_structure)}</span>}
+                </div>
+                {engagement.pending_requested_by_user_id === user.user_id ? (
+                  <>
+                    <p className="lead" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                      Waiting for {role === 'expert' ? engagement.org_name : `${engagement.expert_first_name} ${engagement.expert_last_name}`} to respond to your proposed change.
+                    </p>
+                    <button className="btn btn-sm" onClick={openTermsForm}>Update proposal</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="lead" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                      {role === 'expert' ? engagement.org_name : `${engagement.expert_first_name} ${engagement.expert_last_name}`} proposed this change.
+                    </p>
+                    <div className="row gap-8">
+                      <button className="btn btn-sm btn-acc" disabled={actionLoading} onClick={handleAcceptTerms}>Accept</button>
+                      <button className="btn btn-sm" disabled={actionLoading} onClick={handleDeclineTerms}>Decline</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : showTermsForm ? (
+              <form onSubmit={handleProposeTerms} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="row gap-10">
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Start date</label>
+                    <input
+                      className="field-input"
+                      type="date"
+                      value={termsForm.start_date}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, start_date: e.target.value }))}
+                    />
+                  </div>
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Estimated end date</label>
+                    <input
+                      className="field-input"
+                      type="date"
+                      min={todayStr}
+                      value={termsForm.estimated_end_date}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, estimated_end_date: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="row gap-10">
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Budget</label>
+                    <input
+                      className="field-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={termsForm.agreed_budget}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, agreed_budget: e.target.value }))}
+                      placeholder="e.g. 75000"
+                    />
+                  </div>
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <label className="field-label">Payment structure</label>
+                    <select
+                      className="field-input"
+                      value={termsForm.payment_structure}
+                      onChange={(e) => setTermsForm((p) => ({ ...p, payment_structure: e.target.value }))}
+                    >
+                      <option value="">— No change —</option>
+                      {PAYMENT_STRUCTURE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="row gap-8">
+                  <button className="btn btn-acc" type="submit" disabled={termsLoading}>
+                    {termsLoading ? 'Sending…' : 'Send Proposal'}
+                  </button>
+                  <button className="btn" type="button" onClick={() => setShowTermsForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button className="btn btn-sm" onClick={openTermsForm}>Propose a change</button>
+            )}
+          </div>
+        )}
+
+        {/* Review */}
+        {engagement.status === 'completed' && reviewsLoaded && (
+          <div className="card" style={{ padding: 22, marginBottom: 20 }}>
+            <span className="section-label" style={{ display: 'block', marginBottom: 12 }}>Your Review</span>
+
+            {myReview ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="row gap-8" style={{ alignItems: 'center' }}>
+                  <RatingStars rating={myReview.overall_rating} />
+                  {myReview.review_title && <span style={{ fontWeight: 600, fontSize: 13 }}>{myReview.review_title}</span>}
+                  {!myReview.is_public && <span className="tag" style={{ fontSize: 10 }}>Private</span>}
+                </div>
+                {myReview.review_body && <p style={{ fontSize: 12.5 }}>{myReview.review_body}</p>}
+                <p className="lead" style={{ fontSize: 11.5 }}>Submitted — thanks for the feedback.</p>
+              </div>
+            ) : !showReviewForm ? (
+              <div>
+                <p className="lead" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                  {otherReview
+                    ? `${counterpartyLabel} has already submitted a review. Share your own perspective.`
+                    : `How did this engagement with ${counterpartyLabel} go?`}
+                </p>
+                <button className="btn btn-acc" onClick={() => { setReviewError(''); setShowReviewForm(true) }}>
+                  Write a Review
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitReview} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {reviewError && <div className="alert alert-error">{reviewError}</div>}
+                <StarRatingInput
+                  label="Overall rating" required
+                  value={reviewForm.overall_rating}
+                  onChange={(n) => setReviewForm((p) => ({ ...p, overall_rating: n }))}
+                />
+                <div className="field-group">
+                  <label className="field-label">Title <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                  <input
+                    className="field-input"
+                    value={reviewForm.review_title}
+                    onChange={(e) => setReviewForm((p) => ({ ...p, review_title: e.target.value }))}
+                  />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Comments <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></label>
+                  <textarea
+                    className="field-input"
+                    rows={3}
+                    value={reviewForm.review_body}
+                    onChange={(e) => setReviewForm((p) => ({ ...p, review_body: e.target.value }))}
+                  />
+                </div>
+                <label className="row gap-8" style={{ fontSize: 12.5, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={reviewForm.is_public}
+                    onChange={(e) => setReviewForm((p) => ({ ...p, is_public: e.target.checked }))}
+                  />
+                  Show this review publicly on {role === 'organization' ? "the expert's" : "the organization's"} profile
+                </label>
+                <div className="row gap-8">
+                  <button className="btn btn-acc" type="submit" disabled={reviewLoading}>
+                    {reviewLoading ? 'Submitting…' : 'Submit Review'}
+                  </button>
+                  <button className="btn" type="button" onClick={() => setShowReviewForm(false)}>Cancel</button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
@@ -470,7 +1012,7 @@ export default function EngagementDetail() {
               <div className="row gap-10">
                 <div className="field-group" style={{ flex: 1 }}>
                   <label className="field-label">Due date</label>
-                  <input className="field-input" type="date" value={addForm.due_date} onChange={(e) => setAddForm((p) => ({ ...p, due_date: e.target.value }))} />
+                  <input className="field-input" type="date" min={todayStr} value={addForm.due_date} onChange={(e) => setAddForm((p) => ({ ...p, due_date: e.target.value }))} />
                 </div>
                 <div className="field-group" style={{ flex: 2 }}>
                   <label className="field-label">Deliverable</label>
@@ -491,13 +1033,24 @@ export default function EngagementDetail() {
             </p>
           )}
 
-          {milestones.map((m, idx) => (
+          {milestones.map((m, idx) => {
+            const isPendingChange = m.pending_action != null
+            const isFlashConfirmed = flashConfirmedId === m.milestone_id
+            const outlineStyle = isPendingChange
+              ? { outline: '2px solid var(--danger, #c0392b)', outlineOffset: 3, borderRadius: 6 }
+              : isFlashConfirmed
+                ? { outline: '2px solid var(--good, #2e9e5b)', outlineOffset: 3, borderRadius: 6 }
+                : {}
+            return (
             <div
               key={m.milestone_id}
+              ref={(el) => { milestoneRefs.current[m.milestone_id] = el }}
               style={{
                 borderBottom: idx < milestones.length - 1 ? '1px solid var(--border)' : 'none',
                 paddingBottom: idx < milestones.length - 1 ? 16 : 0,
                 marginBottom: idx < milestones.length - 1 ? 16 : 0,
+                padding: isPendingChange || isFlashConfirmed ? 10 : undefined,
+                ...outlineStyle,
               }}
             >
               {editingId === m.milestone_id ? (
@@ -519,6 +1072,7 @@ export default function EngagementDetail() {
                     <input
                       className="field-input"
                       type="date"
+                      min={todayStr}
                       style={{ flex: 1 }}
                       value={editForm.due_date ?? (m.due_date || '')}
                       onChange={(e) => setEditForm((p) => ({ ...p, due_date: e.target.value }))}
@@ -549,37 +1103,48 @@ export default function EngagementDetail() {
                     <div className="row gap-6">
                       {/* Expert actions */}
                       {role === 'expert' && (
-                        <>
-                          {m.status === 'confirmed' && (
-                            <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'in_progress')}>
-                              Start work
+                        isPendingChange ? (
+                          <>
+                            <button className="btn btn-sm btn-acc" onClick={() => handleAcceptChange(m.milestone_id)}>
+                              {m.pending_action === 'cancel' ? 'Accept cancellation' : 'Accept change'}
                             </button>
-                          )}
-                          {m.status === 'in_progress' && (
-                            <>
-                              <button className="btn btn-sm btn-acc" onClick={() => handleMilestoneStatus(m.milestone_id, 'completed')}>
-                                Mark complete
+                            <button className="btn btn-sm" onClick={() => handleDeclineChange(m.milestone_id)}>
+                              Decline
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {m.status === 'confirmed' && (
+                              <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'in_progress')}>
+                                Start work
                               </button>
-                              <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'blocked')}>
-                                Mark blocked
+                            )}
+                            {m.status === 'in_progress' && (
+                              <>
+                                <button className="btn btn-sm btn-acc" onClick={() => handleMilestoneStatus(m.milestone_id, 'completed')}>
+                                  Mark complete
+                                </button>
+                                <button className="btn btn-sm" onClick={() => handleMilestoneStatus(m.milestone_id, 'blocked')}>
+                                  Mark blocked
+                                </button>
+                              </>
+                            )}
+                            {['proposed', 'confirmed'].includes(m.status) && !isTerminal && (
+                              <button className="btn btn-sm" onClick={() => { setEditingId(m.milestone_id); setEditForm({}) }}>
+                                Edit
                               </button>
-                            </>
-                          )}
-                          {['proposed', 'confirmed'].includes(m.status) && !isTerminal && (
-                            <button className="btn btn-sm" onClick={() => { setEditingId(m.milestone_id); setEditForm({}) }}>
-                              Edit
-                            </button>
-                          )}
-                          {m.status === 'proposed' && ['scoping', 'proposal_sent'].includes(engagement.status) && (
-                            <button
-                              className="btn btn-sm"
-                              style={{ color: 'var(--danger, #c0392b)' }}
-                              onClick={() => handleDelete(m.milestone_id)}
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </>
+                            )}
+                            {m.status === 'proposed' && ['scoping', 'proposal_sent'].includes(engagement.status) && (
+                              <button
+                                className="btn btn-sm"
+                                style={{ color: 'var(--danger, #c0392b)' }}
+                                onClick={() => handleDelete(m.milestone_id)}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </>
+                        )
                       )}
 
                       {/* Org actions */}
@@ -590,10 +1155,77 @@ export default function EngagementDetail() {
                               Confirm
                             </button>
                           )}
+                          {['confirmed', 'in_progress'].includes(m.status) && !isTerminal && !isPendingChange && (
+                            <>
+                              <button
+                                className="btn btn-sm"
+                                onClick={() => {
+                                  setProposingId(m.milestone_id)
+                                  setProposeForm({})
+                                  setProposeError('')
+                                }}
+                              >
+                                Propose change
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                style={{ color: 'var(--danger, #c0392b)' }}
+                                onClick={() => handleProposeCancel(m.milestone_id)}
+                              >
+                                Request cancellation
+                              </button>
+                            </>
+                          )}
+                          {m.pending_action === 'change' && proposingId !== m.milestone_id && (
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => {
+                                setProposingId(m.milestone_id)
+                                setProposeForm({
+                                  due_date: m.pending_due_date || '',
+                                  deliverable_description: m.pending_deliverable_description || '',
+                                })
+                                setProposeError('')
+                              }}
+                            >
+                              Update proposed change
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
                   </div>
+
+                  {proposingId === m.milestone_id && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                      {proposeError && <div className="alert alert-error">{proposeError}</div>}
+                      <div className="row gap-10">
+                        <input
+                          className="field-input"
+                          type="date"
+                          min={todayStr}
+                          style={{ flex: 1 }}
+                          value={proposeForm.due_date ?? ''}
+                          onChange={(e) => setProposeForm((p) => ({ ...p, due_date: e.target.value }))}
+                        />
+                        <input
+                          className="field-input"
+                          style={{ flex: 2 }}
+                          value={proposeForm.deliverable_description ?? ''}
+                          onChange={(e) => setProposeForm((p) => ({ ...p, deliverable_description: e.target.value }))}
+                          placeholder="Deliverable"
+                        />
+                      </div>
+                      <div className="row gap-8">
+                        <button className="btn btn-sm btn-acc" onClick={() => handleProposeChange(m.milestone_id)}>
+                          Save proposal
+                        </button>
+                        <button className="btn btn-sm" onClick={() => { setProposingId(null); setProposeForm({}) }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {m.description && (
                     <p style={{ fontSize: 12.5, color: 'var(--fg-muted, #666)', marginTop: 4 }}>{m.description}</p>
@@ -611,42 +1243,31 @@ export default function EngagementDetail() {
                       </span>
                     )}
                   </div>
+
+                  {isPendingChange && (
+                    <p style={{ fontSize: 12, marginTop: 6, fontStyle: 'italic', color: 'var(--danger, #c0392b)' }}>
+                      {m.pending_action === 'cancel'
+                        ? 'Cancellation requested — awaiting expert response.'
+                        : `Proposed: ${[
+                            m.pending_due_date && `due date → ${new Date(m.pending_due_date + 'T00:00:00').toLocaleDateString()}`,
+                            m.pending_deliverable_description && `deliverable → ${m.pending_deliverable_description}`,
+                          ].filter(Boolean).join('; ')} — awaiting expert response.`}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
 
-        {/* Messages */}
-        <div className="card" style={{ padding: 22 }}>
-          <span className="section-label" style={{ display: 'block', marginBottom: 14 }}>Messages</span>
-          <div className="chat-panel">
-            <div className="chat-messages">
-              {messagesLoading && <p className="lead">Loading messages…</p>}
-              {messagesError && <div className="alert alert-error">{messagesError}</div>}
-              {!messagesLoading && messages.length === 0 && (
-                <p className="lead" style={{ fontSize: 12.5 }}>
-                  No messages yet — say hello.
-                </p>
-              )}
-              {messages.map((m) => (
-                <div key={m.message_id} className={`chat-bubble ${isMine(m) ? 'mine' : 'theirs'}`}>
-                  {m.content}
-                </div>
-              ))}
-            </div>
-            <form className="chat-composer" onSubmit={handleSend}>
-              <input
-                className="field-input"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Write a message…"
-              />
-              <button className="btn btn-acc btn-sm" type="submit" disabled={sending || !draft.trim()}>
-                Send
-              </button>
-            </form>
+        </div>
+
+        {role === 'expert' && (
+          <div style={{ position: 'sticky', top: 84 }}>
+            <EngagementNotes engagementId={engagementId} />
           </div>
+        )}
         </div>
 
       </div>

@@ -1,6 +1,8 @@
 import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import ChatWindow from './components/ChatWindow'
+import { ChatProvider } from './context/ChatContext'
 import Landing from './pages/Landing'
 import HowItWorks from './pages/HowItWorks'
 import SignUp from './pages/SignUp'
@@ -15,7 +17,7 @@ import NotFound from './pages/NotFound'
 
 export default function App() {
   return (
-    <>
+    <ChatProvider>
       <Navbar />
       <Routes>
         <Route path="/" element={<Landing />} />
@@ -31,6 +33,7 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
-    </>
+      <ChatWindow />
+    </ChatProvider>
   )
 }

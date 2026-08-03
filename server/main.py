@@ -1,8 +1,10 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.config import settings
@@ -16,9 +18,10 @@ from server.models.errors import (
     TransitionError,
     ValidationError,
 )
+from server.storage import UPLOAD_DIR
 from server.controllers import (
-    admin, auth, connections, engagements, experts, messages, notifications,
-    organizations, verifications,
+    admin, auth, connections, engagements, experts, notifications,
+    organizations, reviews, threads, uploads, verifications,
 )
 
 
@@ -42,6 +45,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve uploaded files back out (StaticFiles requires the directory to exist
+# at mount time — save_upload() also creates it lazily on first write).
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 # --- Controller HTTPExceptions → contract error envelope (§1.1) ---
@@ -130,6 +138,26 @@ app.include_router(experts.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
 app.include_router(connections.router, prefix="/api/v1")
 app.include_router(engagements.router, prefix="/api/v1")
-app.include_router(messages.router, prefix="/api/v1")
+app.include_router(threads.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(verifications.router, prefix="/api/v1")
+app.include_router(uploads.router, prefix="/api/v1")
+app.include_router(reviews.router, prefix="/api/v1")
+
+# --- SPA static file serving (must come after all API routers) ---
+# In production the Vite build lands at frontend/dist. API routes above always
+# win; this block only fires for paths that don't match any API route.
+
+_DIST = "frontend/dist"
+
+if os.path.exists(_DIST):
+    app.mount("/assets", StaticFiles(directory=f"{_DIST}/assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Serve root-level static files (favicon, etc.) if they exist
+        candidate = os.path.join(_DIST, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        # Everything else → index.html so React Router handles the path
+        return FileResponse(f"{_DIST}/index.html")

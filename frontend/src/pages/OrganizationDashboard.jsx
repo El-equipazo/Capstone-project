@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi, organizationsApi, matchingApi, connectionsApi, expertsApi, engagementsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import MilestoneMap from '../components/MilestoneMap'
 import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 import RecommendationCard from '../components/matching/RecommendationCard'
+import RatingStars from '../components/RatingStars'
 import TagInput from '../components/organization/TagInput'
+import DeleteAccount from '../components/DeleteAccount'
 import { labelize, BUDGET_RANGE_LABEL, toNumberOrNull } from '../utils/format'
 
 const MATCH_ERROR_MESSAGES = {
@@ -18,8 +21,17 @@ const BUDGET_RANGE_OPTIONS = ['under_10k', '10k_50k', '50k_250k', '250k_plus', '
 const URGENCY_OPTIONS = ['just_exploring', 'planning_ahead', 'urgent', 'critical']
 const STORAGE_TYPE_OPTIONS = ['on_premise', 'cloud', 'hybrid', 'legacy_mainframe', 'mixed']
 
-const COMPLIANCE_SUGGESTIONS = ['PCI-DSS', 'GLBA', 'SOX', 'HIPAA', 'GDPR', 'CCPA', 'FFIEC', 'NYDFS']
-const ENCRYPTION_SUGGESTIONS = ['RSA-2048', 'RSA-4096', 'AES-256', 'ECC', 'TLS 1.2', 'TLS 1.3']
+const COMPLIANCE_SUGGESTIONS = [
+  'BSA', 'AML', 'KYC', 'OFAC', 'FCPA', 'CFPB', 'TILA', 'FCRA', 'ECOA',
+  'GLBA', 'PCI DSS', 'DORA', 'GDPR', 'SOX', 'CECL', 'FINRA', 'CFTC', 'FFIEC',
+]
+const ENCRYPTION_SUGGESTIONS = [
+  'AES', 'AES-256', 'AES-128', 'AES-192', 'ChaCha20',
+  'RSA', 'RSA-2048', 'RSA-4096',
+  'ECC', 'ECDSA', 'EdDSA', 'ECDH',
+  'ML-KEM (FIPS 203)', 'ML-DSA (FIPS 204)', 'SLH-DSA (FIPS 205)', 'FN-DSA (FIPS 206)',
+  'TLS 1.3', 'SSHv2', 'SFTP',
+]
 const CLOUD_PROVIDER_SUGGESTIONS = ['AWS', 'Azure', 'GCP']
 const DATA_CATEGORY_SUGGESTIONS = ['customer_pii', 'transaction_records', 'financial_records', 'health_records', 'employee_records']
 
@@ -55,7 +67,7 @@ function profileToForm(profile) {
 }
 
 export default function OrganizationDashboard() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
@@ -65,9 +77,11 @@ export default function OrganizationDashboard() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedNotice, setSavedNotice] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [connections, setConnections] = useState([])
   const [engagements, setEngagements] = useState([])
   const [expertsById, setExpertsById] = useState({})
+  const [myReviews, setMyReviews] = useState([])
   const [dismissed, setDismissed] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`qc_org_dismissed_${user?.user_id}`) || '[]')) }
     catch { return new Set() }
@@ -121,6 +135,13 @@ export default function OrganizationDashboard() {
       .catch(() => setInfraForm(infraToForm(null)))
   }, [profile])
 
+  useEffect(() => {
+    if (!profile) return
+    // Private -- full review text about this org, visible only to the org
+    // itself (+ admin). Everyone else only ever sees profile.avg_rating.
+    organizationsApi.getMyReviews(profile.org_profile_id).then(setMyReviews).catch(() => {})
+  }, [profile])
+
   if (!user) return null
 
   if (user.role !== 'organization') {
@@ -156,7 +177,6 @@ export default function OrganizationDashboard() {
       // team/invite concept in organization_profiles to send it to.
       const result = await organizationsApi.createProfile(user.user_id, {
         ...wizardData,
-        org_name: wizardData.org_name.trim() || `${user.email.split('@')[0]}'s Organization`,
         sector: 'financial', // the whole platform is scoped to financial institutions
       })
       setProfile(result)
@@ -266,7 +286,11 @@ export default function OrganizationDashboard() {
     .map((c) => ({ id: `conn-${c.connection_id}`, label: `Expert #${c.expert_id}`, status: c.status, link: `/experts/${c.expert_id}` }))
   const _pastEngagements = engagements
     .filter((e) => TERMINAL.includes(e.status))
-    .map((e) => ({ id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status, link: `/engagements/${e.engagement_id}` }))
+    .map((e) => ({
+      id: `eng-${e.engagement_id}`, label: e.title || labelize(e.engagement_type), status: e.status,
+      link: `/engagements/${e.engagement_id}`,
+      needsReview: e.status === 'completed' && !e.my_review_submitted,
+    }))
   const allPastItems = [..._pastConnections, ..._pastEngagements]
 
   const DISMISSED_KEY = `qc_org_dismissed_${user?.user_id}`
@@ -331,25 +355,25 @@ export default function OrganizationDashboard() {
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{labelize(profile.urgency_level)}</span>
-                  <span className="l">urgency</span>
+                  <span className="l">Urgency</span>
                 </div>
               </div>
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{BUDGET_RANGE_LABEL[profile.budget_range]}</span>
-                  <span className="l">budget range</span>
+                  <span className="l">Budget Range</span>
                 </div>
               </div>
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{labelize(profile.quantum_knowledge_level)}</span>
-                  <span className="l">quantum knowledge</span>
+                  <span className="l">Quantum Knowledge</span>
                 </div>
               </div>
               <div className="card" style={{ padding: 18 }}>
                 <div className="stat">
                   <span className="v">{profile.employee_count_range}</span>
-                  <span className="l">employees</span>
+                  <span className="l">Employees</span>
                 </div>
               </div>
             </div>
@@ -388,11 +412,7 @@ export default function OrganizationDashboard() {
                     to send a connection request.
                   </p>
                 ) : activeEngagements.map((e) => (
-                  <Link
-                    key={e.engagement_id}
-                    to={`/engagements/${e.engagement_id}`}
-                    style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-                  >
+                  <Link key={e.engagement_id} to={`/engagements/${e.engagement_id}`} className="eng-list-row">
                     <div className="row gap-8 wrap" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <span style={{ fontWeight: 600, fontSize: 13 }}>{e.title || labelize(e.engagement_type)}</span>
@@ -404,6 +424,7 @@ export default function OrganizationDashboard() {
                       </div>
                       <span className={e.status === 'active' ? 'badge' : 'tag'}>{labelize(e.status)}</span>
                     </div>
+                    <MilestoneMap milestones={e.milestones} />
                   </Link>
                 ))}
               </div>
@@ -429,6 +450,11 @@ export default function OrganizationDashboard() {
                           <span style={{ fontSize: 12.5 }}>{item.label}</span>
                         )}
                         <span className="tag" style={{ fontSize: 11 }}>{labelize(item.status)}</span>
+                        {item.needsReview && (
+                          <Link to={item.link} className="badge" style={{ fontSize: 11 }}>
+                            Review available
+                          </Link>
+                        )}
                       </div>
                       <button
                         className="btn btn-sm"
@@ -474,10 +500,42 @@ export default function OrganizationDashboard() {
                 </div>
               </div>
             )}
+
+            <div className="card" style={{ padding: 22 }}>
+              <div className="row gap-8" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <span className="section-label">My Reviews</span>
+                {profile.avg_rating != null && <RatingStars rating={profile.avg_rating} label="reviews" />}
+              </div>
+              {/* Private -- only this org (+ admin) ever sees this text. Everyone
+                  else, including the experts who wrote these, only ever sees
+                  the aggregate avg_rating above. */}
+              {myReviews.length === 0 ? (
+                <p className="lead" style={{ fontSize: 12.5 }}>No reviews yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {myReviews.map((r) => (
+                    <div key={r.review_id} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
+                      <div className="row gap-8" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div className="row gap-8" style={{ alignItems: 'center' }}>
+                          <RatingStars rating={r.overall_rating} />
+                          {r.review_title && <span style={{ fontWeight: 600, fontSize: 13 }}>{r.review_title}</span>}
+                        </div>
+                        <span className="lead" style={{ fontSize: 11 }}>{new Date(r.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <span className="lead" style={{ fontSize: 12 }}>
+                        {r.reviewer_first_name} {r.reviewer_last_name}
+                      </span>
+                      {r.review_body && <p style={{ fontSize: 12.5, marginTop: 4 }}>{r.review_body}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {tab === 'profile' && (
+          <>
           <form onSubmit={handleSave} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 640 }}>
             <span className="section-label">Profile</span>
 
@@ -583,6 +641,35 @@ export default function OrganizationDashboard() {
               {saving ? 'Saving…' : 'Save changes'}
             </button>
           </form>
+
+          <div className="card" style={{ padding: 22, maxWidth: 640, marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <span className="section-label">Danger zone</span>
+            <p className="lead" style={{ fontSize: 12.5 }}>
+              Deleting your account permanently erases it — along with every engagement, connection
+              request, chat message, and milestone shared with experts you've worked with. Affected
+              experts will be notified that you've left. This cannot be undone.
+            </p>
+            <button
+              type="button"
+              className="btn btn-danger"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => setShowDeleteModal(true)}
+            >
+              Delete account
+            </button>
+          </div>
+
+          {showDeleteModal && (
+            <DeleteAccount
+              orgName={profile.org_name}
+              onClose={() => setShowDeleteModal(false)}
+              onDeleted={() => {
+                logout()
+                navigate('/')
+              }}
+            />
+          )}
+          </>
         )}
 
         {tab === 'infrastructure' && (
@@ -602,7 +689,7 @@ export default function OrganizationDashboard() {
               values={infraForm.data_categories}
               onChange={(v) => updateInfraField('data_categories', v)}
               suggestions={DATA_CATEGORY_SUGGESTIONS}
-              placeholder="e.g. customer_pii"
+              restrictToSuggestions
             />
 
             <div className="field-group">
@@ -626,7 +713,7 @@ export default function OrganizationDashboard() {
               values={infraForm.primary_cloud_providers}
               onChange={(v) => updateInfraField('primary_cloud_providers', v)}
               suggestions={CLOUD_PROVIDER_SUGGESTIONS}
-              placeholder="e.g. AWS"
+              restrictToSuggestions
             />
 
             <TagInput
@@ -634,7 +721,7 @@ export default function OrganizationDashboard() {
               values={infraForm.current_encryption_standards}
               onChange={(v) => updateInfraField('current_encryption_standards', v)}
               suggestions={ENCRYPTION_SUGGESTIONS}
-              placeholder="e.g. RSA-2048"
+              restrictToSuggestions
             />
 
             <div className="row gap-10">
@@ -665,7 +752,7 @@ export default function OrganizationDashboard() {
               values={infraForm.compliance_requirements}
               onChange={(v) => updateInfraField('compliance_requirements', v)}
               suggestions={COMPLIANCE_SUGGESTIONS}
-              placeholder="e.g. PCI-DSS"
+              restrictToSuggestions
             />
 
             <div className="row gap-16">

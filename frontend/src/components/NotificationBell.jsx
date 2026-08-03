@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { notificationsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useChat_context } from '../context/ChatContext'
 
 // First interval-polling precedent in this codebase (everything else is
 // on-demand fetch or the chat websocket) -- notifications aren't
@@ -12,10 +13,23 @@ const POLL_MS = 25000
 
 export default function NotificationBell() {
   const { user } = useAuth()
+  const { openChat, conversations } = useChat_context()
   const [count, setCount] = useState(0)
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState([])
   const [itemsLoading, setItemsLoading] = useState(false)
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onClickOutside(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [open])
 
   useEffect(() => {
     if (!user) {
@@ -33,9 +47,11 @@ export default function NotificationBell() {
     }
     poll()
     const id = setInterval(poll, POLL_MS)
+    window.addEventListener('notifications:refresh', poll)
     return () => {
       cancelled = true
       clearInterval(id)
+      window.removeEventListener('notifications:refresh', poll)
     }
   }, [user])
 
@@ -61,14 +77,19 @@ export default function NotificationBell() {
     notificationsApi.markRead(notificationId).catch(() => {})
     setItems((prev) => prev.filter((n) => n.notification_id !== notificationId))
     setCount((prev) => Math.max(0, prev - 1))
+    setOpen(false)
   }
 
   if (!user) return null
 
   return (
-    <div className="notif-bell-wrap">
+    <div className="notif-bell-wrap" ref={wrapRef}>
       <button className="notif-bell" onClick={toggle} aria-label="Notifications">
-        🔔{count > 0 && <span className="notif-badge">{count > 9 ? '9+' : count}</span>}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {count > 0 && <span className="notif-badge">{count > 9 ? '9+' : count}</span>}
       </button>
       {open && (
         <div className="notif-dropdown card">
@@ -97,6 +118,26 @@ export default function NotificationBell() {
                 {n.body && <div style={{ marginTop: 2, color: 'var(--muted)' }}>{n.body}</div>}
               </>
             )
+
+            const threadIdStr = n.action_url
+              ? new URLSearchParams(n.action_url.split('?')[1] ?? '').get('open_thread')
+              : null
+
+            if (threadIdStr) {
+              const threadId = parseInt(threadIdStr, 10)
+              const title = conversations.find((c) => c.id === threadId)?.title ?? 'Chat'
+              return (
+                <button
+                  key={n.notification_id}
+                  className="notif-row"
+                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+                  onClick={() => { handleRowClick(n.notification_id); openChat(threadId, title) }}
+                >
+                  {content}
+                </button>
+              )
+            }
+
             return n.action_url ? (
               <Link
                 key={n.notification_id}

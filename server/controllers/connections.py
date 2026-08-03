@@ -20,6 +20,7 @@ from server.dependencies import get_current_user, require_role
 from server.models import (
     ai_matching,
     connection_model,
+    engagement_model,
     expert_model,
     match_scoring,
     notification_model,
@@ -100,6 +101,15 @@ async def create_connection(
             "sector": "other",
         })
 
+    # Block duplicate requests: one open engagement per org/expert pair is enough.
+    # body.expert_id is the expert_profile_id — matches engagement_model columns directly.
+    open_eng = await engagement_model.find_open_between(org["org_profile_id"], body.expert_id)
+    if open_eng:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": {"code": "CONFLICT", "message": "You already have an open engagement with this expert"}},
+        )
+
     # Server computes the score + factor breakdown (404 unknown expert /
     # 422 unavailable bubble up from the scorer).
     match_score, factors = await match_scoring.score(
@@ -123,6 +133,15 @@ async def create_connection(
         ai_fit_score=(ai_result or {}).get("fit_score"),
         ai_reasoning=(ai_result or {}).get("reasoning"),
     )
+
+    expert = await expert_model.get(body.expert_id)
+    await notification_model.create(
+        expert["user_id"], "connection_request_received",
+        f"{org['org_name']} sent you a connection request",
+        related_entity_type="connection_request", related_entity_id=row["connection_id"],
+        action_url="/dashboard",
+    )
+
     return dict(row)
 
 
@@ -194,18 +213,18 @@ async def respond_to_connection(
         )
     updated = await connection_model.respond(connection_id, body.status)
 
-    # Notify the org side of the response. §8: "Notifications are
-    # server-generated only (connection received/responded, ...)".
-    org = await organization_model.get(updated["org_id"])
-    accepted = body.status == "accepted"
-    await notification_model.create(
-        org["user_id"],
-        "connection_accepted" if accepted else "connection_declined",
-        f"{expert['first_name']} {expert['last_name']} "
-        f"{'accepted' if accepted else 'declined'} your connection request",
-        related_entity_type="connection_request", related_entity_id=connection_id,
-        action_url=f"/connections/{connection_id}",
-    )
+    # Only notify here on decline -- there's no /connections/:id page to link
+    # to, and nothing meaningful for the org to jump to. The "accepted"
+    # notification fires from POST /engagements instead, once a real
+    # engagement_id exists to link to (accepting and creating the engagement
+    # are two separate calls from the frontend's accept-with-timeline flow).
+    if body.status == "declined":
+        org = await organization_model.get(updated["org_id"])
+        await notification_model.create(
+            org["user_id"], "connection_declined",
+            f"{expert['first_name']} {expert['last_name']} declined your connection request",
+            related_entity_type="connection_request", related_entity_id=connection_id,
+        )
 
     return dict(updated)
 

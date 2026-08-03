@@ -1,22 +1,22 @@
 import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
-import { expertsApi } from '../api/client'
-import ExpertCard from '../components/ExpertCard'
 import LatticeHeroArt from '../components/LatticeHeroArt'
-
-const SECTORS = [
-  { icon: '🏦', label: 'Banks', sub: 'Retail, commercial & community banks' },
-  { icon: '💳', label: 'Payment processors', sub: 'Card networks, payment rails, fintech infrastructure' },
-  { icon: '📈', label: 'Investment firms', sub: 'Asset managers, hedge funds, broker-dealers' },
-  { icon: '🛡️', label: 'Insurers', sub: 'Carriers holding decades of policyholder data' },
-]
+import { useLanguage } from '../context/LanguageContext'
 
 export default function Landing() {
-  const [featured, setFeatured] = useState([])
+  const { t } = useLanguage()
 
-  useEffect(() => {
-    expertsApi.list().then((res) => setFeatured(res.data.slice(0, 3)))
-  }, [])
+  const SECTORS = [
+    { label: t('landing.sectorBanks'), sub: t('landing.sectorBanksSub') },
+    { label: t('landing.sectorPayments'), sub: t('landing.sectorPaymentsSub') },
+    { label: t('landing.sectorInvestment'), sub: t('landing.sectorInvestmentSub') },
+    { label: t('landing.sectorInsurers'), sub: t('landing.sectorInsurersSub') },
+  ]
+
+  const VERIFY_STEPS = [
+    { n: 1, title: t('landing.verify1Title'), body: t('landing.verify1Body') },
+    { n: 2, title: t('landing.verify2Title'), body: t('landing.verify2Body') },
+    { n: 3, title: t('landing.verify3Title'), body: t('landing.verify3Body') },
+  ]
 
   return (
     <>
@@ -24,19 +24,17 @@ export default function Landing() {
         <LatticeHeroArt />
         <div className="container">
           <div className="hero-sky-inner">
-            <span className="hero-eyebrow">◆ post-quantum readiness, before the quantum cliff arrives</span>
+            <span className="hero-eyebrow">◆ {t('landing.eyebrow')}</span>
             <h1 className="hero-serif">
-              Quantum risk has two sides.
+              {t('landing.heroTitle1')}
               <br />
-              Pick yours.
+              {t('landing.heroTitle2')}
             </h1>
             <p className="hero-sub">
-              Lattice is a verified marketplace connecting high-risk financial institutions with
-              the quantum security experts who can assess and remediate their cryptographic
-              exposure — before a quantum breakthrough renders today&apos;s protections obsolete.
+              {t('landing.heroSub')}
             </p>
             <Link to="/experts" className="pill-btn">
-              Browse verified experts <span aria-hidden="true">→</span>
+              {t('landing.browseVerifiedExperts')} <span aria-hidden="true">→</span>
             </Link>
           </div>
         </div>
@@ -54,60 +52,55 @@ export default function Landing() {
           >
             <div className="card" style={{ padding: 26, background: 'var(--fill2)' }}>
               <span className="section-label" style={{ color: 'var(--acc)' }}>
-                for organizations
+                {t('landing.forOrganizations')}
               </span>
               <h2 className="h2" style={{ margin: '10px 0 8px' }}>
-                Assess &amp; remediate your quantum exposure
+                {t('landing.orgHeading')}
               </h2>
               <p className="lead" style={{ marginBottom: 18 }}>
-                Search a curated directory of verified quantum security professionals, filtered by
-                specialization, engagement type, and compliance familiarity — then engage
-                end-to-end in a secure workspace.
+                {t('landing.orgBody')}
               </p>
               <Link to="/experts" className="btn btn-acc btn-block">
-                Browse verified experts
+                {t('landing.browseVerifiedExperts')}
               </Link>
             </div>
             <div className="card" style={{ padding: 26 }}>
-              <span className="section-label">for experts</span>
+              <span className="section-label">{t('landing.forExperts')}</span>
               <h2 className="h2" style={{ margin: '10px 0 8px' }}>
-                Get discovered by institutions that need you
+                {t('landing.expertHeading')}
               </h2>
               <p className="lead" style={{ marginBottom: 18 }}>
-                Build a structured profile — credentials, specializations, sector experience,
-                engagement types — and stop spending your time on leads who aren&apos;t ready to
-                act.
+                {t('landing.expertBody')}
               </p>
               <Link to="/sign-up?role=expert" className="btn btn-solid btn-block">
-                Create your profile
+                {t('landing.createProfile')}
               </Link>
             </div>
           </div>
 
-          {/* Trust band */}
-          <div
-            className="card"
-            style={{ background: 'var(--ink)', borderColor: 'var(--ink)', padding: '20px 24px', marginBottom: 56 }}
-          >
-            <span className="section-label" style={{ color: '#c8d6e4' }}>
-              how experts are vetted
-            </span>
-            <div className="row gap-10 wrap" style={{ marginTop: 12 }}>
-              <span className="chip" style={{ background: 'transparent', borderColor: '#565049', color: '#e6e3dc' }}>
-                ✓ Credentials verified
-              </span>
-              <span className="chip" style={{ background: 'transparent', borderColor: '#565049', color: '#e6e3dc' }}>
-                ✓ Certifications checked
-              </span>
-              <span className="chip" style={{ background: 'transparent', borderColor: '#565049', color: '#e6e3dc' }}>
-                ✓ Sector-compliance proven
-              </span>
+          {/* Verification band */}
+          <div className="verify-band">
+            <div className="verify-head">
+              <span className="section-label">{t('landing.howVettingWorks')}</span>
+              <h3>{t('landing.vettingHeading')}</h3>
             </div>
+            <div className="verify-steps">
+              {VERIFY_STEPS.map((step) => (
+                <div className="verify-step" key={step.n}>
+                  <span className="n">{step.n}</span>
+                  <div>
+                    <div className="t">{step.title}</div>
+                    <div className="d">{step.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="verify-connector" />
           </div>
 
           {/* Target sectors */}
           <div style={{ marginBottom: 56 }}>
-            <span className="section-label">who this is for</span>
+            <span className="section-label">{t('landing.whoThisIsFor')}</span>
             <div
               style={{
                 display: 'grid',
@@ -118,7 +111,7 @@ export default function Landing() {
             >
               {SECTORS.map((s) => (
                 <div key={s.label} className="card" style={{ padding: 18 }}>
-                  <div style={{ fontSize: 22, marginBottom: 8 }}>{s.icon}</div>
+                  <div className="sector-mark" />
                   <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{s.label}</div>
                   <div className="lead" style={{ fontSize: 12 }}>
                     {s.sub}
@@ -128,18 +121,21 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Featured experts */}
-          <div>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
-              <span className="section-label">featured experts</span>
-              <Link to="/experts" className="tag">
-                see full directory →
-              </Link>
+          {/* Closing CTA */}
+          <div className="close-band">
+            <div>
+              <span className="section-label" style={{ color: 'var(--acc)' }}>
+                {t('landing.readyWhenYouAre')}
+              </span>
+              <h3>{t('landing.closingHeading')}</h3>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-              {featured.map((expert) => (
-                <ExpertCard key={expert.expert_profile_id} expert={expert} />
-              ))}
+            <div className="close-actions">
+              <Link to="/sign-up?role=expert" className="btn">
+                {t('landing.createProfile')}
+              </Link>
+              <Link to="/experts" className="btn btn-acc">
+                {t('landing.browseVerifiedExperts')} →
+              </Link>
             </div>
           </div>
         </div>

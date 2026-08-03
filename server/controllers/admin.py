@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from server.dependencies import require_role
-from server.models import admin_model
+from server.models import admin_model, ai_verification, expert_model, review_model
 
 router = APIRouter(tags=["admin"])
 
@@ -25,6 +25,11 @@ class DecideVerificationBody(BaseModel):
 
 class VerifyProfileBody(BaseModel):
     is_verified: bool
+
+
+class AdminReviewPatch(BaseModel):
+    is_public: Optional[bool] = None
+    is_flagged: Optional[bool] = None
 
 
 @router.get("/admin/users")
@@ -54,6 +59,24 @@ async def list_verifications(
     return await admin_model.list_verifications(
         status=status_filter, verification_type=verification_type
     )
+
+
+@router.get("/admin/reviews")
+async def list_reviews(
+    is_flagged: Optional[bool] = Query(None),
+    current_user=Depends(require_role("admin")),
+):
+    return await review_model.admin_list(is_flagged=is_flagged)
+
+
+@router.patch("/admin/reviews/{review_id}")
+async def update_review(
+    review_id: int,
+    body: AdminReviewPatch,
+    current_user=Depends(require_role("admin")),
+):
+    updates = body.model_dump(exclude_none=True)
+    return await review_model.admin_update(review_id, updates)
 
 
 @router.patch("/admin/verifications/{verification_id}")
@@ -88,6 +111,55 @@ async def decide_verification(
     )
 
 
+@router.post("/admin/verifications/{verification_id}/ai-review")
+async def ai_review_verification(
+    verification_id: int,
+    current_user=Depends(require_role("admin")),
+):
+    """
+    Advisory only — Gemini assesses the credential's claimed details plus any
+    submitted document files and returns a recommendation, but this never
+    decides anything itself. The admin still calls PATCH .../verifications/:id
+    to actually approve/reject.
+    """
+    verification = await admin_model.get_verification(verification_id)
+    if verification["verification_type"] != "professional_credential":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": {"code": "WRONG_TYPE",
+                              "message": "AI review only applies to professional_credential verifications"}},
+        )
+    if not verification["related_credential_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": {"code": "NO_CREDENTIAL",
+                              "message": "This verification isn't linked to a credential"}},
+        )
+
+    credential = await expert_model.get_credential(verification["related_credential_id"])
+
+    try:
+        assessment = await ai_verification.review_credential(credential, verification)
+    except ai_verification.AIConfigurationError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"code": "AI_NOT_CONFIGURED", "message": str(e)}},
+        )
+    except ai_verification.AIUnavailableError as e:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": {"code": "AI_UNAVAILABLE", "message": str(e)}},
+        )
+
+    return await admin_model.save_ai_review(
+        verification_id,
+        recommendation=assessment["recommendation"],
+        confidence=assessment["confidence"],
+        reasoning=assessment["reasoning"],
+        red_flags=assessment["red_flags"],
+    )
+
+
 @router.get("/admin/experts")
 async def list_expert_profiles(
     is_verified: Optional[bool] = Query(None),
@@ -114,15 +186,9 @@ async def list_organization_profiles(
 
 
 @router.patch("/admin/organizations/{org_profile_id}/verify")
-async def verify_organization(
+async def set_organization_verified(
     org_profile_id: int,
     body: VerifyProfileBody,
     current_user=Depends(require_role("admin")),
 ):
-    if not body.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": {"code": "INVALID_VALUE",
-                              "message": "is_verified must be true"}},
-        )
-    return await admin_model.verify_organization(org_profile_id)
+    return await admin_model.set_organization_verified(org_profile_id, body.is_verified)

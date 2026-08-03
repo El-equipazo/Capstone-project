@@ -62,6 +62,7 @@ class ExpertResponse(BaseModel):
     last_name: str
     headline: Optional[str] = None
     bio: Optional[str] = None
+    profile_photo_url: Optional[str] = None
     years_of_experience: Optional[int] = None
     linkedin_url: Optional[str] = None
     hourly_rate_min: Optional[float] = None
@@ -83,6 +84,7 @@ class ExpertListItem(BaseModel):
     first_name: str
     last_name: str
     headline: Optional[str] = None
+    profile_photo_url: Optional[str] = None
     availability_status: str
     hourly_rate_min: Optional[float] = None
     hourly_rate_max: Optional[float] = None
@@ -111,6 +113,7 @@ class ExpertUpdate(BaseModel):
     last_name: Optional[str] = None
     headline: Optional[str] = None
     bio: Optional[str] = None
+    profile_photo_url: Optional[str] = None
     years_of_experience: Optional[int] = None
     linkedin_url: Optional[str] = None
     hourly_rate_min: Optional[float] = None
