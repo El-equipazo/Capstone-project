@@ -3,7 +3,8 @@ user_model — data access for the users table.
 
 The Python/asyncpg analogue of userModel.js:
   - one module per resource, thin functions over the pool helpers
-  - password_hash is NEVER returned except inside validate_password
+  - password_hash is NEVER returned; it's only ever read inside
+  validate_password and update (for password changes)
   - auth key is `email` (this schema has no username column)
 
 Password hashing uses passlib bcrypt, matching seed.py. Keep BCRYPT_ROUNDS in
@@ -14,7 +15,7 @@ from passlib.context import CryptContext
 
 from server.db import connection_pool as pool
 from .enums import USER_ROLE
-from .errors import AuthenticationError, ConflictError, DeactivatedError
+from .errors import AuthenticationError, ConflictError, DeactivatedError, ValidationError
 from .validators import check_enum
 
 BCRYPT_ROUNDS = 12  # set explicitly; align with any other hasher in the stack
@@ -68,6 +69,54 @@ async def find_by_email(email: str):
     return await pool.fetchrow(
         f"SELECT {_PUBLIC_COLS} FROM users WHERE email = $1", email
     )
+
+
+async def update(user_id: int, updates: dict) -> dict:
+    """
+    Update mutable fields on a user (email and/or password). Returns the
+    public row. Fields are handled explicitly rather than looped over, so an
+    unrelated key like `current_password` can never be mistaken for a column.
+
+    Raises ValidationError (-> 400) if a new password is given without the
+    correct current_password, ConflictError (-> 409) on a duplicate email.
+    """
+    set_parts: dict = {}
+
+    if "password" in updates:
+        row = await pool.fetchrow(
+            "SELECT password_hash FROM users WHERE user_id = $1", user_id
+        )
+        current_password = updates.get("current_password") or ""
+        if row is None or not pwd_context.verify(current_password, row["password_hash"]):
+            raise ValidationError(
+                "current password is incorrect",
+                field="current_password", issue="incorrect",
+            )
+        set_parts["password_hash"] = hash_password(updates["password"])
+
+    if "email" in updates:
+        set_parts["email"] = updates["email"]
+
+    if not set_parts:
+        return await find(user_id)
+
+    keys = list(set_parts.keys())
+    vals = [set_parts[k] for k in keys]
+    clauses = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(keys))
+
+    try:
+        return await pool.fetchrow(
+            f"""
+            UPDATE users SET {clauses}, updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING {_PUBLIC_COLS}
+            """,
+            user_id, *vals,
+        )
+    except Exception as e:
+        if getattr(e, "sqlstate", None) == "23505":
+            raise ConflictError("email already registered") from e
+        raise
 
 
 async def validate_password(email: str, password: str):

@@ -109,6 +109,19 @@ export const authApi = {
     storeSession({ ...session, user })
     return { user, profile }
   },
+
+  async updateMe({ email, password, current_password } = {}) {
+    const body = {}
+    if (email !== undefined) body.email = email
+    if (password !== undefined) body.password = password
+    if (current_password !== undefined) body.current_password = current_password
+    const data = await apiFetch('/auth/me', { method: 'PATCH', body, headers: authHeader() })
+    const session = getStoredSession()
+    if (session) {
+      storeSession({ ...session, user: { ...session.user, email: data.email } })
+    }
+    return data
+  },
 }
 
 // ---------------- Experts ----------------------------------------------------
