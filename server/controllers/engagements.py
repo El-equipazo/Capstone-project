@@ -64,6 +64,13 @@ class MilestoneProposeChange(BaseModel):
     deliverable_description: Optional[str] = None
 
 
+class EngagementTermsPropose(BaseModel):
+    start_date: Optional[date] = None
+    estimated_end_date: Optional[date] = None
+    agreed_budget: Optional[float] = None
+    payment_structure: Optional[str] = None
+
+
 class EngagementNoteUpdate(BaseModel):
     content: Optional[str] = None
 
@@ -219,6 +226,106 @@ async def patch_engagement(
     role, _ = await _require_participant(engagement_id, current_user)
     updates = body.model_dump(exclude_none=True)
     return await engagement_model.update(engagement_id, caller_role=role, updates=updates)
+
+
+# ---------------------------------------------------------------------------
+# Engagement terms negotiation -- once active/on_hold, dates/budget/payment
+# structure no longer go through PATCH (see the guard in engagement_model.
+# update()); either party proposes a change here and the *other* party
+# accepts or declines. Mirrors the milestone propose/accept/decline endpoints
+# above, but bidirectional -- either role can be the proposer.
+# ---------------------------------------------------------------------------
+
+def _terms_change_label(eng: dict) -> str:
+    labels = []
+    if eng.get("pending_start_date") is not None:
+        labels.append("start date")
+    if eng.get("pending_estimated_end_date") is not None:
+        labels.append("estimated end date")
+    if eng.get("pending_agreed_budget") is not None:
+        labels.append("budget")
+    if eng.get("pending_payment_structure") is not None:
+        labels.append("payment structure")
+    if len(labels) <= 1:
+        return labels[0] if labels else "the engagement terms"
+    return ", ".join(labels[:-1]) + f" and {labels[-1]}"
+
+
+@router.post("/engagements/{engagement_id}/propose-terms")
+async def propose_engagement_terms(
+    engagement_id: int,
+    body: EngagementTermsPropose,
+    current_user=Depends(get_current_user),
+):
+    role, _ = await _require_participant(engagement_id, current_user)
+    eng = await engagement_model.get(engagement_id)
+    updated = await engagement_model.propose_terms_change(
+        engagement_id, current_user["user_id"], **body.model_dump(exclude_none=True)
+    )
+
+    org = await organization_model.get(eng["org_id"])
+    expert = await expert_model.get(eng["expert_id"])
+    other_user_id = expert["user_id"] if role == "organization" else org["user_id"]
+    proposer_name = org["org_name"] if role == "organization" else f"{expert['first_name']} {expert['last_name']}"
+    await notification_model.create(
+        other_user_id, "engagement_terms_proposed",
+        f"{proposer_name} proposed a change to {_terms_change_label(updated)}",
+        related_entity_type="engagement", related_entity_id=engagement_id,
+        action_url=f"/engagements/{engagement_id}",
+    )
+    return updated
+
+
+@router.post("/engagements/{engagement_id}/terms/accept")
+async def accept_engagement_terms(
+    engagement_id: int,
+    current_user=Depends(get_current_user),
+):
+    await _require_participant(engagement_id, current_user)
+    eng = await engagement_model.get(engagement_id)
+    if eng["pending_requested_by_user_id"] == current_user["user_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "You cannot accept your own proposed change"}},
+        )
+    proposer_user_id = eng["pending_requested_by_user_id"]
+    label = _terms_change_label(eng)
+    updated = await engagement_model.accept_terms_change(engagement_id)
+
+    if proposer_user_id is not None:
+        await notification_model.create(
+            proposer_user_id, "engagement_terms_accepted",
+            f"Your proposed change to {label} was accepted",
+            related_entity_type="engagement", related_entity_id=engagement_id,
+            action_url=f"/engagements/{engagement_id}",
+        )
+    return updated
+
+
+@router.post("/engagements/{engagement_id}/terms/decline")
+async def decline_engagement_terms(
+    engagement_id: int,
+    current_user=Depends(get_current_user),
+):
+    await _require_participant(engagement_id, current_user)
+    eng = await engagement_model.get(engagement_id)
+    if eng["pending_requested_by_user_id"] == current_user["user_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": {"code": "FORBIDDEN", "message": "You cannot decline your own proposed change"}},
+        )
+    proposer_user_id = eng["pending_requested_by_user_id"]
+    label = _terms_change_label(eng)
+    updated = await engagement_model.decline_terms_change(engagement_id)
+
+    if proposer_user_id is not None:
+        await notification_model.create(
+            proposer_user_id, "engagement_terms_declined",
+            f"Your proposed change to {label} was declined",
+            related_entity_type="engagement", related_entity_id=engagement_id,
+            action_url=f"/engagements/{engagement_id}",
+        )
+    return updated
 
 
 # ---------------------------------------------------------------------------

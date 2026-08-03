@@ -247,14 +247,15 @@ async def set_expert_verified(expert_profile_id: int, is_verified: bool) -> dict
     return dict(row)
 
 
-async def verify_organization(org_profile_id: int) -> dict:
+async def set_organization_verified(org_profile_id: int, is_verified: bool) -> dict:
     row = await pool.fetchrow(
         """
         UPDATE organization_profiles
-        SET is_verified = true, updated_at = NOW()
-        WHERE org_profile_id = $1
+        SET is_verified = $1, updated_at = NOW()
+        WHERE org_profile_id = $2
         RETURNING org_profile_id, user_id, org_name, is_verified
         """,
+        is_verified,
         org_profile_id,
     )
     if row is None:

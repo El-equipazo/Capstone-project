@@ -84,6 +84,17 @@ export const authApi = {
     return getStoredSession()
   },
 
+  // DELETE /auth/me: for organizations this permanently erases the account
+  // (organization_model.hard_delete -- engagements, connections, chat threads,
+  // and all shared history are actually deleted, not just the account).
+  // Experts/admins still just get soft-deactivated (is_active = false).
+  // Either way every authenticated route already 401s once the account is
+  // gone/inactive via get_current_user, so this clears the local session too.
+  async deleteAccount() {
+    await apiFetch('/auth/me', { method: 'DELETE', headers: authHeader() })
+    localStorage.removeItem(SESSION_KEY)
+  },
+
   // GET /auth/me already resolves either an organization_profile or an
   // expert_profile server-side depending on the user's role, so this stays
   // generic rather than branching on role itself.
@@ -371,6 +382,28 @@ export const engagementsApi = {
     })
   },
 
+  async proposeTerms(engagementId, data) {
+    return await apiFetch(`/engagements/${engagementId}/propose-terms`, {
+      method: 'POST',
+      body: data,
+      headers: authHeader(),
+    })
+  },
+
+  async acceptTermsChange(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/terms/accept`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
+  async declineTermsChange(engagementId) {
+    return await apiFetch(`/engagements/${engagementId}/terms/decline`, {
+      method: 'POST',
+      headers: authHeader(),
+    })
+  },
+
   async getNotes(engagementId) {
     return await apiFetch(`/engagements/${engagementId}/notes`, { headers: authHeader() })
   },
@@ -492,10 +525,10 @@ export const adminApi = {
     })
   },
 
-  async verifyOrganization(orgProfileId) {
+  async setOrganizationVerified(orgProfileId, isVerified) {
     return await apiFetch(`/admin/organizations/${orgProfileId}/verify`, {
       method: 'PATCH',
-      body: { is_verified: true },
+      body: { is_verified: isVerified },
       headers: authHeader(),
     })
   },
