@@ -55,6 +55,11 @@
   --lp-cream-deep: #ece0cf;
   --lp-ink: #14241c;
   --lp-ink-muted: #4b5a50;
+  /* Fixed (never overridden for dark mode) -- the light pill button on the
+     expert CTA card, which sits on a permanently-dark forest/cobalt card
+     regardless of page theme and needs to stay light-on-dark either way. */
+  --lp-paper: #f4ece0;
+  --lp-paper-ink: #14241c;
   --font-heading: 'Space Grotesk', Figtree, system-ui, sans-serif;
 }
 
@@ -99,6 +104,15 @@
   --cat-5: #d98a72;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+
+  /* Landing v5 -- cobalt/forest/coral stay put across themes (already dark,
+     work as accents either way); only the cream page grounds + ink text
+     invert, same warm-dark family as --xp-bg. */
+  --lp-cream: #1c1a15;
+  --lp-cream-deep: #141210;
+  --lp-ink: #ede7db;
+  --lp-ink-muted: #a39e90;
+  --lp-coral-text: #f2795a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -143,6 +157,11 @@
     --cat-5: #d98a72;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.55);
+    --lp-cream: #1c1a15;
+    --lp-cream-deep: #141210;
+    --lp-ink: #ede7db;
+    --lp-ink-muted: #a39e90;
+    --lp-coral-text: #f2795a;
   }
 }
 
@@ -1795,8 +1814,8 @@ button, input, select, textarea {
 }
 
 .lp-cta-btn--cream {
-  background: var(--lp-cream);
-  color: var(--lp-ink);
+  background: var(--lp-paper);
+  color: var(--lp-paper-ink);
 }
 
 .lp-cta-btn--cream:hover {
