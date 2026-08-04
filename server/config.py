@@ -44,5 +44,20 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-flash-latest"
 
+    # Transactional email (Resend), used to actually mail the email-verification
+    # link. Optional — without a key, user_model still generates the token and
+    # returns it directly in the response instead (see email_client.py), which
+    # is also how local dev works without signing up for anything.
+    resend_api_key: str = ""
+    # resend.dev's shared sending domain — works out of the box with no DNS
+    # setup, but Resend will only actually deliver to the email address you
+    # signed up to Resend with until a custom domain is verified. Swap this
+    # for a verified "no-reply@yourdomain.com" in a real deployment.
+    resend_from_email: str = "onboarding@resend.dev"
+    # Public base URL of the frontend, used to build the link inside the
+    # verification email itself (the frontend builds the same link client-side
+    # for the token-in-response fallback, since it already knows its own origin).
+    frontend_url: str = "http://localhost:5173"
+
 
 settings = Settings()

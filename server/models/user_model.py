@@ -16,6 +16,7 @@ import secrets
 from passlib.context import CryptContext
 
 from server.db import connection_pool as pool
+from . import email_client
 from .enums import USER_ROLE
 from .errors import AuthenticationError, ConflictError, DeactivatedError, ValidationError
 from .validators import check_enum
@@ -44,17 +45,18 @@ def hash_password(password: str) -> str:
 
 async def create(email: str, password: str, role: str):
     """
-    Register a user. Returns the public row (no password_hash) plus a
-    verification_token field. There's no email-sending service in this stack,
-    so the token is surfaced directly in the response rather than mailed --
-    a real deployment would email a link containing it instead.
+    Register a user. Returns the public row (no password_hash), plus a
+    verification_token field -- but only when send_verification_email()
+    couldn't actually mail it (no RESEND_API_KEY configured, or the send
+    failed), in which case it's surfaced directly in the response instead.
+    A real deployment with email configured never exposes it here at all.
     Raises ValidationError on bad role, ConflictError on duplicate email.
     """
     check_enum(role, USER_ROLE, "role")
     password_hash = hash_password(password)
     token = _new_verification_token()
     try:
-        return await pool.fetchrow(
+        row = await pool.fetchrow(
             f"""
             INSERT INTO users (email, password_hash, role, verification_token, verification_token_expires_at)
             VALUES ($1, $2, $3, $4, NOW() + INTERVAL '{VERIFICATION_TOKEN_TTL_INTERVAL}')
@@ -67,6 +69,11 @@ async def create(email: str, password: str, role: str):
         if getattr(e, "sqlstate", None) == "23505":
             raise ConflictError("email already registered") from e
         raise
+
+    result = dict(row)
+    if await email_client.send_verification_email(email, token):
+        result["verification_token"] = None
+    return result
 
 
 async def verify_email(token: str):
@@ -110,11 +117,11 @@ async def find_by_email(email: str):
 async def update(user_id: int, updates: dict) -> dict:
     """
     Update mutable fields on a user (email and/or password). Returns the
-    public row, plus verification_token when the email changed (re-triggering
-    verification -- see create()'s docstring on why the token is surfaced
-    directly instead of emailed). Fields are handled explicitly rather than
-    looped over, so an unrelated key like `current_password` can never be
-    mistaken for a column.
+    public row, plus verification_token when the email changed AND
+    send_verification_email() couldn't actually mail it -- see create()'s
+    docstring for why. Fields are handled explicitly rather than looped
+    over, so an unrelated key like `current_password` can never be mistaken
+    for a column.
 
     Raises ValidationError (-> 400) if a new password is given without the
     correct current_password, ConflictError (-> 409) on a duplicate email.
@@ -153,7 +160,7 @@ async def update(user_id: int, updates: dict) -> dict:
     returning_cols = _PUBLIC_COLS + (", verification_token" if "email" in updates else "")
 
     try:
-        return await pool.fetchrow(
+        row = await pool.fetchrow(
             f"""
             UPDATE users SET {clauses}, updated_at = NOW()
             WHERE user_id = $1
@@ -165,6 +172,12 @@ async def update(user_id: int, updates: dict) -> dict:
         if getattr(e, "sqlstate", None) == "23505":
             raise ConflictError("email already registered") from e
         raise
+
+    result = dict(row)
+    if "email" in updates:
+        if await email_client.send_verification_email(updates["email"], set_parts["verification_token"]):
+            result["verification_token"] = None
+    return result
 
 
 async def validate_password(email: str, password: str):
