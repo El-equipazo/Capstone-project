@@ -67,9 +67,12 @@ export default function Landing() {
     { icon: TRUST_ICONS.background, title: t('landing.trustBackground'), body: t('landing.trustBackgroundBody') },
   ]
 
+  // Directory isn't an in-page section like the other three -- it's the
+  // actual expert directory route, same destination as the hero's "Browse
+  // the directory" button -- so it navigates instead of anchor-scrolling.
   const footerLinks = [
     { label: t('landing.footerHow'), href: '#how' },
-    { label: t('landing.footerDirectory'), href: '#directory' },
+    { label: t('landing.footerDirectory'), to: '/experts' },
     { label: t('landing.footerForExperts'), href: '#experts' },
     { label: t('landing.footerVerification'), href: '#trust' },
   ]
@@ -195,9 +198,13 @@ export default function Landing() {
             <span className="lp-footer-brand-name">LATTICE</span>
           </Link>
           <div className="lp-footer-links">
-            {footerLinks.map((link) => (
-              <a key={link.label} href={link.href}>{link.label}</a>
-            ))}
+            {footerLinks.map((link) =>
+              link.to ? (
+                <Link key={link.label} to={link.to}>{link.label}</Link>
+              ) : (
+                <a key={link.label} href={link.href}>{link.label}</a>
+              )
+            )}
           </div>
           <span className="lp-footer-legal">{t('landing.footerLegal')}</span>
         </div>
