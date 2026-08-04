@@ -15,13 +15,25 @@ export function AuthProvider({ children }) {
   }, [])
 
   // authApi.me() persists its fresher user fields (e.g. is_email_verified,
-  // which login() never returns) to localStorage, but that alone doesn't
-  // update this component's live session state -- nothing re-renders
-  // without going through setSession here.
+  // profile_photo_url, which login() never returns) to localStorage, but
+  // that alone doesn't update this component's live session state --
+  // nothing re-renders without going through setSession here.
   const refreshUser = useCallback(async () => {
     const { user } = await authApi.me()
     setSession((prev) => (prev ? { ...prev, user } : prev))
     return user
+  }, [])
+
+  // A session restored from localStorage (i.e. every page load after the
+  // first) is whatever `login()`/`me()` last stored -- it can be missing
+  // fields added since then (is_email_verified, profile_photo_url), or
+  // just be stale (an expert uploaded a new photo in another tab). Refresh
+  // once on mount so those show up without forcing a re-login.
+  useEffect(() => {
+    if (session) refreshUser().catch(() => {})
+    // Intentionally mount-only: refreshUser is stable, and re-running this
+    // on every session change would just refetch after every refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const login = useCallback(async (credentials) => {

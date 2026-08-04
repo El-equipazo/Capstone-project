@@ -115,6 +115,9 @@ export const authApi = {
     const user = {
       user_id: userFields.user_id, email: userFields.email, role: userFields.role,
       is_email_verified: userFields.is_email_verified,
+      // Only experts have a profile photo today (see expert_profiles.profile_photo_url) --
+      // undefined for organizations/admins, which the navbar treats the same as "no photo".
+      profile_photo_url: profile?.profile_photo_url,
     }
     // Keep stored session user fields fresh
     storeSession({ ...session, user })

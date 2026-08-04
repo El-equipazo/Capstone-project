@@ -6,12 +6,28 @@ import { useLanguage } from '../context/LanguageContext'
 import { LANGUAGE_OPTIONS } from '../i18n/translations'
 import NotificationBell from './NotificationBell'
 import LanguagePopup from './LanguagePopup'
+import LatticeMark from './LatticeMark'
 
 function initials(str) {
   const words = (str || '').replace(/[^a-zA-Z\s]/g, ' ').trim().split(/\s+/).filter(Boolean)
   if (words.length === 0) return '?'
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
   return (words[0][0] + words[1][0]).toUpperCase()
+}
+
+// Only experts have a profile photo today (expert_profiles.profile_photo_url,
+// surfaced onto the session user by authApi.me()) -- organizations/admins
+// fall back to initials same as an expert who hasn't uploaded one yet.
+function AccountAvatar({ user }) {
+  return (
+    <span className="avatar avatar-sm" style={user.profile_photo_url ? { overflow: 'hidden' } : undefined}>
+      {user.profile_photo_url ? (
+        <img src={user.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        initials(user.email)
+      )}
+    </span>
+  )
 }
 
 function SunIcon() {
@@ -105,7 +121,7 @@ export default function Navbar() {
     <header className={`navbar ${isLanding ? 'navbar-overlay' : ''} ${transparent ? 'navbar-transparent' : ''} ${isLanding && scrolled ? 'navbar-landing-solid' : ''}`}>
       <div className="container navbar-inner">
         <Link to="/" className="brand">
-          <span className="brand-mark">L</span>
+          <span className="brand-mark"><LatticeMark /></span>
           Lattice
         </Link>
         <div className="nav-right">
@@ -122,13 +138,13 @@ export default function Navbar() {
             {user ? (
               <div className="account-wrap" ref={accountRef}>
                 <button className="account-trigger" onClick={() => setAccountOpen((v) => !v)} aria-label="Account menu">
-                  <span className="avatar avatar-sm">{initials(user.email)}</span>
+                  <AccountAvatar user={user} />
                   <span className="chev">▾</span>
                 </button>
                 {accountOpen && (
                   <div className="account-dropdown card">
                     <div className="account-head">
-                      <span className="avatar avatar-sm">{initials(user.email)}</span>
+                      <AccountAvatar user={user} />
                       <div className="id-text">
                         <span className="email">{user.email}</span>
                         <span className={`badge role-${user.role}`}>{user.role}</span>
@@ -163,9 +179,17 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <Link to="/sign-up" className="btn btn-acc">
-                {t('nav.getStarted')}
-              </Link>
+              <>
+                <button className="nav-icon-btn" onClick={toggleTheme} aria-label={t('nav.darkMode')} title={t('nav.darkMode')}>
+                  {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+                </button>
+                <button className="nav-icon-btn" onClick={() => setShowLanguagePopup(true)} aria-label={t('nav.language')} title={currentLanguageName}>
+                  <GlobeIcon />
+                </button>
+                <Link to="/sign-up" className="btn btn-acc">
+                  {t('nav.getStarted')}
+                </Link>
+              </>
             )}
           </div>
         </div>
