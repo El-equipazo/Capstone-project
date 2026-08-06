@@ -10,6 +10,8 @@ email                  TEXT UNIQUE NOT NULL
 password_hash          TEXT NOT NULL
 role                   TEXT NOT NULL -- 'organization' | 'expert' | 'admin'
 is_email_verified      BOOLEAN DEFAULT false
+verification_token     TEXT -- set on register/email-change, cleared on verify
+verification_token_expires_at TIMESTAMP
 is_active              BOOLEAN DEFAULT true
 last_login_at          TIMESTAMP
 created_at             TIMESTAMP DEFAULT NOW()

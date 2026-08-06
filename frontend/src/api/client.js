@@ -64,6 +64,14 @@ export const authApi = {
     return await apiFetch('/auth/register', { method: 'POST', body: { email, password, role } })
   },
 
+  // Public -- no auth header. There's no email-sending service in this
+  // stack (see user_model.create()/update()), so the token this consumes
+  // comes from the register/updateMe response shown directly to the user,
+  // not from a link they clicked in an actual email.
+  async verifyEmail(token) {
+    return await apiFetch('/auth/verify-email', { method: 'POST', body: { token } })
+  },
+
   async login({ email, password }) {
     const data = await apiFetch('/auth/login', { method: 'POST', body: { email, password } })
     const session = { access_token: data.access_token, user: data.user }
@@ -104,10 +112,29 @@ export const authApi = {
     const data = await apiFetch('/auth/me', { headers: authHeader() })
     // Transform flat response into { user, profile } shape the dashboard expects
     const { profile, ...userFields } = data
-    const user = { user_id: userFields.user_id, email: userFields.email, role: userFields.role }
+    const user = {
+      user_id: userFields.user_id, email: userFields.email, role: userFields.role,
+      is_email_verified: userFields.is_email_verified,
+      // Only experts have a profile photo today (see expert_profiles.profile_photo_url) --
+      // undefined for organizations/admins, which the navbar treats the same as "no photo".
+      profile_photo_url: profile?.profile_photo_url,
+    }
     // Keep stored session user fields fresh
     storeSession({ ...session, user })
     return { user, profile }
+  },
+
+  async updateMe({ email, password, current_password } = {}) {
+    const body = {}
+    if (email !== undefined) body.email = email
+    if (password !== undefined) body.password = password
+    if (current_password !== undefined) body.current_password = current_password
+    const data = await apiFetch('/auth/me', { method: 'PATCH', body, headers: authHeader() })
+    const session = getStoredSession()
+    if (session) {
+      storeSession({ ...session, user: { ...session.user, email: data.email } })
+    }
+    return data
   },
 }
 

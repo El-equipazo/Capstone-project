@@ -6,6 +6,7 @@ import { useChat_context } from '../context/ChatContext'
 import ExpertCard from '../components/ExpertCard'
 import MilestoneMap from '../components/MilestoneMap'
 import RatingStars from '../components/RatingStars'
+import ChangePasswordCard from '../components/ChangePasswordCard'
 import TagInput from '../components/organization/TagInput'
 import { SPECIALIZATIONS, PROFICIENCY_LEVELS, ENGAGEMENT_LENGTHS } from '../data/mockExperts'
 import { AVAILABILITY_LABEL, BUDGET_RANGE_LABEL, ENGAGEMENT_TYPE_OPTIONS, labelize, toNumberOrNull } from '../utils/format'
@@ -44,7 +45,7 @@ function profileToForm(profile) {
 }
 
 export default function ExpertDashboard() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { openChat } = useChat_context()
@@ -398,6 +399,9 @@ export default function ExpertDashboard() {
       const { url } = await uploadsApi.upload(file)
       const updated = await expertsApi.updateProfile(profile.expert_profile_id, { profile_photo_url: url })
       setProfile(updated)
+      // Otherwise the navbar circle keeps showing the old photo/initials
+      // until the next full session refresh (e.g. a page reload).
+      refreshUser().catch(() => {})
     } catch (err) {
       setPhotoError(err.body?.error?.message ?? 'Could not upload photo. Please try again.')
     } finally {
@@ -1402,6 +1406,8 @@ export default function ExpertDashboard() {
                   </div>
                 </form>
               </div>
+
+              <ChangePasswordCard />
             </div>
 
             <aside style={{ position: 'sticky', top: 84, alignSelf: 'flex-start' }}>

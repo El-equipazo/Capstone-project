@@ -581,7 +581,8 @@ quantumconnect/
 │   │   └── ...
 │   └── db/
 │       ├── connection_pool.py       # asyncpg pool
-│       └── seed.py                  # Creates all tables and inserts sample data
+│       ├── migrate.py               # Single source of truth for schema (idempotent)
+│       └── seed.py                  # Rebuilds schema via migrate.py, then inserts sample data
 ├── api-contract.md                  # Full REST contract (v2)
 ├── schema.md                        # Full database schema with diagrams
 ├── requirements.txt

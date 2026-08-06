@@ -6,12 +6,28 @@ import { useLanguage } from '../context/LanguageContext'
 import { LANGUAGE_OPTIONS } from '../i18n/translations'
 import NotificationBell from './NotificationBell'
 import LanguagePopup from './LanguagePopup'
+import LatticeMark from './LatticeMark'
 
 function initials(str) {
   const words = (str || '').replace(/[^a-zA-Z\s]/g, ' ').trim().split(/\s+/).filter(Boolean)
   if (words.length === 0) return '?'
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
   return (words[0][0] + words[1][0]).toUpperCase()
+}
+
+// Only experts have a profile photo today (expert_profiles.profile_photo_url,
+// surfaced onto the session user by authApi.me()) -- organizations/admins
+// fall back to initials same as an expert who hasn't uploaded one yet.
+function AccountAvatar({ user }) {
+  return (
+    <span className="avatar avatar-sm" style={user.profile_photo_url ? { overflow: 'hidden' } : undefined}>
+      {user.profile_photo_url ? (
+        <img src={user.profile_photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        initials(user.email)
+      )}
+    </span>
+  )
 }
 
 function SunIcon() {
@@ -44,6 +60,15 @@ function GlobeIcon() {
       <circle cx="12" cy="12" r="10" />
       <line x1="2" y1="12" x2="22" y2="12" />
       <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  )
+}
+
+function MailIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m2 6 10 7 10-7" />
     </svg>
   )
 }
@@ -93,10 +118,10 @@ export default function Navbar() {
   const transparent = isLanding && !scrolled
 
   return (
-    <header className={`navbar ${isLanding ? 'navbar-overlay' : ''} ${transparent ? 'navbar-transparent' : ''}`}>
+    <header className={`navbar ${isLanding ? 'navbar-overlay' : ''} ${transparent ? 'navbar-transparent' : ''} ${isLanding && scrolled ? 'navbar-landing-solid' : ''}`}>
       <div className="container navbar-inner">
         <Link to="/" className="brand">
-          <span className="brand-mark">L</span>
+          <span className="brand-mark"><LatticeMark /></span>
           Lattice
         </Link>
         <div className="nav-right">
@@ -113,13 +138,13 @@ export default function Navbar() {
             {user ? (
               <div className="account-wrap" ref={accountRef}>
                 <button className="account-trigger" onClick={() => setAccountOpen((v) => !v)} aria-label="Account menu">
-                  <span className="avatar avatar-sm">{initials(user.email)}</span>
+                  <AccountAvatar user={user} />
                   <span className="chev">▾</span>
                 </button>
                 {accountOpen && (
                   <div className="account-dropdown card">
                     <div className="account-head">
-                      <span className="avatar avatar-sm">{initials(user.email)}</span>
+                      <AccountAvatar user={user} />
                       <div className="id-text">
                         <span className="email">{user.email}</span>
                         <span className={`badge role-${user.role}`}>{user.role}</span>
@@ -135,6 +160,18 @@ export default function Navbar() {
                       <span className="account-row-label">{t('nav.language')}</span>
                       <span className="account-row-value">{currentLanguageName}</span>
                     </button>
+                    {typeof user.is_email_verified === 'boolean' && (
+                      <div className="account-row static">
+                        <MailIcon />
+                        <span className="account-row-label">{t('nav.email')}</span>
+                        <span
+                          className="account-row-value"
+                          style={user.is_email_verified ? undefined : { color: 'var(--pending)' }}
+                        >
+                          {user.is_email_verified ? t('nav.emailVerified') : t('nav.emailUnverified')}
+                        </span>
+                      </div>
+                    )}
                     <button className="account-row danger" onClick={handleLogout}>
                       {t('nav.signOut')}
                     </button>
@@ -142,9 +179,17 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <Link to="/sign-up" className="btn btn-acc">
-                {t('nav.getStarted')}
-              </Link>
+              <>
+                <button className="nav-icon-btn" onClick={toggleTheme} aria-label={t('nav.darkMode')} title={t('nav.darkMode')}>
+                  {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+                </button>
+                <button className="nav-icon-btn" onClick={() => setShowLanguagePopup(true)} aria-label={t('nav.language')} title={currentLanguageName}>
+                  <GlobeIcon />
+                </button>
+                <Link to="/sign-up" className="btn btn-acc">
+                  {t('nav.getStarted')}
+                </Link>
+              </>
             )}
           </div>
         </div>
