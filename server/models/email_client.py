@@ -46,7 +46,17 @@ async def _send(to_email: str, subject: str, html: str) -> bool:
                 },
             )
             response.raise_for_status()
+            logger.warning("Sent email to %s: %r", to_email, subject)
             return True
+    except httpx.HTTPStatusError as e:
+        # Resend's response body names the actual problem (e.g. the sandbox
+        # restriction that only delivers to your own account email until a
+        # custom domain is verified) -- the bare status code alone hides that.
+        logger.warning(
+            "Resend rejected email to %s (%s): %s",
+            to_email, e.response.status_code, e.response.text,
+        )
+        return False
     except Exception:
         logger.warning("Failed to send email to %s", to_email, exc_info=True)
         return False
