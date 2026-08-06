@@ -73,7 +73,7 @@ export default function OnboardingWizard({ onComplete }) {
   }
 
   const step1Valid = form.contact_name.trim() !== '' && form.contact_title.trim() !== ''
-  const step2Valid = form.org_name.trim() !== '' && form.budget_range !== '' && form.urgency_level !== ''
+  const step2Valid = form.org_name.trim() !== '' && form.sub_sector.trim() !== '' && form.budget_range !== '' && form.urgency_level !== ''
   const emailsValid = emails.every((e) => e.trim() === '' || isValidEmail(e.trim()))
 
   function goNext() {
@@ -183,13 +183,16 @@ export default function OnboardingWizard({ onComplete }) {
               </select>
             </div>
             <div className="field-group" style={{ flex: 1 }}>
-              <label className="field-label">Industry</label>
+              <label className="field-label">Industry<RequiredMark /></label>
               <input
                 className="field-input"
+                required
+                style={showErrors && form.sub_sector.trim() === '' ? { borderColor: 'var(--danger)' } : undefined}
                 value={form.sub_sector}
                 onChange={(e) => updateField('sub_sector', e.target.value)}
                 placeholder="e.g. Retail banking, Payments"
               />
+              {showErrors && form.sub_sector.trim() === '' && <FieldError />}
             </div>
           </div>
           <div className="field-group">

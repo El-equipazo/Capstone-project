@@ -30,6 +30,10 @@ class RegisterResponse(BaseModel):
     role: str
     is_email_verified: bool
     created_at: datetime
+    # Only present when send_verification_email() couldn't actually mail it
+    # (no RESEND_API_KEY configured, or the send failed) -- see
+    # user_model.create(). None whenever the email really was sent.
+    verification_token: Optional[str] = None
 
 
 class VerifyEmailRequest(BaseModel):
@@ -62,3 +66,10 @@ class UpdateMeRequest(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
     current_password: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) < 8:
+            raise ValueError("password must be at least 8 characters")
+        return v
