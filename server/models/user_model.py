@@ -260,7 +260,11 @@ async def request_password_reset(email: str) -> None:
     if row is None:
         return
     if not await email_client.send_password_reset_email(email, token):
-        logger.info("password reset token for %s: %s", email, token)
+        # .warning(), not .info(): nothing in this app configures logging
+        # beyond uvicorn's defaults (WARNING+), so .info() here would be a
+        # silent no-op -- confirmed live, the same way email_client.py's own
+        # send-failure log already had to use .warning() to actually show up.
+        logger.warning("password reset token for %s: %s", email, token)
 
 
 async def reset_password(token: str, new_password: str):
