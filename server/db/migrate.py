@@ -450,6 +450,13 @@ MIGRATIONS: list[tuple[str, str]] = [
         ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires_at TIMESTAMP;
         """,
     ),
+    (
+        "003_password_reset",
+        """
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_expires_at TIMESTAMP;
+        """,
+    ),
 ]
 
 

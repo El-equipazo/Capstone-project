@@ -8,6 +8,8 @@ import HowItWorks from './pages/HowItWorks'
 import SignUp from './pages/SignUp'
 import Login from './pages/Login'
 import VerifyEmail from './pages/VerifyEmail'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import ExpertDirectory from './pages/ExpertDirectory'
 import ExpertProfile from './pages/ExpertProfile'
 import ExpertDashboard from './pages/ExpertDashboard'
@@ -31,6 +33,8 @@ export default function App() {
         <Route path="/sign-up" element={<SignUp />} />
         <Route path="/login" element={<Login />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/experts" element={<ExpertDirectory />} />
         <Route path="/experts/:expertId" element={<ExpertProfile />} />
         <Route path="/dashboard" element={<ExpertDashboard />} />

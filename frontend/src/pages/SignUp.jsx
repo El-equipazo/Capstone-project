@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { landingPathFor } from '../utils/format'
+import PasswordField from '../components/PasswordField'
 
 export default function SignUp() {
   const [searchParams] = useSearchParams()
@@ -176,22 +177,17 @@ export default function SignUp() {
             />
           </div>
 
-          <div className="field-group">
-            <label className="field-label" htmlFor="password">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              minLength={8}
-              className="field-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
-            <span className="field-hint">Minimum 8 characters.</span>
-          </div>
+          <PasswordField
+            id="password"
+            label="Password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            hint="Minimum 8 characters."
+          />
 
           {error && <div className="alert alert-error">{error}</div>}
 

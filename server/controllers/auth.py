@@ -8,11 +8,13 @@ from server.dependencies import get_current_user
 from server.models import organization_model, user_model
 from server.models.errors import AuthenticationError, DeactivatedError
 from server.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
+    ResetPasswordRequest,
     UpdateMeRequest,
     UserInToken,
     VerifyEmailRequest,
@@ -57,6 +59,21 @@ async def register(body: RegisterRequest):
 async def verify_email(body: VerifyEmailRequest):
     await user_model.verify_email(body.token)
     return {"is_email_verified": True}
+
+
+@router.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest):
+    # Always the same response whether or not `email` matches an account --
+    # see user_model.request_password_reset() for why leaking that here
+    # would be a real account-enumeration/takeover risk, not just a nitpick.
+    await user_model.request_password_reset(body.email)
+    return {"message": "If that email has an account, a reset link is on its way."}
+
+
+@router.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    await user_model.reset_password(body.token, body.password)
+    return {"message": "Password reset. You can now sign in with your new password."}
 
 
 @router.post("/auth/login", response_model=LoginResponse)
@@ -155,8 +172,6 @@ async def update_me(body: UpdateMeRequest, current_user=Depends(get_current_user
                 }
             },
         )
-    # Expects user_model.update(user_id, fields_dict) -> updated row.
-    # Teammate implementing user_model should add this function.
     updated = await user_model.update(current_user["user_id"], body.model_dump(exclude_none=True))
     return dict(updated)
 

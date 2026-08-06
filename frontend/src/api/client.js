@@ -64,12 +64,27 @@ export const authApi = {
     return await apiFetch('/auth/register', { method: 'POST', body: { email, password, role } })
   },
 
-  // Public -- no auth header. There's no email-sending service in this
-  // stack (see user_model.create()/update()), so the token this consumes
-  // comes from the register/updateMe response shown directly to the user,
-  // not from a link they clicked in an actual email.
+  // Public -- no auth header. The token comes either from a real emailed
+  // link (Resend configured, see server/models/email_client.py) or from
+  // the register/updateMe response's verification_token fallback when it
+  // isn't (see user_model.create()/update()).
   async verifyEmail(token) {
     return await apiFetch('/auth/verify-email', { method: 'POST', body: { token } })
+  },
+
+  // Public -- no auth header. Always resolves, regardless of whether
+  // `email` matches an account (see user_model.request_password_reset()) --
+  // there's no token to fall back to showing here even without Resend
+  // configured, since a reset token must never leave the server in a
+  // response body. Check the server log for it in that case.
+  async forgotPassword(email) {
+    return await apiFetch('/auth/forgot-password', { method: 'POST', body: { email } })
+  },
+
+  // Public -- no auth header. `token` comes from the emailed (or logged --
+  // see forgotPassword above) reset link.
+  async resetPassword(token, password) {
+    return await apiFetch('/auth/reset-password', { method: 'POST', body: { token, password } })
   },
 
   async login({ email, password }) {

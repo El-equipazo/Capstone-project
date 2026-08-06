@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { landingPathFor } from '../utils/format'
+import PasswordField from '../components/PasswordField'
 
 // Only ever redirect to a same-site path — an absolute URL is blocked by
 // React Router already, but a protocol-relative "//evil.com" isn't, so
@@ -70,20 +71,19 @@ export default function Login() {
             />
           </div>
 
-          <div className="field-group">
-            <label className="field-label" htmlFor="password">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              className="field-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Your password"
-            />
-          </div>
+          <PasswordField
+            id="password"
+            label="Password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Your password"
+            autoComplete="current-password"
+          />
+
+          <Link to="/forgot-password" style={{ fontSize: 12.5, alignSelf: 'flex-end', marginTop: -8 }}>
+            Forgot password?
+          </Link>
 
           {error && <div className="alert alert-error">{error}</div>}
 

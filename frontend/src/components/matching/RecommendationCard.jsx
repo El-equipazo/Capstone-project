@@ -1,12 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatRate, AVAILABILITY_LABEL } from '../../utils/format'
 
 export default function RecommendationCard({ recommendation }) {
   const rec = recommendation
   const [showScoreInfo, setShowScoreInfo] = useState(false)
+  const scoreInfoRef = useRef(null)
   const initials = `${rec.first_name[0]}${rec.last_name[0]}`
   const fillPct = Math.max(0, Math.min(1, (rec.avg_rating ?? 0) / 5)) * 100
+
+  // Same click-outside idiom as NotificationBell.jsx's dropdown.
+  useEffect(() => {
+    if (!showScoreInfo) return
+    function onClickOutside(e) {
+      if (scoreInfoRef.current && !scoreInfoRef.current.contains(e.target)) {
+        setShowScoreInfo(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [showScoreInfo])
 
   return (
     <div className="card expert-card">
@@ -24,7 +37,7 @@ export default function RecommendationCard({ recommendation }) {
             <h3 className="ec-name">
               {rec.first_name} {rec.last_name}
             </h3>
-            <div className="rec-scores">
+            <div className="rec-scores" ref={scoreInfoRef}>
               <span className="fit-score-badge">{Math.round(rec.profile_match_score)}% Profile</span>
               <span className="fit-score-badge">{rec.fit_score}% AI Fit</span>
               <button
