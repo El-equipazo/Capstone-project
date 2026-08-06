@@ -11,6 +11,7 @@ Password hashing uses passlib bcrypt, matching seed.py. Keep BCRYPT_ROUNDS in
 sync with whatever the rest of the stack uses so hashes stay portable.
 """
 
+import logging
 import secrets
 
 from passlib.context import CryptContext
@@ -21,21 +22,25 @@ from .enums import USER_ROLE
 from .errors import AuthenticationError, ConflictError, DeactivatedError, ValidationError
 from .validators import check_enum
 
+logger = logging.getLogger(__name__)
+
 BCRYPT_ROUNDS = 12  # set explicitly; align with any other hasher in the stack
 pwd_context = CryptContext(
     schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=BCRYPT_ROUNDS,
 )
 
 VERIFICATION_TOKEN_TTL_INTERVAL = "24 hours"
+PASSWORD_RESET_TOKEN_TTL_INTERVAL = "1 hour"  # shorter-lived: resetting a password is higher-stakes than confirming an address
 
-# Columns safe to expose. password_hash and verification_token are deliberately excluded.
+# Columns safe to expose. password_hash, verification_token, and
+# password_reset_token are deliberately excluded.
 _PUBLIC_COLS = (
     "user_id, email, role, is_email_verified, is_active, "
     "last_login_at, created_at, updated_at"
 )
 
 
-def _new_verification_token() -> str:
+def _new_token() -> str:
     return secrets.token_urlsafe(32)
 
 
@@ -54,7 +59,7 @@ async def create(email: str, password: str, role: str):
     """
     check_enum(role, USER_ROLE, "role")
     password_hash = hash_password(password)
-    token = _new_verification_token()
+    token = _new_token()
     try:
         row = await pool.fetchrow(
             f"""
@@ -144,7 +149,7 @@ async def update(user_id: int, updates: dict) -> dict:
     if "email" in updates:
         set_parts["email"] = updates["email"]
         set_parts["is_email_verified"] = False
-        set_parts["verification_token"] = _new_verification_token()
+        set_parts["verification_token"] = _new_token()
         extra_clauses.append(
             f"verification_token_expires_at = NOW() + INTERVAL '{VERIFICATION_TOKEN_TTL_INTERVAL}'"
         )
@@ -224,3 +229,59 @@ async def deactivate(user_id: int):
         """,
         user_id,
     )
+
+
+async def request_password_reset(email: str) -> None:
+    """
+    Best-effort: if `email` matches an active account, issues a reset token
+    and emails it (see email_client.send_password_reset_email). Always
+    returns None either way -- unlike the verification token, a reset token
+    must never be handed back in an HTTP response, since (unlike
+    confirming your own just-submitted email) the requester here isn't
+    necessarily the account owner. The controller returns the same generic
+    response regardless of whether `email` matched anything, so this
+    function can't be used to enumerate registered emails.
+
+    When Resend isn't configured, the token is logged instead of emailed --
+    the equivalent of create()/update()'s response-body fallback, but safe
+    to use here since only someone with server console access can read it.
+    """
+    token = _new_token()
+    row = await pool.fetchrow(
+        f"""
+        UPDATE users
+        SET password_reset_token = $2,
+            password_reset_token_expires_at = NOW() + INTERVAL '{PASSWORD_RESET_TOKEN_TTL_INTERVAL}'
+        WHERE email = $1 AND is_active = true
+        RETURNING user_id
+        """,
+        email, token,
+    )
+    if row is None:
+        return
+    if not await email_client.send_password_reset_email(email, token):
+        logger.info("password reset token for %s: %s", email, token)
+
+
+async def reset_password(token: str, new_password: str):
+    """
+    Consume a password-reset token: sets a new password hash and clears the
+    token so it can't be reused. Raises ValidationError (-> 400) if the
+    token doesn't match any user or has expired.
+    """
+    row = await pool.fetchrow(
+        f"""
+        UPDATE users
+        SET password_hash = $2, password_reset_token = NULL,
+            password_reset_token_expires_at = NULL, updated_at = NOW()
+        WHERE password_reset_token = $1 AND password_reset_token_expires_at > NOW()
+        RETURNING {_PUBLIC_COLS}
+        """,
+        token, hash_password(new_password),
+    )
+    if row is None:
+        raise ValidationError(
+            "invalid or expired reset token",
+            field="token", issue="invalid_or_expired",
+        )
+    return row

@@ -2,10 +2,11 @@
 email_client — sends transactional email via Resend's HTTP API.
 
 Mirrors ai_client.py's "optional external service" shape: without
-RESEND_API_KEY configured, send_verification_email() is a no-op that
-returns False rather than raising, so callers (user_model.create()/update())
-can fall back to surfacing the token directly in the API response instead
-of mailing it -- which is also how local dev works without an account.
+RESEND_API_KEY configured, the send_*_email() functions are no-ops that
+return False rather than raising. Callers fall back accordingly -- see
+user_model.create()/update() (surface the token directly in the API
+response) and user_model.request_password_reset() (log it instead, since a
+reset token must never ride in an HTTP response -- see that docstring).
 
 A plain httpx call rather than the official `resend` SDK, which is
 synchronous (blocking) and would stall the event loop if awaited naively
@@ -23,16 +24,15 @@ logger = logging.getLogger(__name__)
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
-async def send_verification_email(to_email: str, token: str) -> bool:
+async def _send(to_email: str, subject: str, html: str) -> bool:
     """
-    Best-effort — returns False (never raises) if RESEND_API_KEY isn't
+    Shared send path for every transactional email this module sends.
+    Best-effort -- returns False (never raises) if RESEND_API_KEY isn't
     configured or the send fails for any reason, since a failed email must
-    never block registration/email-change itself.
+    never block whatever triggered it.
     """
     if not settings.resend_api_key:
         return False
-
-    link = f"{settings.frontend_url}/verify-email?token={token}"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post(
@@ -41,20 +41,46 @@ async def send_verification_email(to_email: str, token: str) -> bool:
                 json={
                     "from": settings.resend_from_email,
                     "to": [to_email],
-                    "subject": "Verify your Lattice email address",
-                    "html": (
-                        "<p>Confirm your email address to finish setting up your Lattice account.</p>"
-                        f'<p><a href="{link}">Verify email address</a></p>'
-                        "<p>Or paste this link into your browser:<br>"
-                        f'<a href="{link}">{link}</a></p>'
-                        "<p style=\"color:#6b6f76;font-size:13px\">"
-                        "This link expires in 24 hours. If you didn't create a Lattice account, "
-                        "you can ignore this email.</p>"
-                    ),
+                    "subject": subject,
+                    "html": html,
                 },
             )
             response.raise_for_status()
             return True
     except Exception:
-        logger.warning("Failed to send verification email to %s", to_email, exc_info=True)
+        logger.warning("Failed to send email to %s", to_email, exc_info=True)
         return False
+
+
+async def send_verification_email(to_email: str, token: str) -> bool:
+    link = f"{settings.frontend_url}/verify-email?token={token}"
+    return await _send(
+        to_email,
+        "Verify your Lattice email address",
+        (
+            "<p>Confirm your email address to finish setting up your Lattice account.</p>"
+            f'<p><a href="{link}">Verify email address</a></p>'
+            "<p>Or paste this link into your browser:<br>"
+            f'<a href="{link}">{link}</a></p>'
+            "<p style=\"color:#6b6f76;font-size:13px\">"
+            "This link expires in 24 hours. If you didn't create a Lattice account, "
+            "you can ignore this email.</p>"
+        ),
+    )
+
+
+async def send_password_reset_email(to_email: str, token: str) -> bool:
+    link = f"{settings.frontend_url}/reset-password?token={token}"
+    return await _send(
+        to_email,
+        "Reset your Lattice password",
+        (
+            "<p>We received a request to reset your Lattice password.</p>"
+            f'<p><a href="{link}">Reset password</a></p>'
+            "<p>Or paste this link into your browser:<br>"
+            f'<a href="{link}">{link}</a></p>'
+            "<p style=\"color:#6b6f76;font-size:13px\">"
+            "This link expires in 1 hour. If you didn't request a password reset, "
+            "you can ignore this email — your password won't be changed.</p>"
+        ),
+    )

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { authApi } from '../api/client'
+import PasswordField from './PasswordField'
 
 export default function ChangePasswordCard() {
   const [form, setForm] = useState({ current_password: '', password: '', confirm: '' })
@@ -41,24 +42,18 @@ export default function ChangePasswordCard() {
     <form onSubmit={handleSubmit} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <span className="section-label">Password</span>
 
-      <div className="field-group">
-        <label className="field-label">Current password</label>
-        <input
-          type="password"
-          className="field-input"
-          required
-          autoComplete="current-password"
-          value={form.current_password}
-          onChange={(e) => update('current_password', e.target.value)}
-        />
-      </div>
+      <PasswordField
+        label="Current password"
+        required
+        autoComplete="current-password"
+        value={form.current_password}
+        onChange={(e) => update('current_password', e.target.value)}
+      />
 
       <div className="row gap-10">
-        <div className="field-group" style={{ flex: 1 }}>
-          <label className="field-label">New password</label>
-          <input
-            type="password"
-            className="field-input"
+        <div style={{ flex: 1 }}>
+          <PasswordField
+            label="New password"
             required
             minLength={8}
             autoComplete="new-password"
@@ -66,11 +61,9 @@ export default function ChangePasswordCard() {
             onChange={(e) => update('password', e.target.value)}
           />
         </div>
-        <div className="field-group" style={{ flex: 1 }}>
-          <label className="field-label">Confirm new password</label>
-          <input
-            type="password"
-            className="field-input"
+        <div style={{ flex: 1 }}>
+          <PasswordField
+            label="Confirm new password"
             required
             minLength={8}
             autoComplete="new-password"

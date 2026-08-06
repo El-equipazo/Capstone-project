@@ -1012,7 +1012,7 @@ button, input, select, textarea {
   :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(1);
   }
-}Delete account
+}
 
 .field-input:focus {
   outline: none;
@@ -1022,6 +1022,43 @@ button, input, select, textarea {
 .field-hint {
   font-size: 11.5px;
   color: var(--muted);
+}
+
+.password-field-wrap {
+  position: relative;
+  display: flex;
+}
+
+.password-field-wrap .field-input {
+  flex: 1;
+  padding-right: 40px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.password-toggle-btn:hover {
+  background: var(--fill2);
+  color: var(--ink);
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 1px;
 }
 
 .field-error {
