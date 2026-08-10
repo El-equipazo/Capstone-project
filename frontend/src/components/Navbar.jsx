@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -126,11 +126,21 @@ export default function Navbar() {
         </Link>
         <div className="nav-right">
           <nav className="nav-links">
-            <NavLink to="/experts">{t('nav.browseExperts')}</NavLink>
-            <NavLink to="/how-it-works">{t('nav.howItWorks')}</NavLink>
-            {user?.role === 'expert' && <NavLink to="/dashboard">{t('nav.dashboard')}</NavLink>}
-            {user?.role === 'organization' && <NavLink to="/organization">{t('nav.dashboard')}</NavLink>}
-            {user?.role === 'admin' && <NavLink to="/admin">{t('nav.admin')}</NavLink>}
+            {/* Plain <a> tags, not <NavLink> -- these do a full page reload on
+                click rather than a client-side route change (requested
+                behavior). The active-link underline is recreated manually
+                since NavLink normally handles that automatically. */}
+            <a href="/experts" className={location.pathname === '/experts' ? 'active' : ''}>{t('nav.browseExperts')}</a>
+            <a href="/how-it-works" className={location.pathname === '/how-it-works' ? 'active' : ''}>{t('nav.howItWorks')}</a>
+            {user?.role === 'expert' && (
+              <a href="/dashboard" className={location.pathname === '/dashboard' ? 'active' : ''}>{t('nav.dashboard')}</a>
+            )}
+            {user?.role === 'organization' && (
+              <a href="/organization" className={location.pathname === '/organization' ? 'active' : ''}>{t('nav.dashboard')}</a>
+            )}
+            {user?.role === 'admin' && (
+              <a href="/admin" className={location.pathname === '/admin' ? 'active' : ''}>{t('nav.admin')}</a>
+            )}
             {!user && <Link to="/login">{t('nav.signIn')}</Link>}
           </nav>
           <div className="nav-actions">
